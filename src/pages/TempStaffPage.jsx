@@ -17,7 +17,7 @@ export default function TempStaffPage({ filterData, filterKeys }) {
             <table>
               <thead>
                 <tr>
-                  <th>Temp ID</th>
+                  <th>Member ID</th>
                   <th>Company</th>
                   <th>Role</th>
                   <th>Duration</th>

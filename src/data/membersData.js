@@ -46,7 +46,8 @@ export const membersData = [
     "Account Number": "12345678901",
     "CV Attachment": "Yes",
     "Profile Photo": "Yes",
-    "Blacklisted": "No"
+    "Blacklisted": "No",
+    "Manpower":"Vendor Manpower, Brisk Olive Manpower"
   },
   // ... other two members
   {
@@ -75,7 +76,7 @@ export const membersData = [
     "Rating": "Good",
     "Year Of Commission": "2005",
     "Commission Course": "OTA 75",
-    "Actual Plan Date Of Retirement": "2030-01-31",
+    "Actual Plan Date Of Retirement": "15 Aug 1947",
     "Education": "M.Sc Physics, PGDHRM",
     "Govt Experience": "19 years",
     "Corporate Experience": "1 year",
@@ -94,7 +95,8 @@ export const membersData = [
     "Account Number": "09876543210",
     "CV Attachment": "Yes",
     "Profile Photo": "Yes",
-    "Blacklisted": "No"
+    "Blacklisted": "No",
+    "Manpower":"Vendor Manpower, Brisk Olive Manpower"
   },
   {
     "Member Id": "BO001",
@@ -141,7 +143,8 @@ export const membersData = [
     "Account Number": "21098765432",
     "CV Attachment": "Yes",
     "Profile Photo": "Yes",
-    "Blacklisted": "No"
+    "Blacklisted": "No",
+    "Manpower":"Vendor Manpower, Brisk Olive Manpower"
   }
 ];
 

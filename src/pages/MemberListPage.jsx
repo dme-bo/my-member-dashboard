@@ -3,7 +3,6 @@ import { useState, useMemo } from "react";
 import membersData from "../data/membersData";
 import FilterSidebar from "../components/FilterSidebar";
 
-
 export default function MemberListPage({ onMemberClick, filterData, filterKeys }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPlaced, setFilterPlaced] = useState("all");
@@ -20,52 +19,48 @@ export default function MemberListPage({ onMemberClick, filterData, filterKeys }
       );
     });
 
-    if (filterPlaced !== "all") {
-      list = list.filter((m) =>
-        filterPlaced === "placed" ? m["Placed by BO"] === "Yes" : m["Placed by BO"] === "No"
-      );
+    if (filterPlaced === "placed") {
+      list = list.filter(m => m["Placed by BO"] === "Yes");
+    } else if (filterPlaced === "active") {
+      list = list.filter(m => m["Placed by BO"] === "No");
     }
+    // "all" → no extra filtering
 
     return applyFilters(list);
   }, [searchTerm, filterPlaced, applyFilters]);
 
   return (
-    <div className="member-list-page">
-      {/* Header */}
+    <div className="member-list-page with-filters">
       <div className="page-header">
         <h1>Member Details</h1>
-
         <div className="header-actions">
           <select
-            className="styled-select"
             value={filterPlaced}
             onChange={(e) => setFilterPlaced(e.target.value)}
+            className="status-dropdown"
           >
             <option value="all">All Members</option>
             <option value="active">Active Seekers</option>
             <option value="placed">Placed</option>
           </select>
-
           <button className="btn-purple">Export CSV</button>
         </div>
       </div>
 
-      {/* Search */}
       <div className="search-section">
         <input
           type="text"
-          placeholder="Search by Name, Mobile, Email, ID..."
+          placeholder="Search by Name, Mobile, Email, Member ID..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
+          className="big-search-input"
         />
       </div>
 
-      {/* Table + Sidebar */}
       <div className="content-with-sidebar">
         <div className="table-container">
           <div className="table-wrapper">
-            <table className="members-table">
+            <table>
               <thead>
                 <tr>
                   <th>Member ID</th>
@@ -83,7 +78,7 @@ export default function MemberListPage({ onMemberClick, filterData, filterKeys }
                   <tr
                     key={member["Member Id"]}
                     onClick={() => onMemberClick(member)}
-                    className="table-row-hover"
+                    className="member-row"
                   >
                     <td>
                       <strong>{member["Member Id"]}</strong>
@@ -101,7 +96,7 @@ export default function MemberListPage({ onMemberClick, filterData, filterKeys }
                     </td>
                     <td>
                       <span
-                        className={`status-badge ${
+                        className={`status ${
                           member["Placed by BO"] === "Yes" ? "placed" : "active"
                         }`}
                       >

@@ -14,7 +14,7 @@ export default function ProjectsPage({ filterData, filterKeys }) {
             <table>
               <thead>
                 <tr>
-                  <th>Project ID</th>
+                  <th>Member ID</th>
                   <th>Title</th>
                   <th>Client</th>
                   <th>Domain</th>

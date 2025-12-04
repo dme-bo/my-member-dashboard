@@ -14,7 +14,7 @@ export default function RecruitmentPage({ filterData, filterKeys }) {
             <table>
               <thead>
                 <tr>
-                  <th>Job ID</th>
+                  <th>Member ID</th>
                   <th>Company</th>
                   <th>Position</th>
                   <th>Location</th>

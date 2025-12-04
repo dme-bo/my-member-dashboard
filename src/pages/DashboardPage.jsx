@@ -11,8 +11,8 @@ export default function DashboardPage() {
           </div>
           <div className="button-group">
             <button className="btn active">All</button>
-            <button className="btn">Army</button>
-            <button className="btn">Navy</button>
+            <button className="btn">Military</button>
+            <button className="btn">Paramilitary</button>
             <button className="btn">Air Force</button>
           </div>
         </div>
@@ -20,8 +20,8 @@ export default function DashboardPage() {
 
       <div className="stats-grid">
         <div className="card"><div className="card-icon blue">Total</div><div className="card-label">Total Members</div><div className="card-value">11,162</div></div>
-        <div className="card"><div className="card-icon purple">Stats</div><div className="card-label">Genders</div><div className="card-value">2</div></div>
-        <div className="card"><div className="card-icon orange">Stats</div><div className="card-label">Categories</div><div className="card-value">9</div></div>
+        <div className="card"><div className="card-icon purple">Gender</div><div className="card-label">Genders</div><div className="card-value">2</div></div>
+        <div className="card"><div className="card-icon orange">Categories</div><div className="card-label">Categories</div><div className="card-value">9</div></div>
         <div className="card"><div className="card-icon info">Stats</div><div className="card-label">Services</div><div className="card-value">12</div></div>
         <div className="card"><div className="card-icon success">Stats</div><div className="card-label">Ranks</div><div className="card-value">88</div></div>
         <div className="card"><div className="card-icon red">Stats</div><div className="card-label">Avg Experience</div><div className="card-value">10.9</div></div>

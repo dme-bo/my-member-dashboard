@@ -1,5 +1,26 @@
 // src/components/Sidebar.jsx
-export default function Sidebar({ currentPage, expandedMenu, onMenuClick, onSubMenuClick }) {
+import { NavLink, useLocation } from "react-router-dom";
+import { useState } from "react";
+
+export default function Sidebar() {
+  const location = useLocation();
+  const [expandedMenu, setExpandedMenu] = useState(null);
+
+  // Determine if "Member Applications" parent should look active
+  const isApplicationsActive =
+    expandedMenu === "applications" ||
+    ["/tempstaff", "/recruitment", "/projects"].includes(location.pathname);
+
+  // Auto-expand "applications" menu when on any of its subpages
+  const isApplicationsExpanded =
+    expandedMenu === "applications" ||
+    ["/tempstaff", "/recruitment", "/projects"].includes(location.pathname);
+
+  const handleParentClick = (e) => {
+    e.preventDefault();
+    setExpandedMenu(expandedMenu === "applications" ? null : "applications");
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -11,57 +32,59 @@ export default function Sidebar({ currentPage, expandedMenu, onMenuClick, onSubM
       </div>
 
       <nav className="sidebar-menu">
-        <a
-          href="#"
-          className={currentPage === "dashboard" ? "active" : ""}
-          onClick={(e) => { e.preventDefault(); onMenuClick("dashboard"); }}
+        <NavLink
+          to="/"
+          className={({ isActive }) => (isActive ? "active" : "")}
+          end
         >
           Dashboard
-        </a>
+        </NavLink>
 
-        <a
-          href="#"
-          className={currentPage === "memberlist" ? "active" : ""}
-          onClick={(e) => { e.preventDefault(); onMenuClick("memberlist"); }}
+        <NavLink
+          to="/memberlist"
+          className={({ isActive }) => (isActive ? "active" : "")}
         >
           Member List
-        </a>
+        </NavLink>
 
+        {/* Parent Menu Item - Clickable to expand/collapse */}
         <a
           href="#"
-          className={expandedMenu === "applications" || ["tempstaff", "recruitment", "projects"].includes(currentPage) ? "active" : ""}
-          onClick={(e) => { e.preventDefault(); onMenuClick("applications"); }}
+          className={isApplicationsActive ? "active" : ""}
+          onClick={handleParentClick}
+          style={{ cursor: "pointer" }}
         >
           Member Applications
+          <span className="arrow">{isApplicationsExpanded}</span>
         </a>
 
-        {expandedMenu === "applications" && (
+        {/* Submenu - shown when expanded or when on a subpage */}
+        {isApplicationsExpanded && (
           <div className="submenu">
-            <a
-              href="#"
-              className={currentPage === "tempstaff" ? "active" : ""}
-              onClick={(e) => { e.preventDefault(); onSubMenuClick("tempstaff"); }}
+            <NavLink
+              to="/tempstaff"
+              className={({ isActive }) => (isActive ? "active" : "")}
             >
               Temp Staff
-            </a>
-            <a
-              href="#"
-              className={currentPage === "recruitment" ? "active" : ""}
-              onClick={(e) => { e.preventDefault(); onSubMenuClick("recruitment"); }}
+            </NavLink>
+            <NavLink
+              to="/recruitment"
+              className={({ isActive }) => (isActive ? "active" : "")}
             >
               Recruitment
-            </a>
-            <a
-              href="#"
-              className={currentPage === "projects" ? "active" : ""}
-              onClick={(e) => { e.preventDefault(); onSubMenuClick("projects"); }}
+            </NavLink>
+            <NavLink
+              to="/projects"
+              className={({ isActive }) => (isActive ? "active" : "")}
             >
               Projects
-            </a>
+            </NavLink>
           </div>
         )}
 
-        <a href="#">Configuration</a>
+        <NavLink to="/configuration" className={({ isActive }) => (isActive ? "active" : "")}>
+          Configuration
+        </NavLink>
       </nav>
     </aside>
   );
