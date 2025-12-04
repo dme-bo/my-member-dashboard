@@ -1,15 +1,23 @@
 // src/components/FilterSidebar.jsx
 export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
-  const { filters, availableOptions, handleFilterChange, clearFilters } = filterData;
+  const { filters, handleFilterChange, clearFilters } = filterData;
 
+  // Placeholder options (hardcoded for now)
   const placeholderOptions = {
     TempStaffPage: {
-      Company: ["Tata Power", "Adani Group", "L&T"],
-      Role: ["Consultant", "Admin", "Technical"],
-      Duration: ["3 months", "6 months", "1 year"],
-      Status: ["In Progress", "Completed", "New"]
+      Service: ["Indian Army", "Indian Navy", "Indian Air Force", "BSF/CRPF", "Others"],
+      "Rank Level": ["Senior Officers", "Mid-Level Officers", "Junior Officers", "JCOs & Below"],
+      State: ["Delhi/NCR", "Maharashtra", "Karnataka", "Gujarat", "Rajasthan", "Punjab", "Tamil Nadu", "Others"],
+      "Preferred Role": [
+        "Security Consultant", "Admin Support", "Technical Advisor", "Project Coordinator",
+        "Risk Assessment Lead", "Training Instructor", "Facility Manager", "Protocol Officer"
+      ],
+      Status: ["New", "Contacted", "Interviewed", "Shortlisted", "Placed", "On Hold", "Not Interested"],
+      Rating: ["5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star", "Not Rated"],
     },
-    RecruitmentPage: {
+
+
+     RecruitmentPage: {
       Company: ["Reliance", "Infosys", "Wipro"],
       Position: ["Head", "Manager", "Analyst"],
       Location: ["Mumbai", "Bangalore", "Delhi"],
@@ -20,11 +28,13 @@ export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
       Domain: ["Training", "Mentorship", "IT"],
       Status: ["Active", "Completed", "Planning"]
     }
+    // ... other pages
   };
 
-  const isMemberPage = pageKey === "memberlist";
-  const options = isMemberPage ? availableOptions : placeholderOptions[pageKey] || {};
-  const keys = isMemberPage ? filterKeys : Object.keys(options);
+  const options = placeholderOptions[pageKey] || {};
+
+  // Use filterKeys if provided, else auto from options
+  const keys = filterKeys.length > 0 ? filterKeys : Object.keys(options);
 
   return (
     <div className="filter-sidebar">

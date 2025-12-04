@@ -36,7 +36,7 @@ export default function MemberDetailModal({ member, onClose }) {
             key={i}
             className="star"
             style={{
-              color: i < rating ? "#f59e0b" : "#e5e7eb",
+              color: i < rating ? "#f59e0b" : "#fefeffff",
               fontSize: "20px",
               cursor: "default"
             }}
@@ -71,7 +71,7 @@ export default function MemberDetailModal({ member, onClose }) {
           {/* Star Rating - Top Right */}
           <div style={{ marginRight: "60px", marginTop: "8px" }}>
             {renderStars()}
-            <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px", textAlign: "right" }}>
+            <div style={{ fontSize: "12px", color: "#ffffffff", marginTop: "4px", textAlign: "right" }}>
               {getRatingLabel(rating)}
             </div>
           </div>
@@ -182,7 +182,7 @@ export default function MemberDetailModal({ member, onClose }) {
                   width: "100%",
                   padding: "12px",
                   borderRadius: "8px",
-                  border: "1px solid #d1d5db",
+                  border: "1px solid #ffffffff",
                   fontSize: "14px",
                   fontFamily: "inherit"
                 }}
@@ -214,4 +214,3 @@ export default function MemberDetailModal({ member, onClose }) {
     </div>
   );
 }
-

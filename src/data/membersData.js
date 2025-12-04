@@ -47,7 +47,8 @@ export const membersData = [
     "CV Attachment": "Yes",
     "Profile Photo": "Yes",
     "Blacklisted": "No",
-    "Manpower":"Vendor Manpower, Brisk Olive Manpower"
+    "Manpower":"Vendor Manpower, Brisk Olive Manpower",
+    "Rating":"5"
   },
   // ... other two members
   {
@@ -96,7 +97,8 @@ export const membersData = [
     "CV Attachment": "Yes",
     "Profile Photo": "Yes",
     "Blacklisted": "No",
-    "Manpower":"Vendor Manpower, Brisk Olive Manpower"
+    "Manpower":"Vendor Manpower, Brisk Olive Manpower",
+    "Rating":"3"
   },
   {
     "Member Id": "BO001",
@@ -144,7 +146,8 @@ export const membersData = [
     "CV Attachment": "Yes",
     "Profile Photo": "Yes",
     "Blacklisted": "No",
-    "Manpower":"Vendor Manpower, Brisk Olive Manpower"
+    "Manpower":"Vendor Manpower, Brisk Olive Manpower",
+    "Rating":"1"
   }
 ];
 

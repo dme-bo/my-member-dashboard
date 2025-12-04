@@ -85,6 +85,9 @@ export default function Sidebar() {
         <NavLink to="/configuration" className={({ isActive }) => (isActive ? "active" : "")}>
           Configuration
         </NavLink>
+        <NavLink to="/request" className={({ isActive }) => (isActive ? "active" : "")}>
+          Request
+        </NavLink>
       </nav>
     </aside>
   );
