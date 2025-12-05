@@ -65,7 +65,7 @@ export default function DashboardPage() {
   <div className="card">
     <div className="card-icon red"><FaClock size={28} /></div>
     <div className="card-label">Avg Experience</div>
-    <div className="card-value">10.9 years</div>
+    <div className="card-value">10.9Y</div>
   </div>
 
   <div className="card">

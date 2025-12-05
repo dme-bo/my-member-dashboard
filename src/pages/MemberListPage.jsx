@@ -65,9 +65,9 @@ export default function MemberListPage({ onMemberClick, filterData, filterKeys }
                 <tr>
                   <th>Member ID</th>
                   <th>Name</th>
+                  <th>Mobile</th>
                   <th>Rank</th>
                   <th>Service</th>
-                  <th>Mobile</th>
                   <th>Location</th>
                   <th>Applied</th>
                   <th>Status</th>
@@ -87,9 +87,9 @@ export default function MemberListPage({ onMemberClick, filterData, filterKeys }
                       <div className="member-name">{member["Full Name"]}</div>
                       <small className="member-email">{member["Email"]}</small>
                     </td>
+                    <td>{member["Mobile Number"]}</td>
                     <td>{member["Rank"]}</td>
                     <td>{member["Service"]}</td>
-                    <td>{member["Mobile Number"]}</td>
                     <td>{member["City"]}</td>
                     <td>
                       <strong>{member["No of Jobs Applied"] || 0}</strong>
