@@ -26,19 +26,19 @@ export default function RequirementsPage() {
     <div className="dashboard-container">
         
       {/* Header */}
-      <header className="dashboard-header">
-        <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
+<header className="dashboard-header">
+  <div className="header-content">
+    <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
 
-          <div className="category-buttons">
-            <button className="filter-btn active">All</button>
-            <button className="filter-btn">Open</button>
-            <button className="filter-btn">In Progress</button>
-            <button className="filter-btn">Closed</button>
-            <button className="filter-btn">TempStaff</button>
-            <button className="filter-btn">Recruitment</button>
-            <button className="filter-btn">Projects</button>
-          </div>
-      </header>
+      <button className="filter-btn active">All</button>
+      <button className="filter-btn">Open</button>
+      <button className="filter-btn">In Progress</button>
+      <button className="filter-btn">Closed</button>
+      <button className="filter-btn">TempStaff</button>
+      <button className="filter-btn">Recruitment</button>
+      <button className="filter-btn">Projects</button>
+    </div>
+</header>
 
       {/* Stats Cards - Same Style */}
       <div className="stats-grid">
@@ -121,7 +121,7 @@ export default function RequirementsPage() {
       {/* Detail Modal */}
       {showModal && selectedReq && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-contents" onClick={(e) => e.stopPropagation()}>
             <h2>{selectedReq.title}</h2>
             <p><strong>Location:</strong> {selectedReq.location}</p>
             <p><strong>Salary Range:</strong> {selectedReq.salary}</p>

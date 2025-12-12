@@ -1144,7 +1144,7 @@ footer {
 
 /* TempStaffPage.css */
 .temp-staff-table.clean th {
-  background: #2c3e50;
+  background: #3b82f6;
   color: white;
   padding: 14px 12px;
   font-weight: 600;
@@ -1270,10 +1270,10 @@ footer {
   backdrop-filter: blur(4px);
 }
 
-.modal-content {
+.modal-contents {
   background: white;
-  padding: 32px;
   border-radius: 16px;
+  padding: 36px;
   max-width: 600px;
   width: 90%;
   max-height: 90vh;
@@ -1283,7 +1283,7 @@ footer {
 
 .modal-content h2 {
   margin-top: 0;
-  color: #1e293b;
+  color: white;
   font-size: 24px;
 }
 
@@ -1334,11 +1334,11 @@ footer {
   font-size: 13px;
 }
 
-  .category-buttons {
+  .header-content {
     display: flex;
     gap: 12px;                  /* Creates consistent spacing between buttons */
     padding: 16px;
-    background-color: #3b82f6;  /* Blue background (Tailwind's blue-500) */
+    background-color: #1e40af;  /* Blue background (Tailwind's blue-500) */
     border-radius: 12px;
     flex-wrap: wrap;            /* Allows wrapping on small screens */
     justify-content: center;
@@ -1367,18 +1367,18 @@ footer {
     font-weight: 600;
   }
   /* Center the entire dashboard and limit to ~80% width */
+/* Main Container - Takes 90% of viewport width */
 .dashboard-container {
-  max-width: 1400px;           /* Adjust as needed - controls the max width */
-  width: 90%;                  /* Falls back nicely on smaller screens */
-  margin: 0 auto;              /* Centers the container */
-  padding: 24px 20px;          /* Optional: adds internal padding */
-  min-height: 100vh;           /* Ensures it fills viewport height if needed */
+  width: 90%;                   /* Takes 90% of the screen */         /* Prevents it from becoming too wide on huge screens */
+  margin: 0 auto;               /* Centers it */
+  padding: 32px 24px;
+  min-height: 100vh;
 }
 
 /* On larger screens, strictly enforce ~80% width */
 @media (min-width: 1200px) {
   .dashboard-container {
-    width: 80%;
+    width: 90%;
   }
 }
 
@@ -1395,8 +1395,8 @@ footer {
   font-size: 28px;
   color: #1e293b;
   margin: 0;
-  background-color: #3b82f6;
-  width: 800px;
+  background-color: #1e40af;
+  width: 853px;
   border-radius: 7px;
   color: white;
   text-align: center;
@@ -1410,7 +1410,7 @@ footer {
 }
 
 /* Make category buttons full width inside the container but still centered */
-.category-buttons {
+.header-content {
   width: 100%;
   max-width: 1000px;  /* Prevents it from stretching too wide */
   justify-content: center;
@@ -1423,3 +1423,336 @@ footer {
   gap: 20px;
   margin-bottom: 40px;
 }
+
+/* src/pages/RequirementsPage.css */
+
+/* Base & Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background-color: #f8f9fc;
+  color: #2d3748;
+  line-height: 1.6;
+}
+
+/* Container */
+.dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  width: 100%;
+}
+
+/* Header */
+.dashboard-header {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 40px;
+}
+
+.header-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.dashboard-title {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.filter-btn {
+  padding: 10px 18px;
+  border: none;
+  background: #edf2f7;
+  color: #4a5568;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn.active,
+.filter-btn:hover {
+  background: #1e40af;
+  color: white;
+}
+
+/* Stats Cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.icon-wrapper {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bg-blue    { background: #3182ce; }
+.bg-green   { background: #38a169; }
+.bg-cyan    { background: #319795; }
+.bg-purple  { background: #805ad5; }
+
+.icon-wrapper svg {
+  color: white;
+}
+
+.stat-info p {
+  margin: 0;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #718096;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+/* Requirements Section */
+.section-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 24px;
+  color: #1a202c;
+}
+
+.requirements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 24px;
+}
+
+.requirement-card {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.requirement-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+}
+
+.req-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.req-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #1a202c;
+}
+
+.status-badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-badge.active,
+.status-badge.Open {
+  background: #e6fffa;
+  color: #0c8599;
+}
+
+.status-badge.completed,
+.status-badge.Closed {
+  background: #ffe6e6;
+  color: #c92a2a;
+}
+
+.location,
+.salary,
+.deadline,
+.allocated {
+  font-size: 15px;
+  color: #4a5568;
+  margin-bottom: 12px;
+}
+
+.allocated {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-weight: 500;
+  color: #2d3748;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-contents {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 520px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-contents h2 {
+  margin-bottom: 24px;
+  font-size: 24px;
+  color: #1a202c;
+}
+
+.modal-contents p {
+  margin-bottom: 16px;
+  font-size: 15px;
+  color: #4a5568;
+}
+
+.jd-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-actions {
+  margin-top: 32px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn.primary {
+  background: #1e40af;
+  color: white;
+}
+
+.btn.primary:hover {
+  background: #1e40af;
+}
+
+.btn.secondary {
+  background: #edf2f7;
+  color: #2d3748;
+}
+
+.btn.secondary:hover {
+  background: #e2e8f0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 20px 16px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stats-grid,
+  .requirements-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-contents {
+    padding: 24px;
+  }
+}
+
+/* src/styles/DashboardPage.css */
+.modal-overlay {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.modal-content {
+  animation: slideIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(-50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  transition: transform 0.2s ease-in-out;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+
+
+
+
+
+
+

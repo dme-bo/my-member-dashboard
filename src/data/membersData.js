@@ -147,7 +147,7 @@ export const membersData = [
     "Profile Photo": "Yes",
     "Blacklisted": "No",
     "Manpower":"Vendor Manpower, Brisk Olive Manpower",
-    "Rating":"1"
+    "Rating":"2"
   }
 ];
 
