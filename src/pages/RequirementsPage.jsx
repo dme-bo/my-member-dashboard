@@ -4,11 +4,11 @@ import { FaBriefcase, FaCheckCircle, FaHourglassHalf, FaUsers } from "react-icon
 
 // Sample data - replace with your actual API/data later
 const requirementsData = [
-  { id: 1, title: "Senior Security Officer", jd: "Responsible for site security...", salary: "₹18-22 LPA", location: "Mumbai", deadline: "2025-12-20", status: "active", allocated: 2 },
-  { id: 2, title: "Facility Manager", jd: "Oversee operations of corporate facilities...", salary: "₹15-18 LPA", location: "Delhi", deadline: "2025-12-10", status: "active", allocated: 0 },
-  { id: 3, title: "Admin Executive (Ex-Serviceman)", jd: "Handle admin & coordination...", salary: "₹8-10 LPA", location: "Pune", deadline: "2025-11-30", status: "completed", allocated: 5 },
-  { id: 4, title: "Driver Cum Guard", jd: "Safe driving + basic security...", salary: "₹4-6 LPA", location: "Bangalore", deadline: "2025-12-25", status: "active", allocated: 1 },
-  { id: 5, title: "Fire & Safety Officer", jd: "Ensure compliance with fire safety norms...", salary: "₹12-15 LPA", location: "Chennai", deadline: "2025-12-15", status: "active", allocated: 0 },
+  { id: 1, title: "Senior Security Officer", jd: "Responsible for site security...", salary: "₹18-22 LPA", location: "Mumbai", deadline: "20 Dec 2025", status: "active", allocated: 2 },
+  { id: 2, title: "Facility Manager", jd: "Oversee operations of corporate facilities...", salary: "₹15-18 LPA", location: "Delhi", deadline: "20 Dec 2025", status: "active", allocated: 0 },
+  { id: 3, title: "Admin Executive (Ex-Serviceman)", jd: "Handle admin & coordination...", salary: "₹8-10 LPA", location: "Pune", deadline: "20 Dec 2025", status: "completed", allocated: 5 },
+  { id: 4, title: "Driver Cum Guard", jd: "Safe driving + basic security...", salary: "₹4-6 LPA", location: "Bangalore", deadline: "20 Dec 2025", status: "active", allocated: 1 },
+  { id: 5, title: "Fire & Safety Officer", jd: "Ensure compliance with fire safety norms...", salary: "₹12-15 LPA", location: "Chennai", deadline: "20 Dec 2025", status: "active", allocated: 0 },
 ];
 
 export default function RequirementsPage() {

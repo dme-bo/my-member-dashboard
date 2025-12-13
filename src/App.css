@@ -181,7 +181,7 @@ body {
 }
 
 .blue {
-  color: #3b82f6;
+  color: #1e40af;
 }
 
 .green {
@@ -223,7 +223,7 @@ body {
   color: #1e40af;
   margin-bottom: 15px;
   padding-bottom: 10px;
-  border-bottom: 3px solid #3b82f6;
+  border-bottom: 3px solid #1e40af;
   font-size: 18px;
 }
 
@@ -271,7 +271,7 @@ tr:hover {
 }
 
 .total-count-badge {
-  background: #3b82f6;
+  background: #1e40af;
   color: white;
   padding: 12px 28px;
   border-radius: 30px;
@@ -321,7 +321,7 @@ tr:hover {
 }
 
 .table-wrapper th {
-  background: #3b82f6;
+  background: #1e40af;
   color: white;
   padding: 16px;
   text-align: left;
@@ -444,7 +444,7 @@ footer {
 }
 
 .view-btn {
-  background: #3b82f6;
+  background: #1e40af;
   color: white;
   border: none;
   padding: 6px 14px;
@@ -461,7 +461,7 @@ footer {
 .modal-tabs {
   display: flex;
   border-bottom: 2px solid #eee;
-  background: #3b82f6;
+  background: #1e40af;
 }
 
 .tab {
@@ -723,7 +723,7 @@ footer {
   /* --- STYLES FOR THE FIX --- */
   background-color: #f9fafb; /* Light gray background to distinguish it */
   color: #1e40af; /* Blue text color to match the theme */
-  border: 1px solid #3b82f6; /* Blue border for emphasis */
+  border: 1px solid #1e40af; /* Blue border for emphasis */
   font-weight: 500;
   appearance: none; /* Remove default browser styling */
   background-repeat: no-repeat;
@@ -1144,7 +1144,7 @@ footer {
 
 /* TempStaffPage.css */
 .temp-staff-table.clean th {
-  background: #3b82f6;
+  background: #1e40af;
   color: white;
   padding: 14px 12px;
   font-weight: 600;
@@ -1292,7 +1292,7 @@ footer {
   padding: 16px;
   background: #f8fafc;
   border-radius: 12px;
-  border-left: 4px solid #3b82f6;
+  border-left: 4px solid #1e40af;
 }
 
 .modal-actions {
@@ -1312,7 +1312,7 @@ footer {
 }
 
 .btn.primary {
-  background: #3b82f6;
+  background: #1e40af;
   color: white;
 }
 
@@ -1747,7 +1747,6 @@ body {
   transition: transform 0.2s ease-in-out;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
-
 
 
 
