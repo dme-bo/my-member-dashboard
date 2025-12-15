@@ -54,7 +54,11 @@ function Layout() {
 
       <div className="main-content">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<DashboardPage
+                onMemberClick={setSelectedMember}
+                filterData={memberFilterData}
+                filterKeys={memberFilterKeys}
+              />} />
           <Route
             path="/memberlist"
             element={

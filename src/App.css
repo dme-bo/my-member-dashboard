@@ -74,7 +74,7 @@ body {
 .top-header {
   background: #1e40af;
   color: white;
-  padding: 20px 30px;
+  padding: 20px 200px;
   border-radius: 12px;
   margin-bottom: 25px;
   display: flex;
@@ -466,7 +466,6 @@ footer {
 
 .tab {
   padding: 14px 24px;
-  color: #333;
   border: none;
   background: none;
   font-size: 15px;

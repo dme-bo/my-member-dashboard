@@ -25,9 +25,9 @@ export default function DashboardPage() {
     { icon: FaTrophy, color: 'success', label: 'Ranks', value: '88', description: 'Number of different ranks held by members' },
     { icon: FaClock, color: 'red', label: 'Avg Experience', value: '10.9Y', description: 'Average years of experience among members' },
     { icon: FaUserPlus, color: 'new', label: 'Registered Today', value: '1', description: 'New members registered today' },
-    { icon: FaCalendarWeek, color: 'week', label: 'This Week', value: '14', description: 'New members registered this week' },
-    { icon: FaCalendarAlt, color: 'month', label: 'This Month', value: '47', description: 'New members registered this month' },
-    { icon: FaCalendarAlt, color: 'quarter', label: 'Last 3 Months', value: '395', description: 'New members registered in last 3 months' }
+    { icon: FaCalendarWeek, color: 'week', label: 'Registered This Week', value: '14', description: 'New members registered this week' },
+    { icon: FaCalendarAlt, color: 'month', label: 'Registered This Month', value: '47', description: 'New members registered this month' },
+    { icon: FaCalendarAlt, color: 'quarter', label: 'Registered Last 3 Months', value: '395', description: 'New members registered in last 3 months' }
   ];
 
   const handleCardClick = (card) => {
@@ -45,15 +45,16 @@ export default function DashboardPage() {
       <header className="top-header">
         <h1>Member Dashboard</h1>
         <div className="top-filters">
-          <div className="date-group">
+          {/* <div className="date-group">
             <div><label>From</label><input type="date" defaultValue="2025-04-01" /></div>
             <div><label>To</label><input type="date" defaultValue="2026-03-31" /></div>
-          </div>
+          </div> */}
           <div className="button-group">
             <button className="btn active">All</button>
             <button className="btn">Military</button>
             <button className="btn">Paramilitary</button>
-            <button className="btn">Air Force</button>
+            <button className="btn">BRO</button>
+            <button className="btn">Police</button>
           </div>
         </div>
       </header>
