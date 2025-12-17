@@ -9,6 +9,7 @@ const requirementsData = [
   { id: 3, title: "Admin Executive (Ex-Serviceman)", jd: "Handle admin & coordination...", salary: "₹8-10 LPA", location: "Pune", deadline: "20 Dec 2025", status: "completed", allocated: 5 },
   { id: 4, title: "Driver Cum Guard", jd: "Safe driving + basic security...", salary: "₹4-6 LPA", location: "Bangalore", deadline: "20 Dec 2025", status: "active", allocated: 1 },
   { id: 5, title: "Fire & Safety Officer", jd: "Ensure compliance with fire safety norms...", salary: "₹12-15 LPA", location: "Chennai", deadline: "20 Dec 2025", status: "active", allocated: 0 },
+  { id: 6, title: "Fire & Safety Officer", jd: "Ensure compliance with fire safety norms...", salary: "₹20-25 LPA", location: "Delhi", deadline: "20 Dec 2025", status: "active", allocated: 17 },
 ];
 
 export default function RequirementsPage() {

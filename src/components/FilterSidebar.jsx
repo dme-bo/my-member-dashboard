@@ -2,7 +2,7 @@
 export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
   const { filters, handleFilterChange, clearFilters } = filterData;
 
-  // Placeholder options (hardcoded for now)
+  // Updated placeholder options with memberlist support
   const placeholderOptions = {
     TempStaffPage: {
       Service: ["Indian Army", "Indian Navy", "Indian Air Force", "BSF/CRPF", "Others"],
@@ -15,9 +15,13 @@ export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
       Status: ["New", "Contacted", "Interviewed", "Shortlisted", "Placed", "On Hold", "Not Interested"],
       Rating: ["5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star", "Not Rated"],
     },
-
-
-     RecruitmentPage: {
+    memberlist: {
+      Service: ["Indian Army", "Indian Navy", "Indian Air Force", "BSF/CRPF", "Military"],
+      Rank: ["Colonel", "Major", "Captain", "Lieutenant", "JCO", "Other"],
+      Location: ["Delhi/NCR", "Mumbai", "Bangalore", "Chennai", "Pune", "Others"],
+      Status: ["Active", "Placed", "Inactive"],
+    },
+    RecruitmentPage: {
       Company: ["Reliance", "Infosys", "Wipro"],
       Position: ["Head", "Manager", "Analyst"],
       Location: ["Mumbai", "Bangalore", "Delhi"],

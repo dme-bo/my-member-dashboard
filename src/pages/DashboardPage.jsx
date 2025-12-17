@@ -24,10 +24,10 @@ export default function DashboardPage() {
     { icon: FaConciergeBell, color: 'info', label: 'Services', value: '12', description: 'Available service types for members' },
     { icon: FaTrophy, color: 'success', label: 'Ranks', value: '88', description: 'Number of different ranks held by members' },
     { icon: FaClock, color: 'red', label: 'Avg Experience', value: '10.9Y', description: 'Average years of experience among members' },
-    { icon: FaUserPlus, color: 'new', label: 'Registered Today', value: '1', description: 'New members registered today' },
-    { icon: FaCalendarWeek, color: 'week', label: 'Registered This Week', value: '14', description: 'New members registered this week' },
-    { icon: FaCalendarAlt, color: 'month', label: 'Registered This Month', value: '47', description: 'New members registered this month' },
-    { icon: FaCalendarAlt, color: 'quarter', label: 'Registered Last 3 Months', value: '395', description: 'New members registered in last 3 months' }
+    { icon: FaUserPlus, color: 'new', label: 'Registered Today', value: '69', description: 'New members registered today' },
+    { icon: FaCalendarWeek, color: 'week', label: 'Registered This Week', value: '169', description: 'New members registered this week' },
+    { icon: FaCalendarAlt, color: 'month', label: 'Registered This Month', value: '269', description: 'New members registered this month' },
+    { icon: FaCalendarAlt, color: 'quarter', label: 'Registered Last 3 Months', value: '369', description: 'New members registered in last 3 months' }
   ];
 
   const handleCardClick = (card) => {

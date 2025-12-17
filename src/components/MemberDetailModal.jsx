@@ -3,27 +3,28 @@ import { useState } from "react";
 
 export default function MemberDetailModal({ member, onClose }) {
   const [activeTab, setActiveTab] = useState("personal");
-  const [notes, setNotes] = useState(member["Notes"] || ""); // assuming you might have notes field
+  
+  // Notes: You can add a "notes" field later in Firestore. For now, using local state.
+  const [notes, setNotes] = useState(member.notes || "");
 
   const tabs = [
     { id: "personal", label: "Personal Info" },
+    { id: "education", label: "Education" },
     { id: "service", label: "Service Record" },
-    { id: "servicebo", label: "Service Record in BO" },
     { id: "job", label: "Job Preferences" },
-    { id: "experience", label: "Experience & Skills" },
-    { id: "documents", label: "Documents & IDs" },
-    { id: "interaction", label: "Interaction & Notes" }, // New Tab
+    { id: "documents", label: "Documents" },
+    { id: "interaction", label: "Interaction & Notes" },
   ];
 
-  // Rating logic
-  const rating = parseInt(member["Rating"]) || 0;
+  // Rating logic (assuming you might add a "rating" field later)
+  const rating = parseInt(member.rating) || 0;
   const getRatingLabel = (stars) => {
     const labels = {
       1: "Poor - Unresponsive / Unprofessional",
       2: "Below Average - Slow response / Low interest",
       3: "Average - Decent communication",
       4: "Good - Proactive & Professional",
-      5: "Excellent - Highly recommended"
+      5: "Excellent - Highly recommended",
     };
     return labels[stars] || "Not Rated";
   };
@@ -36,15 +37,14 @@ export default function MemberDetailModal({ member, onClose }) {
             key={i}
             className="star"
             style={{
-              color: i < rating ? "#f59e0b" : "#fefeffff",
+              color: i < rating ? "#f59e0b" : "#e5e7eb",
               fontSize: "20px",
-              cursor: "default"
             }}
           >
             ★
           </span>
         ))}
-        <span style={{ marginLeft: "8px", fontSize: "14px", color: "#6b45309", fontWeight: "500" }}>
+        <span style={{ marginLeft: "8px", fontSize: "14px", fontWeight: "500" }}>
           {rating}/5
         </span>
       </div>
@@ -52,26 +52,28 @@ export default function MemberDetailModal({ member, onClose }) {
   };
 
   const handleSaveNotes = () => {
-    // Here you can integrate with your backend API to save notes
-    alert("Notes saved successfully!"); // Replace with actual save logic
-    console.log("Saving notes for member:", member["Full Name"], notes);
+    // TODO: Integrate with Firestore update later
+    alert("Notes saved locally! (Implement Firestore save in production)");
+    console.log("Notes for", member.first_name, member.last_name, ":", notes);
   };
+
+  const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim() || "N/A";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div style={{ flex: 1 }}>
-            <h2>{member["Full Name"]}</h2>
+            <h2>{fullName}</h2>
             <p style={{ margin: "5px 0", opacity: 0.9, fontSize: "15px" }}>
-              {member["Mobile Number"]} • {member["Email"]}
+              {member.phone_number || "N/A"} • {member.email || "N/A"}
             </p>
           </div>
 
           {/* Star Rating - Top Right */}
           <div style={{ marginRight: "60px", marginTop: "8px" }}>
             {renderStars()}
-            <div style={{ fontSize: "12px", color: "#ffffffff", marginTop: "4px", textAlign: "right" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px", textAlign: "right" }}>
               {getRatingLabel(rating)}
             </div>
           </div>
@@ -92,99 +94,94 @@ export default function MemberDetailModal({ member, onClose }) {
         </div>
 
         <div className="modal-body" style={{ minHeight: "400px" }}>
-          {/* 1. Personal Info */}
+          {/* Personal Info */}
           {activeTab === "personal" && (
             <div className="detail-grid">
-              <div><strong>Full Name:</strong> {member["Full Name"]}</div>
-              <div><strong>Date of Birth:</strong> {member["Dob"]}</div>
-              <div><strong>Gender:</strong> {member["Gender"]}</div>
-              <div><strong>Email:</strong> {member["Email"]}</div>
-              <div><strong>Mobile:</strong> {member["Mobile Number"]}</div>
-              <div><strong>Whatsapp:</strong> {member["Whatsapp"]}</div>
-              <div><strong>Current Location:</strong> {member["Current Location"]}</div>
-              <div><strong>Permanent Address:</strong> {member["Permanent Address"]}</div>
-              <div><strong>Preferred Location:</strong> {member["Preferred Job Location"] || "Any"}</div>
+              <div><strong>Full Name:</strong> {fullName}</div>
+              <div><strong>Email:</strong> {member.email || "-"}</div>
+              <div><strong>Mobile:</strong> {member.phone_number || "-"}</div>
+              <div><strong>Gender:</strong> {member.gender || "-"}</div>
+              <div><strong>Date of Birth:</strong> {member.dateofbirth || "-"}</div>
+              <div><strong>Current City:</strong> {member.city || "-"}</div>
+              <div><strong>State:</strong> {member.state || "-"}</div>
+              <div><strong>Country:</strong> {member.country || "India"}</div>
+              <div><strong>Location Preference:</strong> {member.location || "Any"}</div>
             </div>
           )}
 
-          {/* Other tabs remain same */}
+          {/* Education */}
+          {activeTab === "education" && (
+            <div className="detail-grid">
+              <div><strong>Graduation Course:</strong> {member.graduation_course || "-"}</div>
+              <div><strong>Graduation %:</strong> {member.graduation_percentage || "-"}</div>
+              <div><strong>11th %:</strong> {member.percentage11th || "-"}</div>
+              <div><strong>12th %:</strong> {member.percentage12th || "-"}</div>
+              <div><strong>Post Graduation:</strong> {member.postgraduation_course || "-"}</div>
+              <div><strong>PG Percentage:</strong> {member.postgraduation_percentage || "-"}</div>
+              <div><strong>PhD:</strong> {member.phd_course || "None"}</div>
+              <div><strong>Languages Known:</strong> 
+                {[member.language_known1, member.language_known2, member.language_known3]
+                  .filter(Boolean)
+                  .join(", ") || "-"}
+              </div>
+            </div>
+          )}
+
+          {/* Service Record */}
           {activeTab === "service" && (
             <div className="detail-grid">
-              <div><strong>Service:</strong> {member["Service"]}</div>
-              <div><strong>Rank:</strong> {member["Rank"]}</div>
-              <div><strong>Level:</strong> {member["Level"]}</div>
-              <div><strong>Year of Commission:</strong> {member["Year Of Commission"]}</div>
-              <div><strong>Commission Course:</strong> {member["Commission Course"]}</div>
-              <div><strong>Planned Retirement:</strong> {member["Actual Plan Date Of Retirement"]}</div>
-              <div><strong>Govt Experience:</strong> {member["Govt Experience"]}</div>
-              <div><strong>Rating:</strong> {member["Rating"]}/5</div>
-              <div><strong>Tags:</strong> {member["Tags"]}</div>
-              <div><strong>Blacklisted:</strong> {member["Blacklisted"]}</div>
+              <div><strong>Service/Organization:</strong> {member.service || member.organization || "Civilian"}</div>
+              <div><strong>Rank:</strong> {member.rank || "-"}</div>
+              <div><strong>Level:</strong> {member.level || "-"}</div>
+              <div><strong>Profile Complete (Essential):</strong> {member.isEssentialProfileComplete ? "Yes" : "No"}</div>
+              <div><strong>Profile Complete (Education):</strong> {member.isEducationalProfileComplete ? "Yes" : "No"}</div>
             </div>
           )}
 
-          {activeTab === "servicebo" && (
-            <div className="detail-grid">
-              <div><strong>Member ID:</strong> {member["Member Id"]}</div>
-              <div><strong>Entry Date:</strong> {member["Entry Date"]}</div>
-              <div><strong>Apply Job:</strong> {member["Apply Job"]}</div>
-              <div><strong>Placed by BO:</strong> {member["Placed by BO"]}</div>
-              <div><strong>Jobs Applied:</strong> {member["No of Jobs Applied"]}</div>
-              <div><strong>Shortlistings:</strong> {member["No of Shortlistings"]}</div>
-              <div><strong>State/City:</strong> {member["State"]}, {member["City"]}</div>
-              <div><strong>Pincode:</strong> {member["Pincode"]}</div>
-            </div>
-          )}
-
+          {/* Job Preferences */}
           {activeTab === "job" && (
             <div className="detail-grid">
-              <div><strong>Preferred Job Location:</strong> {member["Preferred Job Location"] || "Anywhere"}</div>
-              <div><strong>Expected CTC:</strong> {member["Expected Ctc"]}</div>
-              <div><strong>Current CTC:</strong> {member["Current Ctc"] || "N/A"}</div>
-              <div><strong>Notice Period:</strong> {member["Notice Period"]}</div>
-              <div><strong>Job Applied:</strong> {member["Apply Job"]}</div>
-              <div><strong>Placed Status:</strong> {member["Placed by BO"]}</div>
+              <div><strong>Preferred Location:</strong> {member.location || "Anywhere"}</div>
+              <div><strong>Current City:</strong> {member.city || "-"}</div>
+              <div><strong>Resume Uploaded:</strong> {member.resume_fileurl ? "Yes" : "No"}</div>
+              <div><strong>Actively Seeking Job:</strong> {member.isEssentialProfileComplete ? "Yes" : "Pending Profile"}</div>
             </div>
           )}
 
-          {activeTab === "experience" && (
-            <div className="detail-grid">
-              <div><strong>Education:</strong> {member["Education"]}</div>
-              <div><strong>MBA:</strong> {member["Mba"]}</div>
-              <div><strong>Total Experience:</strong> {member["Total Experience"]}</div>
-              <div><strong>Work Experience:</strong> {member["Work Experience"]}</div>
-              <div><strong>IT Skills:</strong> {member["It Skills"]}</div>
-              <div><strong>English Proficiency:</strong> {member["English"]}</div>
-              <div><strong>Corporate Experience:</strong> {member["Corporate Experience"]}</div>
-            </div>
-          )}
-
+          {/* Documents */}
           {activeTab === "documents" && (
             <div className="detail-grid">
-              <div><strong>Aadhaar:</strong> {member["Aadhaar Number"] ? "Uploaded" : "Not Uploaded"}</div>
-              <div><strong>PAN:</strong> {member["Pan Number"] ? "Uploaded" : "Not Uploaded"}</div>
-              <div><strong>CV Attached:</strong> {member["CV Attachment"] === "Yes" ? "Yes" : "No"}</div>
-              <div><strong>Profile Photo:</strong> {member["Profile Photo"] === "Yes" ? "Yes" : "No"}</div>
-              <div><strong>Bank Details:</strong> {member["Bank Name"]} - {member["Account Number"]}</div>
+              <div><strong>Resume:</strong> 
+                {member.resume_fileurl ? (
+                  <a href={member.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
+                    View Resume
+                  </a>
+                ) : "Not Uploaded"}
+              </div>
+              <div><strong>Profile Completion:</strong> 
+                {member.isEssentialProfileComplete && member.isEducationalProfileComplete ? "Complete" : "Incomplete"}
+              </div>
+              <div><strong>User Since:</strong> {member.created_time?.toDate?.().toLocaleDateString() || "Unknown"}</div>
             </div>
           )}
 
-          {/* New Interaction & Notes Tab */}
+          {/* Interaction & Notes */}
           {activeTab === "interaction" && (
             <div style={{ padding: "20px" }}>
               <h3 style={{ marginBottom: "15px", color: "#1f2937" }}>Interaction Notes</h3>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add your notes about communication, interviews, behavior, etc..."
-                rows="10"
+                placeholder="Add notes about calls, responsiveness, interviews, behavior, etc..."
+                rows="12"
                 style={{
                   width: "100%",
                   padding: "12px",
                   borderRadius: "8px",
-                  border: "1px solid #ffffffff",
+                  border: "1px solid #d1d5db",
                   fontSize: "14px",
-                  fontFamily: "inherit"
+                  fontFamily: "inherit",
+                  resize: "vertical",
                 }}
               />
               <div style={{ marginTop: "15px", textAlign: "right" }}>
@@ -197,7 +194,7 @@ export default function MemberDetailModal({ member, onClose }) {
                     border: "none",
                     borderRadius: "6px",
                     cursor: "pointer",
-                    fontWeight: "500"
+                    fontWeight: "500",
                   }}
                 >
                   Save Notes
