@@ -2038,6 +2038,113 @@ body {
     justify-content: center;
   }
 }
+/* Main content area - full height minus header/search */
+.content-with-sidebar.responsive {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  height: calc(100vh - 200px); /* Adjust 200px based on your page header + search height (~160-220px) */
+  overflow: hidden;
+}
+
+/* Table Container - takes full height, column layout */
+.table-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden; /* Important: clips the scroll */
+}
+
+/* Scrollable table body only */
+.table-wrapper.responsive-table {
+  flex: 1;
+  overflow: auto; /* Vertical + horizontal scroll */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Fixed sticky header */
+.members-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #1e40af; /* Your blue header color */
+}
+
+.members-table thead th {
+  background: #1e40af;
+  color: white;
+  padding: 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* Sticky Name column (optional, matches many designs) */
+.sticky-name {
+  position: sticky;
+  left: 0;
+  background: white; /* Body rows */
+  z-index: 1;
+  min-width: 200px;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+}
+
+.members-table thead th.sticky-name {
+  background: #1e40af; /* Header stays blue */
+  z-index: 3;
+}
+
+/* Pagination fixed at bottom, outside scroll */
+.custom-pagination {
+  flex-shrink: 0;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+  padding: 20px 24px;
+}
+
+/* Filter Sidebar - independent scroll */
+.filter-sidebar-desktop {
+  width: 310px;
+  height: 100%; /* Full available height */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.filter-sidebar-desktop > * {
+  flex: 1;
+  overflow-y: auto; /* Sidebar content scrolls independently */
+  padding-right: 26px;
+}
+
+/* Nice scrollbar (optional) */
+.table-wrapper::-webkit-scrollbar,
+.filter-sidebar-desktop > *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-track,
+.filter-sidebar-desktop > *::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+
+
+
+
 
 
 
