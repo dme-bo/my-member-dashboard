@@ -18,7 +18,7 @@ export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
     memberlist: {
       Gender: ["Male", "Female", "Others"],
       Category: ["Civilian", "BRO", "MES", "Military", "Military Child", "Military Spouse", "Paramilitary", "Police"],
-      Service: ["Indian Army", "Indian Navy", "Indian Air Force", "BSF/CRPF", "Military"],
+      Service: ["Military", "Indian Navy", "Indian Air Force", "BSF/CRPF", "Military"],
       Rank: ["Colonel", "Major", "Captain", "Lieutenant", "JCO", "Other"],
       Location: ["Delhi/NCR", "Mumbai", "Bangalore", "Chennai", "Pune", "Others"],
       Status: ["Active", "Placed", "Inactive"],
