@@ -7,6 +7,7 @@ import {
   FaUsers,
   FaSearch,
   FaEye,
+  FaProjectDiagram,
 } from "react-icons/fa";
 import {
   collection,
@@ -20,14 +21,17 @@ import {
 import { db } from "../firebase";
 
 export default function RequirementsPage() {
-  const [requirementsData, setRequirementsData] = useState([]);
+  const [requirementsData, setRequirementsData] = useState([]); // Combined jobs + projects
   const [members, setMembers] = useState([]);
   const [filteredMembers, setFilteredMembers] = useState([]);
   const [selectedReq, setSelectedReq] = useState(null);
 
   // Global allocations + live counts
   const [allAllocations, setAllAllocations] = useState([]);
-  const [allocatedCounts, setAllocatedCounts] = useState({}); // jobId → count
+  const [allocatedCounts, setAllocatedCounts] = useState({});
+
+  // Active filter for header buttons
+  const [activeFilter, setActiveFilter] = useState("All");
 
   // Modals
   const [showJobModal, setShowJobModal] = useState(false);
@@ -44,96 +48,156 @@ export default function RequirementsPage() {
   // Selected member for detail view
   const [selectedMember, setSelectedMember] = useState(null);
 
-  // Allocated members for current job
+  // Allocated members for current req
   const [allocatedMembers, setAllocatedMembers] = useState([]);
 
-  // Search term
+  // Member filters
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
+  const [genderFilter, setGenderFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
+  const [organizationFilter, setOrganizationFilter] = useState("");
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
+  // Toast
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  /* FETCH REQUIREMENTS */
+  /* FETCH BOTH JOBS AND PROJECTS */
   useEffect(() => {
     const fetchRequirements = async () => {
       try {
         setLoading(true);
-        const q = query(collection(db, "jobsmaster"));
-        const snapshot = await getDocs(q);
-        const raw = snapshot.docs.map((doc) => ({
+
+        // Fetch Jobs from jobsmaster
+        const jobsQuery = query(collection(db, "jobsmaster"));
+        const jobsSnapshot = await getDocs(jobsQuery);
+        const jobs = jobsSnapshot.docs.map((doc) => ({
           id: doc.id,
+          collection: "jobsmaster",
+          type: "job",
           ...doc.data(),
         }));
-        const transformed = raw.map((job) => {
-          const min = job.job_salaryrange_minimum ?? 0;
-          const max = job.job_salaryrange_maximum ?? 0;
-          let salary = "Not disclosed";
-          if (min > 0 && max > 0) {
-            const minLPA = (min * 12) / 100000;
-            const maxLPA = (max * 12) / 100000;
-            salary = `₹${minLPA.toFixed(1)} - ₹${maxLPA.toFixed(1)} LPA`;
-          } else if (min > 0) {
-            salary = `₹${min.toLocaleString()}/month`;
+
+        // Fetch Projects from projectsmaster
+        const projectsQuery = query(collection(db, "projectsmaster"));
+        const projectsSnapshot = await getDocs(projectsQuery);
+        const projects = projectsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          collection: "projectsmaster",
+          type: "project",
+          ...doc.data(),
+        }));
+
+        const combined = [...jobs, ...projects];
+
+        const transformed = combined.map((item) => {
+          let title, jd, salary, location, company, logo, postedOn, status, benefits;
+
+          if (item.type === "job") {
+            const min = item.job_salaryrange_minimum ?? 0;
+            const max = item.job_salaryrange_maximum ?? 0;
+            salary = "Not disclosed";
+            if (min > 0 && max > 0) {
+              const minLPA = (min * 12) / 100000;
+              const maxLPA = (max * 12) / 100000;
+              salary = `₹${minLPA.toFixed(1)} - ₹${maxLPA.toFixed(1)} LPA`;
+            } else if (min > 0) {
+              salary = `₹${min.toLocaleString()}/month`;
+            }
+
+            title = item.job_title ?? "Untitled Job";
+            jd = item.job_roleandresponsibilities ?? "No description available.";
+            location = item.job_city ?? item.job_location ?? "Location not specified";
+            company = item.job_company ?? "—";
+            logo = item.job_logo ?? null;
+            postedOn = item.job_postedon ?? "—";
+            benefits = item.job_otherbenefits ?? null;
+            status = item.job_status === "Open" ? "active" : "completed";
+          } else {
+            // Project
+            title = item.project_title ?? "Untitled Project";
+            jd = item.project_description ?? "No description available.";
+            salary = "Volunteer / Stipend-based"; // Customize if needed
+            location = item.project_location ?? item.project_city ?? "Location not specified";
+            company = item.project_company ?? "—";
+            logo = item.project_company_logo ?? null;
+            postedOn = item.project_postedon ?? "—";
+            benefits = item.project_benefit ?? null;
+            status = item.project_status === "Active" ? "active" : "completed";
           }
-          const status = job.job_status === "Open" ? "active" : "completed";
+
           return {
-            id: job.id,
-            title: job.job_title ?? "Untitled Job",
-            jd: job.job_roleandresponsibilities ?? "No description available.",
+            id: item.id,
+            collection: item.collection,
+            type: item.type,
+            title,
+            jd,
             salary,
-            location: job.job_city ?? job.job_location ?? "Location not specified",
-            postedOn: job.job_postedon ?? "—",
+            location,
+            company,
+            logo,
+            benefits,
+            postedOn,
             status,
-            company: job.job_company ?? "—",
-            logo: job.job_logo ?? null,
-            benefits: job.job_otherbenefits ?? null,
           };
         });
-        transformed.sort((a, b) => new Date(b.postedOn) - new Date(a.postedOn));
+
+        // Sort newest first (assuming DD-MM-YYYY format)
+        transformed.sort((a, b) => {
+          const parseDate = (dateStr) => {
+            if (!dateStr || dateStr === "—") return new Date(0);
+            const [d, m, y] = dateStr.split("-");
+            return new Date(`${y}-${m}-${d}`);
+          };
+          return parseDate(b.postedOn) - parseDate(a.postedOn);
+        });
+
         setRequirementsData(transformed);
       } catch (err) {
-        console.error(err);
-        setError("Failed to load requirements.");
+        console.error("Error fetching requirements:", err);
+        setError("Failed to load jobs and projects.");
       } finally {
         setLoading(false);
       }
     };
+
     fetchRequirements();
   }, []);
 
-  /* FETCH ALL ALLOCATIONS - Global listener for live counts & global view */
+  /* FETCH ALL ALLOCATIONS (shared across jobs & projects) */
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "allocations"), (snapshot) => {
       const allocs = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
       setAllAllocations(allocs);
 
-      // Compute live allocated count per job
       const counts = {};
       allocs.forEach((alloc) => {
         counts[alloc.jobId] = (counts[alloc.jobId] || 0) + 1;
       });
       setAllocatedCounts(counts);
     });
-
     return () => unsubscribe();
   }, []);
 
-  /* FETCH ALLOCATED MEMBERS FOR SELECTED JOB */
+  /* FETCH ALLOCATED MEMBERS FOR SELECTED REQ */
   useEffect(() => {
     if (!selectedReq) {
       setAllocatedMembers([]);
       return;
     }
-
     const allocQuery = query(
       collection(db, "allocations"),
       where("jobId", "==", selectedReq.id)
     );
-
     const unsubscribe = onSnapshot(allocQuery, (snapshot) => {
       const alloc = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -141,34 +205,21 @@ export default function RequirementsPage() {
       }));
       setAllocatedMembers(alloc);
     });
-
     return () => unsubscribe();
   }, [selectedReq]);
 
-  /* FETCH MEMBERS - only when needed */
+  /* FETCH MEMBERS */
   useEffect(() => {
-    const needsMembers =
-      showStatsModal ||
-      showAllocateModal ||
-      showAllocatedMembersModal ||
-      showAllAllocationsModal;
-
-    if (!needsMembers) {
-      setMembers([]);
-      setFilteredMembers([]);
-      setMemberSearchTerm("");
-      return;
-    }
-
-    const unsubscribe = onSnapshot(
-      collection(db, "users"),
-      (snapshot) => {
+    const fetchMembers = async () => {
+      try {
+        const q = query(collection(db, "users"));
+        const snapshot = await getDocs(q);
         const membersList = snapshot.docs.map((doc) => ({
           id: doc.id,
           name:
             doc.data().name ||
             doc.data().displayName ||
-            doc.data().first_name ||
+            `${doc.data().first_name || ""} ${doc.data().last_name || ""}`.trim() ||
             "Unnamed",
           email: doc.data().email || "—",
           phone:
@@ -177,164 +228,173 @@ export default function RequirementsPage() {
             doc.data().phone_number ||
             "—",
           designation: doc.data().designation || doc.data().role || "—",
+          gender: doc.data().gender || "",
+          state: doc.data().state || "",
+          city: doc.data().city || "",
+          organization: doc.data().organization || "",
           ...doc.data(),
         }));
         setMembers(membersList);
         setFilteredMembers(membersList);
-      },
-      (error) => console.error("Error fetching members:", error)
-    );
+      } catch (err) {
+        console.error("Error fetching members:", err);
+      }
+    };
+    fetchMembers();
+  }, []);
 
-    return () => unsubscribe();
-  }, [
-    showStatsModal,
-    showAllocateModal,
-    showAllocatedMembersModal,
-    showAllAllocationsModal,
-  ]);
+  /* UNIQUE FILTER VALUES */
+  const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
+  const uniqueCities = useMemo(() => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(), [members]);
+  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => m.organization).filter(Boolean))].sort(), [members]);
 
-  /* LIVE SEARCH FILTER */
+  /* MEMBER FILTERING */
   useEffect(() => {
-    if (!memberSearchTerm.trim()) {
-      setFilteredMembers(members);
-    } else {
+    let filtered = members;
+
+    if (memberSearchTerm.trim()) {
       const term = memberSearchTerm.toLowerCase();
-      setFilteredMembers(
-        members.filter(
-          (m) =>
-            m.name?.toLowerCase().includes(term) ||
-            m.email?.toLowerCase().includes(term) ||
-            m.phone?.includes(term) ||
-            m.designation?.toLowerCase().includes(term)
-        )
+      filtered = filtered.filter(
+        (m) =>
+          m.name?.toLowerCase().includes(term) ||
+          m.email?.toLowerCase().includes(term) ||
+          m.phone?.includes(term) ||
+          m.designation?.toLowerCase().includes(term)
       );
     }
-  }, [memberSearchTerm, members]);
+    if (genderFilter) filtered = filtered.filter((m) => m.gender?.toLowerCase() === genderFilter.toLowerCase());
+    if (stateFilter) filtered = filtered.filter((m) => m.state === stateFilter);
+    if (cityFilter) filtered = filtered.filter((m) => m.city === cityFilter);
+    if (organizationFilter) filtered = filtered.filter((m) => m.organization === organizationFilter);
 
-  /* STATS - Now uses live allocated count */
+    setFilteredMembers(filtered);
+    setCurrentPage(1);
+  }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, organizationFilter, members]);
+
+  /* FILTERED REQUIREMENTS BASED ON HEADER */
+  const filteredRequirements = useMemo(() => {
+    let list = requirementsData;
+
+    if (activeFilter === "Open") list = list.filter((r) => r.status === "active");
+    if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
+    if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
+    if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
+    // "All" and "Temp Staffing" show all (you can add logic for Temp Staffing later)
+
+    return list;
+  }, [requirementsData, activeFilter]);
+
+  /* STATS */
   const stats = useMemo(() => {
     const active = requirementsData.filter((r) => r.status === "active").length;
-    const completed = requirementsData.filter((r) => r.status === "completed")
-      .length;
-    const totalAllocated = Object.values(allocatedCounts).reduce(
-      (sum, count) => sum + count,
-      0
-    );
-    return {
-      active,
-      completed,
-      total: requirementsData.length,
-      totalAllocated,
-    };
+    const completed = requirementsData.filter((r) => r.status === "completed").length;
+    const totalAllocated = Object.values(allocatedCounts).reduce((sum, c) => sum + c, 0);
+    return { total: requirementsData.length, active, completed, totalAllocated };
   }, [requirementsData, allocatedCounts]);
 
-  const getFilteredRequirements = (type) => {
-    if (type === "total") return requirementsData;
-    if (type === "active")
-      return requirementsData.filter((r) => r.status === "active");
-    if (type === "completed")
-      return requirementsData.filter((r) => r.status === "completed");
-    return [];
-  };
-
   const handleStatClick = (type) => {
-    if (type === "allocated") {
-      setShowAllAllocationsModal(true);
-    } else {
+    if (type === "allocated") setShowAllAllocationsModal(true);
+    else {
       setStatsModalType(type);
       setShowStatsModal(true);
     }
-    setMemberSearchTerm("");
   };
 
-  if (loading)
-    return (
-      <div className="dashboard-container">
-        <div className="loading">Loading requirements…</div>
-      </div>
-    );
-  if (error)
-    return (
-      <div className="dashboard-container">
-        <div className="error">{error}</div>
-      </div>
-    );
+  const paginatedMembers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredMembers.slice(start, start + pageSize);
+  }, [filteredMembers, currentPage]);
+
+  const totalPages = Math.ceil(filteredMembers.length / pageSize);
+
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
+  };
+
+  if (loading) return <div className="dashboard-container"><div className="loading">Loading jobs & projects…</div></div>;
+  if (error) return <div className="dashboard-container"><div className="error">{error}</div></div>;
 
   return (
     <div className="dashboard-container">
+      {/* TOAST */}
+      {toast.show && (
+        <div
+          style={{
+            position: "fixed",
+            top: "20px",
+            right: "20px",
+            background: toast.type === "success" ? "#10b981" : "#ef4444",
+            color: "white",
+            padding: "16px 28px",
+            borderRadius: "12px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            zIndex: 10000,
+            fontWeight: "600",
+            fontSize: "16px",
+            animation: "slideIn 0.4s ease-out",
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
+      <style jsx>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
+
       {/* HEADER */}
       <header className="dashboard-header">
         <div className="header-content">
-          <h1 className="dashboard-title">
-            Requirements Allocation Dashboard
-          </h1>
-          <div>
-            <button className="filter-btn active">All</button>
-            <button className="filter-btn">Open</button>
-            <button className="filter-btn">Closed</button>
-            <button className="filter-btn">Temp Staffing</button>
-            <button className="filter-btn">Recruitment</button>
-            <button className="filter-btn">Projects</button>
+          <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
+          <div className="filter-buttons">
+            {["All", "Active", "Closed", "Temp Staffing", "Recruitment", "Projects"].map((filter) => (
+              <button
+                key={filter}
+                className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
+                onClick={() => setActiveFilter(filter)}
+              >
+                {filter}
+              </button>
+            ))}
           </div>
         </div>
       </header>
 
       {/* STATS GRID */}
       <div className="stats-grid">
-        <div
-          className="card"
-          onClick={() => handleStatClick("total")}
-          style={{ cursor: "pointer" }}
-        >
+        <div className="card" onClick={() => handleStatClick("total")} style={{ cursor: "pointer" }}>
           <div className="stat-card total-members">
-            <div className="icon-wrapper bg-blue">
-              <FaBriefcase size={32} />
-            </div>
+            <div className="icon-wrapper bg-blue"><FaBriefcase size={32} /></div>
             <div className="stat-info">
               <p className="stat-label">Total Requirements</p>
               <p className="stat-value">{stats.total}</p>
             </div>
           </div>
         </div>
-        <div
-          className="card"
-          onClick={() => handleStatClick("active")}
-          style={{ cursor: "pointer" }}
-        >
+        <div className="card" onClick={() => handleStatClick("active")} style={{ cursor: "pointer" }}>
           <div className="stat-card active">
-            <div className="icon-wrapper bg-green">
-              <FaHourglassHalf size={32} />
-            </div>
+            <div className="icon-wrapper bg-green"><FaHourglassHalf size={32} /></div>
             <div className="stat-info">
               <p className="stat-label">Active Requirements</p>
               <p className="stat-value">{stats.active}</p>
             </div>
           </div>
         </div>
-        <div
-          className="card"
-          onClick={() => handleStatClick("completed")}
-          style={{ cursor: "pointer" }}
-        >
+        <div className="card" onClick={() => handleStatClick("completed")} style={{ cursor: "pointer" }}>
           <div className="stat-card completed">
-            <div className="icon-wrapper bg-cyan">
-              <FaCheckCircle size={32} />
-            </div>
+            <div className="icon-wrapper bg-cyan"><FaCheckCircle size={32} /></div>
             <div className="stat-info">
-              <p className="stat-label">Completed</p>
+              <p className="stat-label">Closed Requirements</p>
               <p className="stat-value">{stats.completed}</p>
             </div>
           </div>
         </div>
-        <div
-          className="card"
-          onClick={() => handleStatClick("allocated")}
-          style={{ cursor: "pointer" }}
-        >
+        <div className="card" onClick={() => handleStatClick("allocated")} style={{ cursor: "pointer" }}>
           <div className="stat-card allocated">
-            <div className="icon-wrapper bg-purple">
-              <FaUsers size={32} />
-            </div>
+            <div className="icon-wrapper bg-purple"><FaUsers size={32} /></div>
             <div className="stat-info">
               <p className="stat-label">Total Allocated Members</p>
               <p className="stat-value">{stats.totalAllocated}</p>
@@ -343,14 +403,22 @@ export default function RequirementsPage() {
         </div>
       </div>
 
-      {/* REQUIREMENTS LIST - Live Allocated Count */}
+      {/* LIST SECTION */}
       <div className="requirements-section">
-        <h2 className="section-title">Current Requirements</h2>
-        {requirementsData.length === 0 ? (
-          <p>No requirements found.</p>
+        <h2 className="section-title">
+          {activeFilter === "All" && "All Requirements"}
+          {activeFilter === "Active" && "Active Requirements"}
+          {activeFilter === "Closed" && "Closed Requirements"}
+          {activeFilter === "Projects" && "Projects"}
+          {activeFilter === "Recruitment" && "Job Openings"}
+          {activeFilter === "Temp Staffing" && "Temp Staffing"}
+        </h2>
+
+        {filteredRequirements.length === 0 ? (
+          <p>No Requirements found.</p>
         ) : (
           <div className="requirements-grid">
-            {requirementsData.map((req) => {
+            {filteredRequirements.map((req) => {
               const liveCount = allocatedCounts[req.id] || 0;
               return (
                 <div
@@ -364,31 +432,36 @@ export default function RequirementsPage() {
                   {req.logo && (
                     <img
                       src={req.logo}
-                      alt={`${req.company} logo`}
-                      style={{
-                        width: 50,
-                        height: 50,
-                        borderRadius: 8,
-                        marginBottom: 10,
-                        objectFit: "contain",
-                      }}
+                      alt="Logo"
+                      style={{ width: 50, height: 50, borderRadius: 8, marginBottom: 10, objectFit: "contain" }}
                     />
                   )}
                   <div className="req-header">
                     <h3>{req.title}</h3>
-                    <span className={`status-badge ${req.status}`}>
-                      {req.status === "active" ? "Open" : "Closed"}
-                    </span>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span className={`status-badge ${req.status}`}>
+                        {req.status === "active" ? "Open" : "Closed"}
+                      </span>
+                      <span
+                        style={{
+                          background: req.type === "project" ? "#9333ea" : "#2563eb",
+                          color: "white",
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {req.type === "project" ? <><FaProjectDiagram style={{ marginRight: 4 }} /> Project</> : "Job"}
+                      </span>
+                    </div>
                   </div>
-                  <p className="company">
-                    <strong>{req.company}</strong>
-                  </p>
+                  <p className="company"><strong>{req.company}</strong></p>
                   <p className="location">Location: {req.location}</p>
-                  <p className="salary">Salary: {req.salary}</p>
+                  <p className="salary">Compensation: {req.salary}</p>
                   <p className="deadline">Posted: {req.postedOn}</p>
                   <div className="allocated">
-                    <FaUsers size={14} /> Allocated:{" "}
-                    <strong>{liveCount}</strong>
+                    <FaUsers size={14} /> Allocated: <strong>{liveCount}</strong>
                   </div>
                 </div>
               );
@@ -397,46 +470,23 @@ export default function RequirementsPage() {
         )}
       </div>
 
-      {/* JOB DETAILS MODAL */}
+      {/* JOB / PROJECT DETAILS MODAL */}
       {showJobModal && selectedReq && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowJobModal(false)}
-        >
-          <div
-            className="modal-contents"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => setShowJobModal(false)}>
+          <div className="modal-contents" onClick={(e) => e.stopPropagation()}>
             {selectedReq.logo && (
               <img
                 src={selectedReq.logo}
-                alt={`${selectedReq.company} logo`}
-                style={{
-                  width: 100,
-                  borderRadius: 10,
-                  marginBottom: 16,
-                  objectFit: "contain",
-                }}
+                alt="Logo"
+                style={{ width: 100, borderRadius: 10, marginBottom: 16, objectFit: "contain" }}
               />
             )}
-            <h2>{selectedReq.title}</h2>
-            <p>
-              <strong>Company:</strong> {selectedReq.company}
-            </p>
-            <p>
-              <strong>Location:</strong> {selectedReq.location}
-            </p>
-            <p>
-              <strong>Salary Range:</strong> {selectedReq.salary}
-            </p>
-            <p>
-              <strong>Posted On:</strong> {selectedReq.postedOn}
-            </p>
-            {selectedReq.benefits && (
-              <p>
-                <strong>Benefits:</strong> {selectedReq.benefits}
-              </p>
-            )}
+            <h2>{selectedReq.type === "project" ? "Project" : "Job"}: {selectedReq.title}</h2>
+            <p><strong>Organization:</strong> {selectedReq.company}</p>
+            <p><strong>Location:</strong> {selectedReq.location}</p>
+            <p><strong>Compensation:</strong> {selectedReq.salary}</p>
+            <p><strong>Posted On:</strong> {selectedReq.postedOn}</p>
+            {selectedReq.benefits && <p><strong>Benefits:</strong> {selectedReq.benefits}</p>}
             <p>
               <strong>Status:</strong>{" "}
               <span className={`status-badge inline ${selectedReq.status}`}>
@@ -444,7 +494,7 @@ export default function RequirementsPage() {
               </span>
             </p>
             <div className="jd-section">
-              <strong>Job Description & Responsibilities:</strong>
+              <strong>{selectedReq.type === "project" ? "Project Description" : "Job Description"}:</strong>
               <div
                 style={{ marginTop: 8, lineHeight: "1.6" }}
                 dangerouslySetInnerHTML={{
@@ -461,23 +511,24 @@ export default function RequirementsPage() {
                   setShowAllocateModal(true);
                   setShowJobModal(false);
                   setMemberSearchTerm("");
+                  setGenderFilter("");
+                  setStateFilter("");
+                  setCityFilter("");
+                  setOrganizationFilter("");
                   setSelectedMemberIds([]);
+                  setCurrentPage(1);
                 }}
               >
                 Allocate Members
               </button>
               <button
                 className="btn outline"
-                style={{ marginLeft: "12px", backgroundColor: "#1e40af"
-                 }}
+                style={{ marginLeft: "12px", backgroundColor: "#1e40af" }}
                 onClick={() => setShowAllocatedMembersModal(true)}
               >
                 Allocated Members ({allocatedMembers.length})
               </button>
-              <button
-                className="btn secondary"
-                onClick={() => setShowJobModal(false)}
-              >
+              <button className="btn secondary" onClick={() => setShowJobModal(false)}>
                 Close
               </button>
             </div>
@@ -487,24 +538,18 @@ export default function RequirementsPage() {
 
       {/* ALLOCATE MEMBERS MODAL */}
       {showAllocateModal && selectedReq && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowAllocateModal(false)}
-        >
+        <div className="modal-overlay" onClick={() => setShowAllocateModal(false)}>
           <div
             className="modal-contents allocate-modal"
-            style={{ maxWidth: "800px" }}
+            style={{ maxWidth: "900px" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>
-              Allocate Members to: <strong>{selectedReq.title}</strong>
-            </h2>
+            <h2>Allocate Members to: <strong>{selectedReq.title}</strong></h2>
             <p>
-              <strong>Company:</strong> {selectedReq.company} |{" "}
-              <strong>Location:</strong> {selectedReq.location}
+              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
             </p>
 
-            <div style={{ margin: "24px 0" }}>
+            <div style={{ margin: "24px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
               <div style={{ position: "relative", maxWidth: "500px" }}>
                 <FaSearch
                   style={{
@@ -527,29 +572,69 @@ export default function RequirementsPage() {
                     borderRadius: "12px",
                     border: "2px solid #e2e8f0",
                     fontSize: "16px",
+                    backgroundColor: "white",
+                    color:"black"
                   }}
                 />
               </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                <select
+                  value={genderFilter}
+                  onChange={(e) => setGenderFilter(e.target.value)}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor: "white", color
+                    :"black"
+                   }}
+                >
+                  <option value="">All Genders</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+
+                <select
+                  value={stateFilter}
+                  onChange={(e) => setStateFilter(e.target.value)}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor: "white", color
+                    :"black" }}
+                >
+                  <option value="">All States</option>
+                  {uniqueStates.map((state) => (
+                    <option key={state} value={state}>{state}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor:"white",color:"black" }}
+                >
+                  <option value="">All Cities</option>
+                  {uniqueCities.map((city) => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={organizationFilter}
+                  onChange={(e) => setOrganizationFilter(e.target.value)}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor:"white",color:"black" }}
+                >
+                  <option value="">All Organizations</option>
+                  {uniqueOrganizations.map((org) => (
+                    <option key={org} value={org}>{org}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div
-              className="members-list"
-              style={{ maxHeight: "500px", overflowY: "auto" }}
-            >
-              {filteredMembers.length === 0 ? (
-                <p
-                  style={{
-                    textAlign: "center",
-                    padding: "60px",
-                    color: "#888",
-                  }}
-                >
-                  {members.length === 0
-                    ? "Loading members..."
-                    : "No members found."}
+            <div className="members-list" style={{ maxHeight: "420px", overflowY: "auto" }}>
+              {paginatedMembers.length === 0 ? (
+                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
+                  {members.length === 0 ? "Loading members..." : "No members found matching filters."}
                 </p>
               ) : (
-                filteredMembers.map((member) => (
+                paginatedMembers.map((member) => (
                   <label
                     key={member.id}
                     style={{
@@ -563,45 +648,27 @@ export default function RequirementsPage() {
                       margin: "4px 0",
                       transition: "background 0.2s",
                     }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.backgroundColor = "#f0f9ff")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.backgroundColor = "transparent")
-                    }
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f9ff")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    <div
-                      style={{ display: "flex", alignItems: "center", flex: 1 }}
-                    >
+                    <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
                       <input
                         type="checkbox"
                         checked={selectedMemberIds.includes(member.id)}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedMemberIds((prev) => [
-                              ...prev,
-                              member.id,
-                            ]);
+                            setSelectedMemberIds((prev) => [...prev, member.id]);
                           } else {
-                            setSelectedMemberIds((prev) =>
-                              prev.filter((id) => id !== member.id)
-                            );
+                            setSelectedMemberIds((prev) => prev.filter((id) => id !== member.id));
                           }
                         }}
-                        style={{
-                          marginRight: "20px",
-                          transform: "scale(1.4)",
-                          accentColor: "#1e40af",
-                        }}
+                        style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1e40af" }}
                       />
                       <div>
-                        <strong style={{ fontSize: "16px" }}>
-                          {member.name}
-                        </strong>
+                        <strong style={{ fontSize: "16px" }}>{member.name}</strong>
                         <br />
                         <small style={{ color: "#666" }}>
-                          Email: {member.email} | Phone: {member.phone} | Role:{" "}
-                          {member.designation}
+                          Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
                         </small>
                       </div>
                     </div>
@@ -633,6 +700,40 @@ export default function RequirementsPage() {
               )}
             </div>
 
+            {totalPages > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", margin: "20px 0", gap: "8px" }}>
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    background: currentPage === 1 ? "#e5e7eb" : "#1e40af",
+                    color: "white",
+                    border: "none",
+                  }}
+                >
+                  Previous
+                </button>
+                <span style={{ alignSelf: "center", padding: "8px" }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    background: currentPage === totalPages ? "#e5e7eb" : "#1e40af",
+                    color: "white",
+                    border: "none",
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+
             <div className="modal-actions" style={{ marginTop: "32px" }}>
               <button
                 className="btn primary"
@@ -644,20 +745,19 @@ export default function RequirementsPage() {
                       return addDoc(collection(db, "allocations"), {
                         jobId: selectedReq.id,
                         userId,
-                        name: member.name, // Save full name
+                        name: member.name,
                         phone: member.phone || "—",
                         allocatedAt: serverTimestamp(),
                       });
                     });
-
                     await Promise.all(promises);
-                    alert("Members allocated successfully!");
+                    showToast(`Successfully allocated ${selectedMemberIds.length} member(s)!`);
                     setSelectedMemberIds([]);
                     setShowAllocateModal(false);
                     setShowJobModal(true);
                   } catch (err) {
                     console.error("Allocation error:", err);
-                    alert("Failed to allocate members.");
+                    showToast("Failed to allocate members.", "error");
                   }
                 }}
               >
@@ -680,36 +780,18 @@ export default function RequirementsPage() {
 
       {/* ALLOCATED MEMBERS PER JOB MODAL */}
       {showAllocatedMembersModal && selectedReq && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowAllocatedMembersModal(false)}
-        >
-          <div
-            className="modal-contents allocate-modal"
-            style={{ maxWidth: "800px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => setShowAllocatedMembersModal(false)}>
+          <div className="modal-contents allocate-modal" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
             <h2>
-              Allocated Members for: <strong>{selectedReq.title}</strong> (
-              {allocatedMembers.length})
+              Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})
             </h2>
             <p>
-              <strong>Company:</strong> {selectedReq.company} |{" "}
-              <strong>Location:</strong> {selectedReq.location}
+              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
             </p>
 
-            <div
-              className="members-list"
-              style={{ maxHeight: "500px", overflowY: "auto", marginTop: "24px" }}
-            >
+            <div className="members-list" style={{ maxHeight: "500px", overflowY: "auto", marginTop: "24px" }}>
               {allocatedMembers.length === 0 ? (
-                <p
-                  style={{
-                    textAlign: "center",
-                    padding: "60px",
-                    color: "#888",
-                  }}
-                >
+                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
                   No members allocated yet.
                 </p>
               ) : (
@@ -736,13 +818,10 @@ export default function RequirementsPage() {
                       }}
                     >
                       <div>
-                        <strong style={{ fontSize: "16px" }}>
-                          {member.name}
-                        </strong>
+                        <strong style={{ fontSize: "16px" }}>{member.name}</strong>
                         <br />
                         <small style={{ color: "#666" }}>
-                          Email: {member.email} | Phone: {member.phone} | Role:{" "}
-                          {member.designation}
+                          Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
                         </small>
                       </div>
                       <button
@@ -789,82 +868,39 @@ export default function RequirementsPage() {
 
       {/* GLOBAL ALL ALLOCATIONS MODAL */}
       {showAllAllocationsModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowAllAllocationsModal(false)}
-        >
-          <div
-            className="modal-contents stats-modal"
-            style={{ maxWidth: "1000px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2>
-              All Allocated Members Across Jobs ({stats.totalAllocated})
-            </h2>
+        <div className="modal-overlay" onClick={() => setShowAllAllocationsModal(false)}>
+          <div className="modal-contents stats-modal" style={{ maxWidth: "1000px" }} onClick={(e) => e.stopPropagation()}>
+            <h2>All Allocated Members Across Jobs ({stats.totalAllocated})</h2>
 
-            <div
-              style={{ maxHeight: "600px", overflowY: "auto", marginTop: "24px" }}
-            >
+            <div style={{ maxHeight: "600px", overflowY: "auto", marginTop: "24px" }}>
               {allAllocations.length === 0 ? (
-                <p
-                  style={{
-                    textAlign: "center",
-                    padding: "60px",
-                    color: "#888",
-                  }}
-                >
+                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
                   No allocations yet.
                 </p>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr
-                      style={{
-                        backgroundColor: "#f8fafc",
-                        textAlign: "left",
-                      }}
-                    >
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>
-                        Member Name
-                      </th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>
-                        Job Title
-                      </th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>
-                        Company
-                      </th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>
-                        Phone
-                      </th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>
-                        Actions
-                      </th>
+                    <tr style={{ backgroundColor: "#f8fafc", textAlign: "left" }}>
+                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Member Name</th>
+                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Job Title</th>
+                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Company</th>
+                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Phone</th>
+                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {allAllocations.map((alloc) => {
-                      const job = requirementsData.find(
-                        (j) => j.id === alloc.jobId
-                      );
+                      const job = requirementsData.find((j) => j.id === alloc.jobId);
                       const member =
                         members.find((m) => m.id === alloc.userId) || {
                           name: alloc.name || "Unknown Member",
                           phone: alloc.phone || "—",
                         };
                       return (
-                        <tr
-                          key={alloc.id}
-                          style={{ borderBottom: "1px solid #eee" }}
-                        >
-                          <td style={{ padding: "12px" }}>
-                            <strong>{member.name}</strong>
-                          </td>
-                          <td style={{ padding: "12px" }}>
-                            {job?.title || "Unknown Job"}
-                          </td>
-                          <td style={{ padding: "12px" }}>
-                            {job?.company || "—"}
-                          </td>
+                        <tr key={alloc.id} style={{ borderBottom: "1px solid #eee" }}>
+                          <td style={{ padding: "12px" }}><strong>{member.name}</strong></td>
+                          <td style={{ padding: "12px" }}>{job?.title || "Unknown Job"}</td>
+                          <td style={{ padding: "12px" }}>{job?.company || "—"}</td>
                           <td style={{ padding: "12px" }}>{member.phone}</td>
                           <td style={{ padding: "12px" }}>
                             <button
@@ -894,10 +930,7 @@ export default function RequirementsPage() {
             </div>
 
             <div className="modal-actions" style={{ marginTop: "32px" }}>
-              <button
-                className="btn secondary"
-                onClick={() => setShowAllAllocationsModal(false)}
-              >
+              <button className="btn secondary" onClick={() => setShowAllAllocationsModal(false)}>
                 Close
               </button>
             </div>
@@ -905,51 +938,37 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* STATS MODAL (for total/active/completed) */}
+      {/* STATS MODAL */}
       {showStatsModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowStatsModal(false)}
-        >
-          <div
-            className="modal-contents stats-modal"
-            style={{ maxWidth: "800px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => setShowStatsModal(false)}>
+          <div className="modal-contents stats-modal" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
             <h2>
               {statsModalType === "total" && "All Requirements"}
               {statsModalType === "active" && "Active Requirements"}
               {statsModalType === "completed" && "Completed Requirements"}
             </h2>
 
-            <div
-              style={{ maxHeight: "500px", overflowY: "auto", marginTop: "16px" }}
-            >
-              {getFilteredRequirements(statsModalType).length === 0 ? (
-                <p>No requirements found.</p>
-              ) : (
-                <ul style={{ listStyle: "none", padding: 0 }}>
-                  {getFilteredRequirements(statsModalType).map((req) => (
-                    <li
-                      key={req.id}
-                      style={{
-                        padding: "12px 0",
-                        borderBottom: "1px solid #eee",
-                      }}
-                    >
-                      <strong>{req.title}</strong> — {req.company} (
-                      {req.status === "active" ? "Open" : "Closed"})
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div style={{ maxHeight: "500px", overflowY: "auto", marginTop: "16px" }}>
+              {(() => {
+                const list = statsModalType === "total" ? requirementsData :
+                             statsModalType === "active" ? requirementsData.filter(r => r.status === "active") :
+                             requirementsData.filter(r => r.status === "completed");
+                return list.length === 0 ? (
+                  <p>No requirements found.</p>
+                ) : (
+                  <ul style={{ listStyle: "none", padding: 0 }}>
+                    {list.map((req) => (
+                      <li key={req.id} style={{ padding: "12px 0", borderBottom: "1px solid #eee" }}>
+                        <strong>{req.title}</strong> — {req.company} ({req.status === "active" ? "Open" : "Closed"})
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
 
             <div className="modal-actions">
-              <button
-                className="btn secondary"
-                onClick={() => setShowStatsModal(false)}
-              >
+              <button className="btn secondary" onClick={() => setShowStatsModal(false)}>
                 Close
               </button>
             </div>
@@ -959,21 +978,10 @@ export default function RequirementsPage() {
 
       {/* MEMBER DETAIL MODAL */}
       {showMemberDetailModal && selectedMember && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowMemberDetailModal(false)}
-        >
-          <div
-            className="modal-contents"
-            style={{ maxWidth: "900px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => setShowMemberDetailModal(false)}>
+          <div className="modal-contents" style={{ maxWidth: "900px" }} onClick={(e) => e.stopPropagation()}>
             <h2>
-              Member Details:{" "}
-              <strong>
-                {selectedMember.name ||
-                  selectedMember.first_name + " " + selectedMember.last_name}
-              </strong>
+              Member Details: <strong>{selectedMember.name || `${selectedMember.first_name} ${selectedMember.last_name}`}</strong>
             </h2>
 
             <div
@@ -985,75 +993,26 @@ export default function RequirementsPage() {
                 fontSize: "15px",
               }}
             >
-              <div>
-                <strong>Name:</strong>{" "}
-                {selectedMember.name ||
-                  `${selectedMember.first_name} ${selectedMember.last_name}`}
-              </div>
-              <div>
-                <strong>Email:</strong> {selectedMember.email || "—"}
-              </div>
-              <div>
-                <strong>Phone:</strong>{" "}
-                {selectedMember.phone ||
-                  selectedMember.phone_number ||
-                  "—"}
-              </div>
-              <div>
-                <strong>Designation:</strong> {selectedMember.designation || "—"}
-              </div>
-              <div>
-                <strong>Gender:</strong> {selectedMember.gender || "—"}
-              </div>
-              <div>
-                <strong>City:</strong> {selectedMember.city || "—"}
-              </div>
-              <div>
-                <strong>State:</strong> {selectedMember.state || "—"}
-              </div>
-              <div>
-                <strong>Country:</strong> {selectedMember.country || "—"}
-              </div>
-              <div>
-                <strong>Location:</strong> {selectedMember.location || "—"}
-              </div>
-              <div>
-                <strong>Organization:</strong>{" "}
-                {selectedMember.organization || "—"}
-              </div>
-              <div>
-                <strong>Graduation Course:</strong>{" "}
-                {selectedMember.graduation_course || "—"}
-              </div>
-              <div>
-                <strong>Graduation %:</strong>{" "}
-                {selectedMember.graduation_percentage || "—"}
-              </div>
-              <div>
-                <strong>Post Graduation Course:</strong>{" "}
-                {selectedMember.postgraduation_course || "—"}
-              </div>
-              <div>
-                <strong>Post Graduation %:</strong>{" "}
-                {selectedMember.postgraduation_percentage || "—"}
-              </div>
-              <div>
-                <strong>11th %:</strong>{" "}
-                {selectedMember.percentage11th || "—"}
-              </div>
-              <div>
-                <strong>12th %:</strong>{" "}
-                {selectedMember.percentage12th || "—"}
-              </div>
+              <div><strong>Name:</strong> {selectedMember.name || `${selectedMember.first_name} ${selectedMember.last_name}`}</div>
+              <div><strong>Email:</strong> {selectedMember.email || "—"}</div>
+              <div><strong>Phone:</strong> {selectedMember.phone || selectedMember.phone_number || "—"}</div>
+              <div><strong>Designation:</strong> {selectedMember.designation || "—"}</div>
+              <div><strong>Gender:</strong> {selectedMember.gender || "—"}</div>
+              <div><strong>City:</strong> {selectedMember.city || "—"}</div>
+              <div><strong>State:</strong> {selectedMember.state || "—"}</div>
+              <div><strong>Country:</strong> {selectedMember.country || "—"}</div>
+              <div><strong>Location:</strong> {selectedMember.location || "—"}</div>
+              <div><strong>Organization:</strong> {selectedMember.organization || "—"}</div>
+              <div><strong>Graduation Course:</strong> {selectedMember.graduation_course || "—"}</div>
+              <div><strong>Graduation %:</strong> {selectedMember.graduation_percentage || "—"}</div>
+              <div><strong>Post Graduation Course:</strong> {selectedMember.postgraduation_course || "—"}</div>
+              <div><strong>Post Graduation %:</strong> {selectedMember.postgraduation_percentage || "—"}</div>
+              <div><strong>11th %:</strong> {selectedMember.percentage11th || "—"}</div>
+              <div><strong>12th %:</strong> {selectedMember.percentage12th || "—"}</div>
               {selectedMember.resume_fileurl && (
                 <div>
                   <strong>Resume:</strong>{" "}
-                  <a
-                    href={selectedMember.resume_fileurl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: "#1e40af", textDecoration: "underline" }}
-                  >
+                  <a href={selectedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#1e40af", textDecoration: "underline" }}>
                     Open Resume PDF
                   </a>
                 </div>
@@ -1061,10 +1020,7 @@ export default function RequirementsPage() {
             </div>
 
             <div className="modal-actions" style={{ marginTop: "40px" }}>
-              <button
-                className="btn secondary"
-                onClick={() => setShowMemberDetailModal(false)}
-              >
+              <button className="btn secondary" onClick={() => setShowMemberDetailModal(false)}>
                 Close
               </button>
             </div>

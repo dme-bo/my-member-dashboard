@@ -277,7 +277,7 @@ tr:hover {
   border-radius: 30px;
   font-weight: bold;
   font-size: 16px;
-  display: inline-block;
+  display: flex;
   margin-bottom: 20px;
 }
 
@@ -1370,7 +1370,7 @@ footer {
 .dashboard-container {
   width: 90%;                   /* Takes 90% of the screen */         /* Prevents it from becoming too wide on huge screens */
   margin: 0 auto;               /* Centers it */
-  padding: 32px 24px;
+  padding: 0px 90px;
   min-height: 100vh;
 }
 
@@ -1443,7 +1443,7 @@ body {
 .dashboard-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 32px 24px;
+  /* padding: 0px 90px; */
   width: 100%;
 }
 
@@ -1614,7 +1614,7 @@ body {
 .allocated {
   font-size: 15px;
   color: #4a5568;
-  margin-bottom: 12px;
+  /* margin-bottom: 12px; */
 }
 
 .allocated {
@@ -1702,7 +1702,7 @@ body {
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 1200px) {
   .dashboard-container {
     padding: 20px 16px;
   }
@@ -2156,6 +2156,78 @@ body {
 .members-list-modal label:hover {
   background-color: #f5f5f5;
 }
+
+/* src/pages/RequirementsPage.css */
+
+/* Filters Section */
+.filters-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+  align-items: center;
+}
+
+.filters-section select,
+.filters-section input {
+  padding: 12px;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  font-size: 15px;
+  min-width: 150px;
+  flex: 1;
+}
+
+.filters-section button {
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.pagination button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background-color: #1e40af;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pagination button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.pagination span {
+  font-size: 16px;
+  font-weight: 500;
+}
+.dashboard-container {
+  width: 95%;                /* or 96%, 97%, 98% */
+  max-width: none;           /* Remove any max-width limit if present */
+  margin: 0 auto;
+  padding: 0 20px;           /* Reduce side padding for more content space */
+  min-height: 100vh;
+}
+
+@media (min-width: 1400px) {
+  .dashboard-container {
+    width: 115%;              /* Even wider on large screens */
+    padding: 0 16px;
+  }
+}
+/* Other styles can be added as needed for consistency */
 
 
 
