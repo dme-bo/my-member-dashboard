@@ -26,7 +26,7 @@ export default function MemberListPage({ onMemberClick }) {
     Education: "All",
     Status: "All",
     "Placement Status": "All",
-    Experience: "All", // ← Experience filter added
+    Experience: "All",
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,14 +74,28 @@ export default function MemberListPage({ onMemberClick }) {
     return () => unsubscribe();
   }, []);
 
-  // Dynamic filter options (including smart Experience buckets)
+  // Dynamic filter options (with normalized Gender to prevent duplicates)
   const filterOptions = useMemo(() => {
     const getUniqueValues = (field) => {
       const set = new Set();
+
       members.forEach((member) => {
-        const value = member[field];
-        if (value) set.add(String(value).trim());
+        let value = member[field];
+
+        if (value) {
+          value = String(value).trim();
+
+          // Normalize Gender specifically to handle case variations
+          if (field === "gender") {
+            if (value.toLowerCase() === "male") value = "Male";
+            else if (value.toLowerCase() === "female") value = "Female";
+            // Add more if needed, e.g., "M" → "Male", etc.
+          }
+
+          set.add(value);
+        }
       });
+
       return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
     };
 
@@ -93,11 +107,10 @@ export default function MemberListPage({ onMemberClick }) {
     let buckets = ["All"];
 
     if (experiences.length === 0) {
-      // fallback if no experience data
       buckets = ["All", "0-1 yr", "1-3 yrs", "3-5 yrs", "5-10 yrs", "10+ yrs"];
     } else {
       const maxExp = Math.max(...experiences);
-      const ceiling = Math.ceil(maxExp / 5) * 5; // round up to nearest 5
+      const ceiling = Math.ceil(maxExp / 5) * 5;
 
       if (ceiling >= 1) buckets.push("0-1 yr");
       if (ceiling >= 3) buckets.push("1-3 yrs");
@@ -218,6 +231,7 @@ export default function MemberListPage({ onMemberClick }) {
             list = list.filter((member) => {
               const memberValue = member[dbField];
               if (!memberValue) return false;
+              // Case-insensitive comparison
               return String(memberValue).toLowerCase() === value.toLowerCase();
             });
           }
@@ -262,7 +276,7 @@ export default function MemberListPage({ onMemberClick }) {
     "State",
     "City",
     "Education",
-    "Experience", // ← Experience filter visible in sidebar
+    "Experience",
   ];
 
   // Loading state

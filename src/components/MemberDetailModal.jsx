@@ -367,6 +367,8 @@ export default function MemberDetailModal({ member, onClose }) {
                 <div><strong>Govt Experience:</strong> {member.govt_experience || "-"}</div>
                 <div><strong>Corporate Experience:</strong> {member.corporate_experience || "-"}</div>
                 <div><strong>Total Experience:</strong> {member.total_experience || "-"}</div>
+                <div><strong>Work Experience:</strong> {member.work_experience || "-"}</div>
+                
               </div>
             )}
 
@@ -378,6 +380,7 @@ export default function MemberDetailModal({ member, onClose }) {
 
             {activeTab === "job" && (
               <div className="detail-grid">
+                <div><strong>Applied Jobs</strong> {member.open_jobs || "-"}</div>
                 <div><strong>Preferred Job Location:</strong> {member.preferred_job_location || "Anywhere"}</div>
                 <div><strong>Current City:</strong> {member.city || "-"}</div>
                 <div><strong>Current CTC:</strong> {member.current_ctc || "0"}</div>

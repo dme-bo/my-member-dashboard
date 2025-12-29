@@ -18,7 +18,7 @@ const CSVUploadComponent = () => {
   const CORRECT_PASSWORD = 'DAA@987';
 
   const db = getFirestore(getApp());
-  const usersMasterCollection = collection(db, 'usersmaster');
+  const usersMasterCollection = collection(db, 'usersss');
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
