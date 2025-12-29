@@ -11,6 +11,7 @@ import TempStaffPage from "./pages/TempStaffPage";
 import RecruitmentPage from "./pages/RecruitmentPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import RequirementsPage from "./pages/RequirementsPage"
+import ConfigurationPage from "./pages/ConfigurationPage"
 
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
@@ -84,6 +85,10 @@ function Layout() {
           <Route
             path="/requirements"
             element={<RequirementsPage/>}
+          />
+          <Route
+            path="/configuration"
+            element={<ConfigurationPage/>}
           />
           {/* Optional: 404 page */}
           <Route path="*" element={<div>Page not found</div>} />

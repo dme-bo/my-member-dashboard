@@ -25,6 +25,8 @@ export default function RequirementsPage() {
   const [members, setMembers] = useState([]);
   const [filteredMembers, setFilteredMembers] = useState([]);
   const [selectedReq, setSelectedReq] = useState(null);
+  const [allocationTitleFilter, setAllocationTitleFilter] = useState("");
+  const [allocationCompanyFilter, setAllocationCompanyFilter] = useState("");
 
   // Global allocations + live counts
   const [allAllocations, setAllAllocations] = useState([]);
@@ -58,9 +60,9 @@ export default function RequirementsPage() {
   const [cityFilter, setCityFilter] = useState("");
   const [organizationFilter, setOrganizationFilter] = useState("");
 
-  // Pagination
+  // Pagination for Allocate Modal
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 20;
+  const [pageSizeAllocate, setPageSizeAllocate] = useState(100); // New: dynamic rows per page
 
   // Toast
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -120,10 +122,9 @@ export default function RequirementsPage() {
             benefits = item.job_otherbenefits ?? null;
             status = item.job_status === "Open" ? "active" : "completed";
           } else {
-            // Project
             title = item.project_title ?? "Untitled Project";
             jd = item.project_description ?? "No description available.";
-            salary = "Volunteer / Stipend-based"; // Customize if needed
+            salary = "Volunteer / Stipend-based";
             location = item.project_location ?? item.project_city ?? "Location not specified";
             company = item.project_company ?? "—";
             logo = item.project_company_logo ?? null;
@@ -148,7 +149,6 @@ export default function RequirementsPage() {
           };
         });
 
-        // Sort newest first (assuming DD-MM-YYYY format)
         transformed.sort((a, b) => {
           const parseDate = (dateStr) => {
             if (!dateStr || dateStr === "—") return new Date(0);
@@ -170,7 +170,7 @@ export default function RequirementsPage() {
     fetchRequirements();
   }, []);
 
-  /* FETCH ALL ALLOCATIONS (shared across jobs & projects) */
+  /* FETCH ALL ALLOCATIONS */
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "allocations"), (snapshot) => {
       const allocs = snapshot.docs.map((doc) => ({
@@ -212,14 +212,14 @@ export default function RequirementsPage() {
   useEffect(() => {
     const fetchMembers = async () => {
       try {
-        const q = query(collection(db, "users"));
+        const q = query(collection(db, "usersmaster"));
         const snapshot = await getDocs(q);
         const membersList = snapshot.docs.map((doc) => ({
           id: doc.id,
           name:
             doc.data().name ||
             doc.data().displayName ||
-            `${doc.data().first_name || ""} ${doc.data().last_name || ""}`.trim() ||
+            `${doc.data().full_name || ""}`.trim() ||
             "Unnamed",
           email: doc.data().email || "—",
           phone:
@@ -231,7 +231,7 @@ export default function RequirementsPage() {
           gender: doc.data().gender || "",
           state: doc.data().state || "",
           city: doc.data().city || "",
-          organization: doc.data().organization || "",
+          category: doc.data().category || "",
           ...doc.data(),
         }));
         setMembers(membersList);
@@ -246,7 +246,7 @@ export default function RequirementsPage() {
   /* UNIQUE FILTER VALUES */
   const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
   const uniqueCities = useMemo(() => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(), [members]);
-  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => m.organization).filter(Boolean))].sort(), [members]);
+  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(), [members]);
 
   /* MEMBER FILTERING */
   useEffect(() => {
@@ -265,7 +265,7 @@ export default function RequirementsPage() {
     if (genderFilter) filtered = filtered.filter((m) => m.gender?.toLowerCase() === genderFilter.toLowerCase());
     if (stateFilter) filtered = filtered.filter((m) => m.state === stateFilter);
     if (cityFilter) filtered = filtered.filter((m) => m.city === cityFilter);
-    if (organizationFilter) filtered = filtered.filter((m) => m.organization === organizationFilter);
+    if (organizationFilter) filtered = filtered.filter((m) => m.category === organizationFilter);
 
     setFilteredMembers(filtered);
     setCurrentPage(1);
@@ -279,7 +279,6 @@ export default function RequirementsPage() {
     if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
     if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
     if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
-    // "All" and "Temp Staffing" show all (you can add logic for Temp Staffing later)
 
     return list;
   }, [requirementsData, activeFilter]);
@@ -300,12 +299,13 @@ export default function RequirementsPage() {
     }
   };
 
+  /* PAGINATION FOR ALLOCATE MODAL (updated with dynamic pageSize) */
   const paginatedMembers = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredMembers.slice(start, start + pageSize);
-  }, [filteredMembers, currentPage]);
+    const start = (currentPage - 1) * pageSizeAllocate;
+    return filteredMembers.slice(start, start + pageSizeAllocate);
+  }, [filteredMembers, currentPage, pageSizeAllocate]);
 
-  const totalPages = Math.ceil(filteredMembers.length / pageSize);
+  const totalPages = Math.ceil(filteredMembers.length / pageSizeAllocate);
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -350,7 +350,7 @@ export default function RequirementsPage() {
         <div className="header-content">
           <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
-            {["All", "Active", "Closed", "Temp Staffing", "Recruitment", "Projects"].map((filter) => (
+            {["All", "Open", "Closed", "Temp Staffing", "Recruitment", "Projects"].map((filter) => (
               <button
                 key={filter}
                 className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -378,7 +378,7 @@ export default function RequirementsPage() {
           <div className="stat-card active">
             <div className="icon-wrapper bg-green"><FaHourglassHalf size={32} /></div>
             <div className="stat-info">
-              <p className="stat-label">Active Requirements</p>
+              <p className="stat-label">Open Requirements</p>
               <p className="stat-value">{stats.active}</p>
             </div>
           </div>
@@ -407,7 +407,7 @@ export default function RequirementsPage() {
       <div className="requirements-section">
         <h2 className="section-title">
           {activeFilter === "All" && "All Requirements"}
-          {activeFilter === "Active" && "Active Requirements"}
+          {activeFilter === "Open" && "Open Requirements"}
           {activeFilter === "Closed" && "Closed Requirements"}
           {activeFilter === "Projects" && "Projects"}
           {activeFilter === "Recruitment" && "Job Openings"}
@@ -482,7 +482,7 @@ export default function RequirementsPage() {
               />
             )}
             <h2>{selectedReq.type === "project" ? "Project" : "Job"}: {selectedReq.title}</h2>
-            <p><strong>Organization:</strong> {selectedReq.company}</p>
+            <p><strong>Company:</strong> {selectedReq.company}</p>
             <p><strong>Location:</strong> {selectedReq.location}</p>
             <p><strong>Compensation:</strong> {selectedReq.salary}</p>
             <p><strong>Posted On:</strong> {selectedReq.postedOn}</p>
@@ -582,9 +582,7 @@ export default function RequirementsPage() {
                 <select
                   value={genderFilter}
                   onChange={(e) => setGenderFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor: "white", color
-                    :"black"
-                   }}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor: "white", color: "black" }}
                 >
                   <option value="">All Genders</option>
                   <option value="Male">Male</option>
@@ -595,8 +593,7 @@ export default function RequirementsPage() {
                 <select
                   value={stateFilter}
                   onChange={(e) => setStateFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor: "white", color
-                    :"black" }}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor: "white", color: "black" }}
                 >
                   <option value="">All States</option>
                   {uniqueStates.map((state) => (
@@ -607,7 +604,7 @@ export default function RequirementsPage() {
                 <select
                   value={cityFilter}
                   onChange={(e) => setCityFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor:"white",color:"black" }}
+                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor:"white",color:"black" }}
                 >
                   <option value="">All Cities</option>
                   {uniqueCities.map((city) => (
@@ -620,7 +617,7 @@ export default function RequirementsPage() {
                   onChange={(e) => setOrganizationFilter(e.target.value)}
                   style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor:"white",color:"black" }}
                 >
-                  <option value="">All Organizations</option>
+                  <option value="">All Categories</option>
                   {uniqueOrganizations.map((org) => (
                     <option key={org} value={org}>{org}</option>
                   ))}
@@ -700,37 +697,74 @@ export default function RequirementsPage() {
               )}
             </div>
 
+            {/* PAGINATION WITH ROWS PER PAGE SELECTOR */}
             {totalPages > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", margin: "20px 0", gap: "8px" }}>
-                <button
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    background: currentPage === 1 ? "#e5e7eb" : "#1e40af",
-                    color: "white",
-                    border: "none",
-                  }}
-                >
-                  Previous
-                </button>
-                <span style={{ alignSelf: "center", padding: "8px" }}>
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => p + 1)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    background: currentPage === totalPages ? "#e5e7eb" : "#1e40af",
-                    color: "white",
-                    border: "none",
-                  }}
-                >
-                  Next
-                </button>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  margin: "20px 0",
+                  flexWrap: "wrap",
+                  gap: "16px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ fontSize: "14px", color: "#666" }}>Rows per page:</span>
+                  <select
+                    value={pageSizeAllocate}
+                    onChange={(e) => {
+                      setPageSizeAllocate(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "2px solid #e2e8f0",
+                      backgroundColor: "white",
+                      color: "black",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {[100, 500, 1000, 2000, 5000].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "8px",
+                      background: currentPage === 1 ? "#e5e7eb" : "#1e40af",
+                      color: "white",
+                      border: "none",
+                    }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ padding: "8px", fontSize: "14px" }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "8px",
+                      background: currentPage === totalPages ? "#e5e7eb" : "#1e40af",
+                      color: "white",
+                      border: "none",
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
 
@@ -740,7 +774,38 @@ export default function RequirementsPage() {
                 disabled={selectedMemberIds.length === 0}
                 onClick={async () => {
                   try {
-                    const promises = selectedMemberIds.map((userId) => {
+                    // Get already allocated user IDs for this requirement
+                    const alreadyAllocatedUserIds = new Set(
+                      allocatedMembers.map((alloc) => alloc.userId)
+                    );
+
+                    // Separate new vs already allocated
+                    const newMembersToAllocate = selectedMemberIds.filter(
+                      (userId) => !alreadyAllocatedUserIds.has(userId)
+                    );
+
+                    const alreadyTried = selectedMemberIds.filter((userId) =>
+                      alreadyAllocatedUserIds.has(userId)
+                    );
+
+                    // Show toast for duplicates
+                    if (alreadyTried.length > 0) {
+                      const names = alreadyTried
+                        .map((id) => members.find((m) => m.id === id)?.name || "Unknown")
+                        .join(", ");
+                      showToast(
+                        `${alreadyTried.length} member(s) already allocated: ${names}`,
+                        "error"
+                      );
+                    }
+
+                    if (newMembersToAllocate.length === 0) {
+                      setSelectedMemberIds([]);
+                      return;
+                    }
+
+                    // Allocate only new members
+                    const promises = newMembersToAllocate.map((userId) => {
                       const member = members.find((m) => m.id === userId);
                       return addDoc(collection(db, "allocations"), {
                         jobId: selectedReq.id,
@@ -750,8 +815,14 @@ export default function RequirementsPage() {
                         allocatedAt: serverTimestamp(),
                       });
                     });
+
                     await Promise.all(promises);
-                    showToast(`Successfully allocated ${selectedMemberIds.length} member(s)!`);
+
+                    showToast(
+                      `Successfully allocated ${newMembersToAllocate.length} new member(s)!`,
+                      "success"
+                    );
+
                     setSelectedMemberIds([]);
                     setShowAllocateModal(false);
                     setShowJobModal(true);
@@ -866,68 +937,190 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* GLOBAL ALL ALLOCATIONS MODAL */}
+      {/* GLOBAL ALL ALLOCATIONS MODAL WITH FILTERS */}
       {showAllAllocationsModal && (
         <div className="modal-overlay" onClick={() => setShowAllAllocationsModal(false)}>
-          <div className="modal-contents stats-modal" style={{ maxWidth: "1000px" }} onClick={(e) => e.stopPropagation()}>
-            <h2>All Allocated Members Across Jobs ({stats.totalAllocated})</h2>
+          <div className="modal-contents stats-modal" style={{ maxWidth: "1100px" }} onClick={(e) => e.stopPropagation()}>
+            <h2>All Allocated Members ({stats.totalAllocated})</h2>
 
-            <div style={{ maxHeight: "600px", overflowY: "auto", marginTop: "24px" }}>
-              {allAllocations.length === 0 ? (
-                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
-                  No allocations yet.
-                </p>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ backgroundColor: "#f8fafc", textAlign: "left" }}>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Member Name</th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Job Title</th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Company</th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Phone</th>
-                      <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allAllocations.map((alloc) => {
-                      const job = requirementsData.find((j) => j.id === alloc.jobId);
-                      const member =
-                        members.find((m) => m.id === alloc.userId) || {
-                          name: alloc.name || "Unknown Member",
-                          phone: alloc.phone || "—",
-                        };
-                      return (
-                        <tr key={alloc.id} style={{ borderBottom: "1px solid #eee" }}>
-                          <td style={{ padding: "12px" }}><strong>{member.name}</strong></td>
-                          <td style={{ padding: "12px" }}>{job?.title || "Unknown Job"}</td>
-                          <td style={{ padding: "12px" }}>{job?.company || "—"}</td>
-                          <td style={{ padding: "12px" }}>{member.phone}</td>
-                          <td style={{ padding: "12px" }}>
-                            <button
-                              onClick={() => {
-                                setSelectedMember(member);
-                                setShowMemberDetailModal(true);
-                              }}
-                              style={{
-                                background: "#1e40af",
-                                color: "white",
-                                border: "none",
-                                padding: "6px 12px",
-                                borderRadius: "6px",
-                                cursor: "pointer",
-                                fontSize: "13px",
-                              }}
-                            >
-                              <FaEye /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {/* Search & Filter Bar */}
+            <div style={{ margin: "20px 0", display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              <div style={{ position: "relative", flex: "1", minWidth: "300px" }}>
+                <FaSearch
+                  style={{
+                    position: "absolute",
+                    left: "16px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#999",
+                    fontSize: "18px",
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Search by Job/Project Title..."
+                  value={allocationTitleFilter || ""}
+                  onChange={(e) => setAllocationTitleFilter(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "14px 16px 14px 50px",
+                    borderRadius: "12px",
+                    border: "2px solid #e2e8f0",
+                    fontSize: "16px",
+                    backgroundColor: "white",
+                    color: "black",
+                  }}
+                />
+              </div>
+
+              <div style={{ position: "relative", flex: "1", minWidth: "300px" }}>
+                <FaSearch
+                  style={{
+                    position: "absolute",
+                    left: "16px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#999",
+                    fontSize: "18px",
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Search by Company/Organization..."
+                  value={allocationCompanyFilter || ""}
+                  onChange={(e) => setAllocationCompanyFilter(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "14px 16px 14px 50px",
+                    borderRadius: "12px",
+                    border: "2px solid #e2e8f0",
+                    fontSize: "16px",
+                    backgroundColor: "white",
+                    color: "black",
+                  }}
+                />
+              </div>
+
+              {(allocationTitleFilter || allocationCompanyFilter) && (
+                <button
+                  onClick={() => {
+                    setAllocationTitleFilter("");
+                    setAllocationCompanyFilter("");
+                  }}
+                  style={{
+                    padding: "12px 20px",
+                    backgroundColor: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "12px",
+                    cursor: "pointer",
+                    fontWeight: "600",
+                  }}
+                >
+                  Clear Filters
+                </button>
               )}
             </div>
+
+            {/* Filtered Allocations */}
+            {(() => {
+              let filteredAllocations = allAllocations;
+
+              if (allocationTitleFilter) {
+                const term = allocationTitleFilter.toLowerCase();
+                filteredAllocations = filteredAllocations.filter((alloc) => {
+                  const job = requirementsData.find((j) => j.id === alloc.jobId);
+                  return job?.title?.toLowerCase().includes(term);
+                });
+              }
+
+              if (allocationCompanyFilter) {
+                const term = allocationCompanyFilter.toLowerCase();
+                filteredAllocations = filteredAllocations.filter((alloc) => {
+                  const job = requirementsData.find((j) => j.id === alloc.jobId);
+                  return job?.company?.toLowerCase().includes(term);
+                });
+              }
+
+              return (
+                <div style={{ maxHeight: "600px", overflowY: "auto", marginTop: "16px" }}>
+                  {filteredAllocations.length === 0 ? (
+                    <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
+                      {allAllocations.length === 0
+                        ? "No allocations yet."
+                        : "No allocations match the current filters."}
+                    </p>
+                  ) : (
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ backgroundColor: "#f8fafc", textAlign: "left" }}>
+                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Member Name</th>
+                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Job / Project Title</th>
+                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Company</th>
+                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Type</th>
+                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Phone</th>
+                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAllocations.map((alloc) => {
+                          const job = requirementsData.find((j) => j.id === alloc.jobId);
+                          const member =
+                            members.find((m) => m.id === alloc.userId) || {
+                              name: alloc.name || "Unknown Member",
+                              phone: alloc.phone || "—",
+                            };
+
+                          return (
+                            <tr key={alloc.id} style={{ borderBottom: "1px solid #eee" }}>
+                              <td style={{ padding: "12px" }}>
+                                <strong>{member.name}</strong>
+                              </td>
+                              <td style={{ padding: "12px" }}>{job?.title || "Unknown Requirement"}</td>
+                              <td style={{ padding: "12px" }}>{job?.company || "—"}</td>
+                              <td style={{ padding: "12px" }}>
+                                <span
+                                  style={{
+                                    background: job?.type === "project" ? "#9333ea" : "#2563eb",
+                                    color: "white",
+                                    padding: "4px 8px",
+                                    borderRadius: "6px",
+                                    fontSize: "12px",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  {job?.type === "project" ? "Project" : "Job"}
+                                </span>
+                              </td>
+                              <td style={{ padding: "12px" }}>{member.phone}</td>
+                              <td style={{ padding: "12px" }}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedMember(member);
+                                    setShowMemberDetailModal(true);
+                                  }}
+                                  style={{
+                                    background: "#1e40af",
+                                    color: "white",
+                                    border: "none",
+                                    padding: "6px 12px",
+                                    borderRadius: "6px",
+                                    cursor: "pointer",
+                                    fontSize: "13px",
+                                  }}
+                                >
+                                  <FaEye /> View Details
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="modal-actions" style={{ marginTop: "32px" }}>
               <button className="btn secondary" onClick={() => setShowAllAllocationsModal(false)}>
@@ -944,7 +1137,7 @@ export default function RequirementsPage() {
           <div className="modal-contents stats-modal" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
             <h2>
               {statsModalType === "total" && "All Requirements"}
-              {statsModalType === "active" && "Active Requirements"}
+              {statsModalType === "active" && "Open Requirements"}
               {statsModalType === "completed" && "Completed Requirements"}
             </h2>
 
@@ -981,7 +1174,7 @@ export default function RequirementsPage() {
         <div className="modal-overlay" onClick={() => setShowMemberDetailModal(false)}>
           <div className="modal-contents" style={{ maxWidth: "900px" }} onClick={(e) => e.stopPropagation()}>
             <h2>
-              Member Details: <strong>{selectedMember.name || `${selectedMember.first_name} ${selectedMember.last_name}`}</strong>
+              Member Details: <strong>{selectedMember.name || `${selectedMember.full_name} ${selectedMember.last_name}`}</strong>
             </h2>
 
             <div
@@ -1002,7 +1195,7 @@ export default function RequirementsPage() {
               <div><strong>State:</strong> {selectedMember.state || "—"}</div>
               <div><strong>Country:</strong> {selectedMember.country || "—"}</div>
               <div><strong>Location:</strong> {selectedMember.location || "—"}</div>
-              <div><strong>Organization:</strong> {selectedMember.organization || "—"}</div>
+              <div><strong>Category:</strong> {selectedMember.category || "—"}</div>
               <div><strong>Graduation Course:</strong> {selectedMember.graduation_course || "—"}</div>
               <div><strong>Graduation %:</strong> {selectedMember.graduation_percentage || "—"}</div>
               <div><strong>Post Graduation Course:</strong> {selectedMember.postgraduation_course || "—"}</div>

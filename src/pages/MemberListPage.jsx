@@ -1,57 +1,70 @@
 // src/pages/MemberListPage.jsx
-import { useSearchParams } from "react-router-dom"; // Add this import at the top
+import { useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import FilterSidebar from "../components/FilterSidebar";
 
-export default function MemberListPage({ onMemberClick, filterData, filterKeys }) {
+export default function MemberListPage({ onMemberClick }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPlaced, setFilterPlaced] = useState("all");
   const [members, setMembers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [isFilterOpen, setIsFilterOpen] = useState(false); // Mobile filter toggle
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Sidebar filter state - includes Experience
+  const [sidebarFilters, setSidebarFilters] = useState({
+    Gender: "All",
+    Category: "All",
+    Service: "All",
+    Rank: "All",
+    Level: "All",
+    Trade: "All",
+    City: "All",
+    State: "All",
+    Education: "All",
+    Status: "All",
+    "Placement Status": "All",
+    Experience: "All", // ← Experience filter added
+  });
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-// Load state from URL on first render
-useEffect(() => {
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const rows = parseInt(searchParams.get("rows") || "10", 10);
-  const search = searchParams.get("search") || "";
-  const status = searchParams.get("status") || "all";
+  // Load URL params on mount
+  useEffect(() => {
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const rows = parseInt(searchParams.get("rows") || "10", 10);
+    const search = searchParams.get("search") || "";
+    const status = searchParams.get("status") || "all";
 
-  setCurrentPage(page);
-  setRowsPerPage(rows);
-  setSearchTerm(search);
-  setFilterPlaced(status);
-}, []); // Empty dependency → runs only once on mount
+    setCurrentPage(page);
+    setRowsPerPage(rows);
+    setSearchTerm(search);
+    setFilterPlaced(status);
+  }, []);
 
-// Update URL whenever any state changes
-useEffect(() => {
-  const params = new URLSearchParams();
-  if (currentPage > 1) params.set("page", currentPage.toString());
-  if (rowsPerPage !== 10) params.set("rows", rowsPerPage.toString());
-  if (searchTerm) params.set("search", searchTerm);
-  if (filterPlaced !== "all") params.set("status", filterPlaced);
+  // Sync state changes to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (currentPage > 1) params.set("page", currentPage.toString());
+    if (rowsPerPage !== 10) params.set("rows", rowsPerPage.toString());
+    if (searchTerm) params.set("search", searchTerm);
+    if (filterPlaced !== "all") params.set("status", filterPlaced);
 
-  setSearchParams(params, { replace: true });
-}, [currentPage, rowsPerPage, searchTerm, filterPlaced, setSearchParams]);
+    setSearchParams(params, { replace: true });
+  }, [currentPage, rowsPerPage, searchTerm, filterPlaced, setSearchParams]);
 
-  const { applyFilters } = filterData;
-
+  // Fetch members from Firestore
   useEffect(() => {
     const unsubscribe = onSnapshot(
-      collection(db, "users"),
+      collection(db, "usersmaster"),
       (snapshot) => {
         const membersList = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
         setMembers(membersList);
-        // Added: Log all members to console
-        console.log("All members from Firestore:", membersList);
         setCurrentPage(1);
       },
       (error) => {
@@ -61,29 +74,161 @@ useEffect(() => {
     return () => unsubscribe();
   }, []);
 
-  const filteredMembers = useMemo(() => {
-    let list = members.filter((member) => {
-      const term = searchTerm.toLowerCase();
-      const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim().toLowerCase();
-      const email = member.email?.toLowerCase() || "";
-      const phone = member.phone_number || "";
+  // Dynamic filter options (including smart Experience buckets)
+  const filterOptions = useMemo(() => {
+    const getUniqueValues = (field) => {
+      const set = new Set();
+      members.forEach((member) => {
+        const value = member[field];
+        if (value) set.add(String(value).trim());
+      });
+      return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    };
 
-      return (
-        fullName.includes(term) ||
-        email.includes(term) ||
-        phone.includes(searchTerm)
-      );
-    });
+    // === Dynamic Experience Buckets based on actual data ===
+    const experiences = members
+      .map((m) => parseFloat(m.experience))
+      .filter((exp) => !isNaN(exp) && exp >= 0);
 
-    if (filterPlaced === "placed") {
-      // list = list.filter(m => m.isPlaced === true);
-    } else if (filterPlaced === "active") {
-      // list = list.filter(m => m.isPlaced !== true);
+    let buckets = ["All"];
+
+    if (experiences.length === 0) {
+      // fallback if no experience data
+      buckets = ["All", "0-1 yr", "1-3 yrs", "3-5 yrs", "5-10 yrs", "10+ yrs"];
+    } else {
+      const maxExp = Math.max(...experiences);
+      const ceiling = Math.ceil(maxExp / 5) * 5; // round up to nearest 5
+
+      if (ceiling >= 1) buckets.push("0-1 yr");
+      if (ceiling >= 3) buckets.push("1-3 yrs");
+      if (ceiling >= 5) buckets.push("3-5 yrs");
+      if (ceiling >= 10) buckets.push("5-10 yrs");
+      if (ceiling >= 15) buckets.push("10-15 yrs");
+      if (ceiling >= 20) buckets.push("15-20 yrs");
+      if (ceiling >= 25) buckets.push("20-25 yrs");
+      if (ceiling >= 30) buckets.push("25-30 yrs");
+      if (ceiling > 30) buckets.push("30+ yrs");
+      else if (ceiling >= 10) buckets.push(`${Math.max(10, ceiling - 5)}+ yrs`);
     }
 
-    return applyFilters(list);
-  }, [members, searchTerm, filterPlaced, applyFilters]);
+    return {
+      Gender: getUniqueValues("gender"),
+      Category: getUniqueValues("category"),
+      Service: getUniqueValues("service"),
+      Rank: getUniqueValues("rank"),
+      Level: getUniqueValues("level"),
+      Trade: getUniqueValues("trade"),
+      City: getUniqueValues("city"),
+      State: getUniqueValues("state"),
+      Education: getUniqueValues("graduation_course"),
+      Status: getUniqueValues("status"),
+      "Placement Status": ["All", "Placed", "Active"],
+      Experience: buckets,
+    };
+  }, [members]);
 
+  // Handle filter changes
+  const handleFilterChange = (key, value) => {
+    setSidebarFilters((prev) => ({ ...prev, [key]: value }));
+    setCurrentPage(1);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSidebarFilters({
+      Gender: "All",
+      Category: "All",
+      Service: "All",
+      Rank: "All",
+      Level: "All",
+      Trade: "All",
+      City: "All",
+      State: "All",
+      Education: "All",
+      Status: "All",
+      "Placement Status": "All",
+      Experience: "All",
+    });
+    setCurrentPage(1);
+  };
+
+  // Parse experience range string → { min, max }
+  const parseExperienceRange = (range) => {
+    if (range === "All") return null;
+    if (range.includes("+")) {
+      const min = parseFloat(range.replace("+ yrs", "").trim());
+      return { min, max: Infinity };
+    }
+    const [minStr, maxStr] = range.replace(" yrs", "").split("-");
+    return { min: parseFloat(minStr), max: parseFloat(maxStr) };
+  };
+
+  // Main filtering logic
+  const filteredMembers = useMemo(() => {
+    let list = [...members];
+
+    // Search
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter((member) => {
+        const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim().toLowerCase();
+        const email = member.email?.toLowerCase() || "";
+        const phone = member.phone_number || "";
+        return fullName.includes(term) || email.includes(term) || phone.includes(term);
+      });
+    }
+
+    // Placed / Active filter
+    if (filterPlaced === "placed") {
+      list = list.filter((m) => m.isPlaced === true);
+    } else if (filterPlaced === "active") {
+      list = list.filter((m) => m.isPlaced !== true);
+    }
+
+    // Sidebar filters
+    const fieldMap = {
+      Gender: "gender",
+      Category: "category",
+      Service: "service",
+      Rank: "rank",
+      Level: "level",
+      Trade: "trade",
+      City: "city",
+      State: "state",
+      Education: "graduation_course",
+    };
+
+    Object.entries(sidebarFilters).forEach(([key, value]) => {
+      if (value !== "All") {
+        if (key === "Placement Status") {
+          const isPlacedVal = value === "Placed";
+          list = list.filter((member) => member.isPlaced === isPlacedVal);
+        } else if (key === "Experience") {
+          const range = parseExperienceRange(value);
+          if (range) {
+            list = list.filter((member) => {
+              const exp = parseFloat(member.experience);
+              if (isNaN(exp)) return false;
+              return exp >= range.min && (range.max === Infinity || exp <= range.max);
+            });
+          }
+        } else {
+          const dbField = fieldMap[key];
+          if (dbField) {
+            list = list.filter((member) => {
+              const memberValue = member[dbField];
+              if (!memberValue) return false;
+              return String(memberValue).toLowerCase() === value.toLowerCase();
+            });
+          }
+        }
+      }
+    });
+
+    return list;
+  }, [members, searchTerm, filterPlaced, sidebarFilters]);
+
+  // Pagination
   const totalItems = filteredMembers.length;
   const totalPages = Math.ceil(totalItems / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
@@ -97,23 +242,38 @@ useEffect(() => {
 
   const goToPrevious = () => currentPage > 1 && setCurrentPage(currentPage - 1);
   const goToNext = () => currentPage < totalPages && setCurrentPage(currentPage + 1);
-
   const toggleFilter = () => setIsFilterOpen(!isFilterOpen);
 
-  // Empty state
+  // FilterSidebar props
+  const filterData = {
+    filters: sidebarFilters,
+    handleFilterChange,
+    clearFilters,
+    options: filterOptions,
+  };
+
+  const filterKeys = [
+    "Gender",
+    "Category",
+    "Service",
+    "Rank",
+    "Level",
+    "Trade",
+    "State",
+    "City",
+    "Education",
+    "Experience", // ← Experience filter visible in sidebar
+  ];
+
+  // Loading state
   if (members.length === 0) {
     return (
       <div className="member-list-page with-filters">
         <div className="page-header">
           <div className="header-title">
-            <h1>Member Details :- 0</h1>
+            <h1>Total Members:- 0</h1>
           </div>
           <div className="header-actions">
-            <select className="status-dropdown" value={filterPlaced} onChange={(e) => setFilterPlaced(e.target.value)}>
-              <option value="all">All Members</option>
-              <option value="active">Active Seekers</option>
-              <option value="placed">Placed</option>
-            </select>
             <button className="btn-purple">Export CSV</button>
           </div>
           <button className="filter-toggle-btn" onClick={toggleFilter}>
@@ -137,67 +297,38 @@ useEffect(() => {
               <table className="members-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
+                    <th className="sticky-name">Name</th>
                     <th>Mobile</th>
-                    <th>Rank</th>
+                    <th>Category</th>
                     <th>Service</th>
-                    <th>Location</th>
-                    <th>Applied</th>
-                    <th>Status</th>
+                    <th>Rank</th>
+                    <th>State</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td colSpan={7} className="empty-message">
-                      No members found
+                    <td colSpan={6} className="empty-message">
+                      Loading members...
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-
-            <div className="custom-pagination">
-              <div className="rows-per-page">
-                <span>Rows per page</span>
-                <select value={rowsPerPage} onChange={handleRowsPerPageChange}>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={30}>30</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-              <div className="page-info">0–0 of 0</div>
-              <div className="page-navigation">
-                <button className="nav-btn" disabled>‹</button>
-                <button className="nav-btn" disabled>›</button>
-              </div>
-            </div>
-          </div>
-
-          <div className={`filter-sidebar-mobile ${isFilterOpen ? "open" : ""}`}>
-            <FilterSidebar filterData={filterData} filterKeys={filterKeys} pageKey="memberlist" />
           </div>
         </div>
       </div>
     );
   }
 
+  // Main render
   return (
     <div className="member-list-page with-filters">
       <div className="page-header">
         <div className="header-title">
-          <h1>Member Details :- {totalItems}</h1>
+          <h1>Total Members:- {totalItems}</h1>
         </div>
         <div className="header-actions">
-          <select
-            value={filterPlaced}
-            onChange={(e) => {
-              setFilterPlaced(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="status-dropdown"
-          >
+          <select className="status-dropdown" value={filterPlaced} onChange={(e) => setFilterPlaced(e.target.value)}>
             <option value="all">All Members</option>
             <option value="active">Active Seekers</option>
             <option value="placed">Placed</option>
@@ -205,7 +336,6 @@ useEffect(() => {
           <button className="btn-purple">Export CSV</button>
         </div>
 
-        {/* Mobile Filter Toggle */}
         <button className="filter-toggle-btn" onClick={toggleFilter}>
           Filters {isFilterOpen ? "▲" : "▼"}
         </button>
@@ -225,7 +355,6 @@ useEffect(() => {
       </div>
 
       <div className="content-with-sidebar responsive">
-        {/* Main Table */}
         <div className="table-container">
           <div className="table-wrapper responsive-table">
             <table className="members-table">
@@ -233,11 +362,10 @@ useEffect(() => {
                 <tr>
                   <th className="sticky-name">Name</th>
                   <th>Mobile</th>
-                  <th>Rank</th>
+                  <th>Category</th>
                   <th>Service</th>
-                  <th>Location</th>
-                  <th>Applied</th>
-                  <th>Status</th>
+                  <th>Rank</th>
+                  <th>State</th>
                 </tr>
               </thead>
               <tbody>
@@ -250,21 +378,21 @@ useEffect(() => {
                     >
                       <td className="sticky-name">
                         <div className="member-name">
-                          {member.first_name || ""} {member.last_name || ""}
+                          {member.first_name || member.full_name
+                            ? `${member.first_name || ""} ${member.last_name || ""}`.trim() || member.full_name
+                            : "No Name"}
                         </div>
-                        <small className="member-email">{member.email || "-"}</small>
                       </td>
                       <td>{member.phone_number || "-"}</td>
+                      <td>{member.category || "-"}</td>
+                      <td>{member.service || "-"}</td>
                       <td>{member.rank || "-"}</td>
-                      <td>{member.service || member.organization || "-"}</td>
-                      <td>{member.city || "-"}</td>
-                      <td><strong>0</strong></td>
-                      <td><span className="status active">Active</span></td>
+                      <td>{member.state || "-"}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="empty-message">
+                    <td colSpan={6} className="empty-message">
                       No members match your filters
                     </td>
                   </tr>
@@ -273,16 +401,16 @@ useEffect(() => {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="custom-pagination">
             <div className="rows-per-page">
               <span>Rows per page</span>
               <select value={rowsPerPage} onChange={handleRowsPerPageChange}>
                 <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={30}>30</option>
-                <option value={50}>50</option>
                 <option value={100}>100</option>
+                <option value={500}>500</option>
+                <option value={1000}>1000</option>
+                <option value={2000}>2000</option>
+                <option value={5000}>5000</option>
               </select>
             </div>
 
@@ -301,21 +429,21 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Desktop Sidebar + Mobile Drawer */}
+        {/* Desktop Sidebar */}
         <div className="filter-sidebar-desktop">
-          <FilterSidebar filterData={filterData} filterKeys={filterKeys} pageKey="memberlist" />
+          <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
         </div>
 
+        {/* Mobile Sidebar */}
         <div className={`filter-sidebar-mobile ${isFilterOpen ? "open" : ""}`}>
           <div className="mobile-filter-header">
             <h3>Filters</h3>
             <button onClick={toggleFilter} className="close-filter-btn">✕</button>
           </div>
-          <FilterSidebar filterData={filterData} filterKeys={filterKeys} pageKey="memberlist" />
+          <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
         </div>
       </div>
 
-      {/* Mobile Overlay when filters open */}
       {isFilterOpen && <div className="mobile-filter-overlay" onClick={toggleFilter}></div>}
     </div>
   );
