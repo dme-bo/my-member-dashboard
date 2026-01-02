@@ -77,7 +77,7 @@ export default function DashboardPage() {
     const top10Ranks = Object.fromEntries(
       Object.entries(rankCountsRaw)
         .sort(([,a], [,b]) => b - a)
-        .slice(0, 14)
+        .slice(0, 15)
     );
 
     // State - sorted descending for consistency (though GeoChart doesn't use order)

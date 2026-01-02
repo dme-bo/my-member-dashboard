@@ -65,7 +65,7 @@ export default function Sidebar() {
               to="/tempstaff"
               className={({ isActive }) => (isActive ? "active" : "")}
             >
-              Temp Staff
+              TCS
             </NavLink>
             <NavLink
               to="/recruitment"

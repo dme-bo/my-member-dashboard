@@ -10,10 +10,10 @@ export default function MemberListPage({ onMemberClick }) {
   const [filterPlaced, setFilterPlaced] = useState("all");
   const [members, setMembers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(100); // Default changed to 100
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Sidebar filter state - includes Experience
+  // Sidebar filter state
   const [sidebarFilters, setSidebarFilters] = useState({
     Gender: "All",
     Category: "All",
@@ -34,7 +34,7 @@ export default function MemberListPage({ onMemberClick }) {
   // Load URL params on mount
   useEffect(() => {
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const rows = parseInt(searchParams.get("rows") || "10", 10);
+    const rows = parseInt(searchParams.get("rows") || "100", 10); // Default 100
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "all";
 
@@ -48,7 +48,7 @@ export default function MemberListPage({ onMemberClick }) {
   useEffect(() => {
     const params = new URLSearchParams();
     if (currentPage > 1) params.set("page", currentPage.toString());
-    if (rowsPerPage !== 10) params.set("rows", rowsPerPage.toString());
+    if (rowsPerPage !== 100) params.set("rows", rowsPerPage.toString());
     if (searchTerm) params.set("search", searchTerm);
     if (filterPlaced !== "all") params.set("status", filterPlaced);
 
@@ -74,7 +74,7 @@ export default function MemberListPage({ onMemberClick }) {
     return () => unsubscribe();
   }, []);
 
-  // Dynamic filter options (with normalized Gender to prevent duplicates)
+  // Dynamic filter options
   const filterOptions = useMemo(() => {
     const getUniqueValues = (field) => {
       const set = new Set();
@@ -85,11 +85,9 @@ export default function MemberListPage({ onMemberClick }) {
         if (value) {
           value = String(value).trim();
 
-          // Normalize Gender specifically to handle case variations
           if (field === "gender") {
             if (value.toLowerCase() === "male") value = "Male";
             else if (value.toLowerCase() === "female") value = "Female";
-            // Add more if needed, e.g., "M" → "Male", etc.
           }
 
           set.add(value);
@@ -99,7 +97,7 @@ export default function MemberListPage({ onMemberClick }) {
       return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
     };
 
-    // === Dynamic Experience Buckets based on actual data ===
+    // Experience buckets
     const experiences = members
       .map((m) => parseFloat(m.experience))
       .filter((exp) => !isNaN(exp) && exp >= 0);
@@ -165,7 +163,7 @@ export default function MemberListPage({ onMemberClick }) {
     setCurrentPage(1);
   };
 
-  // Parse experience range string → { min, max }
+  // Parse experience range
   const parseExperienceRange = (range) => {
     if (range === "All") return null;
     if (range.includes("+")) {
@@ -180,7 +178,6 @@ export default function MemberListPage({ onMemberClick }) {
   const filteredMembers = useMemo(() => {
     let list = [...members];
 
-    // Search
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       list = list.filter((member) => {
@@ -191,14 +188,12 @@ export default function MemberListPage({ onMemberClick }) {
       });
     }
 
-    // Placed / Active filter
     if (filterPlaced === "placed") {
       list = list.filter((m) => m.isPlaced === true);
     } else if (filterPlaced === "active") {
       list = list.filter((m) => m.isPlaced !== true);
     }
 
-    // Sidebar filters
     const fieldMap = {
       Gender: "gender",
       Category: "category",
@@ -231,7 +226,6 @@ export default function MemberListPage({ onMemberClick }) {
             list = list.filter((member) => {
               const memberValue = member[dbField];
               if (!memberValue) return false;
-              // Case-insensitive comparison
               return String(memberValue).toLowerCase() === value.toLowerCase();
             });
           }
@@ -258,7 +252,6 @@ export default function MemberListPage({ onMemberClick }) {
   const goToNext = () => currentPage < totalPages && setCurrentPage(currentPage + 1);
   const toggleFilter = () => setIsFilterOpen(!isFilterOpen);
 
-  // FilterSidebar props
   const filterData = {
     filters: sidebarFilters,
     handleFilterChange,
@@ -342,11 +335,6 @@ export default function MemberListPage({ onMemberClick }) {
           <h1>Total Members:- {totalItems}</h1>
         </div>
         <div className="header-actions">
-          <select className="status-dropdown" value={filterPlaced} onChange={(e) => setFilterPlaced(e.target.value)}>
-            <option value="all">All Members</option>
-            <option value="active">Active Seekers</option>
-            <option value="placed">Placed</option>
-          </select>
           <button className="btn-purple">Export CSV</button>
         </div>
 
@@ -419,11 +407,9 @@ export default function MemberListPage({ onMemberClick }) {
             <div className="rows-per-page">
               <span>Rows per page</span>
               <select value={rowsPerPage} onChange={handleRowsPerPageChange}>
-                <option value={10}>10</option>
                 <option value={100}>100</option>
                 <option value={500}>500</option>
                 <option value={1000}>1000</option>
-                <option value={2000}>2000</option>
                 <option value={5000}>5000</option>
               </select>
             </div>
@@ -434,10 +420,10 @@ export default function MemberListPage({ onMemberClick }) {
 
             <div className="page-navigation">
               <button onClick={goToPrevious} disabled={currentPage === 1} className="nav-btn">
-                ‹
+              ‹
               </button>
               <button onClick={goToNext} disabled={currentPage === totalPages || totalItems === 0} className="nav-btn">
-                ›
+               ›
               </button>
             </div>
           </div>
