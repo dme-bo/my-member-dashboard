@@ -4,16 +4,16 @@ import { useState, useMemo, useEffect } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import FilterSidebar from "../components/FilterSidebar";
+import * as XLSX from "xlsx"; // ← Required for Excel export
 
 export default function MemberListPage({ onMemberClick }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPlaced, setFilterPlaced] = useState("all");
   const [members, setMembers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(100); // Default changed to 100
+  const [rowsPerPage, setRowsPerPage] = useState(100);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Sidebar filter state
   const [sidebarFilters, setSidebarFilters] = useState({
     Gender: "All",
     Category: "All",
@@ -34,7 +34,7 @@ export default function MemberListPage({ onMemberClick }) {
   // Load URL params on mount
   useEffect(() => {
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const rows = parseInt(searchParams.get("rows") || "100", 10); // Default 100
+    const rows = parseInt(searchParams.get("rows") || "100", 10);
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "all";
 
@@ -44,11 +44,11 @@ export default function MemberListPage({ onMemberClick }) {
     setFilterPlaced(status);
   }, []);
 
-  // Sync state changes to URL
+  // Sync state to URL (skip saving "All" rows to URL)
   useEffect(() => {
     const params = new URLSearchParams();
     if (currentPage > 1) params.set("page", currentPage.toString());
-    if (rowsPerPage !== 100) params.set("rows", rowsPerPage.toString());
+    if (rowsPerPage !== 100 && rowsPerPage !== 999999) params.set("rows", rowsPerPage.toString());
     if (searchTerm) params.set("search", searchTerm);
     if (filterPlaced !== "all") params.set("status", filterPlaced);
 
@@ -78,38 +78,30 @@ export default function MemberListPage({ onMemberClick }) {
   const filterOptions = useMemo(() => {
     const getUniqueValues = (field) => {
       const set = new Set();
-
       members.forEach((member) => {
         let value = member[field];
-
         if (value) {
           value = String(value).trim();
-
           if (field === "gender") {
             if (value.toLowerCase() === "male") value = "Male";
             else if (value.toLowerCase() === "female") value = "Female";
           }
-
           set.add(value);
         }
       });
-
       return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
     };
 
-    // Experience buckets
     const experiences = members
       .map((m) => parseFloat(m.experience))
       .filter((exp) => !isNaN(exp) && exp >= 0);
 
     let buckets = ["All"];
-
     if (experiences.length === 0) {
       buckets = ["All", "0-1 yr", "1-3 yrs", "3-5 yrs", "5-10 yrs", "10+ yrs"];
     } else {
       const maxExp = Math.max(...experiences);
       const ceiling = Math.ceil(maxExp / 5) * 5;
-
       if (ceiling >= 1) buckets.push("0-1 yr");
       if (ceiling >= 3) buckets.push("1-3 yrs");
       if (ceiling >= 5) buckets.push("3-5 yrs");
@@ -138,13 +130,11 @@ export default function MemberListPage({ onMemberClick }) {
     };
   }, [members]);
 
-  // Handle filter changes
   const handleFilterChange = (key, value) => {
     setSidebarFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1);
   };
 
-  // Clear all filters
   const clearFilters = () => {
     setSidebarFilters({
       Gender: "All",
@@ -163,7 +153,6 @@ export default function MemberListPage({ onMemberClick }) {
     setCurrentPage(1);
   };
 
-  // Parse experience range
   const parseExperienceRange = (range) => {
     if (range === "All") return null;
     if (range.includes("+")) {
@@ -174,10 +163,11 @@ export default function MemberListPage({ onMemberClick }) {
     return { min: parseFloat(minStr), max: parseFloat(maxStr) };
   };
 
-  // Main filtering logic
+  // Filtered + Sorted Members (Robust Alphabetical A → Z)
   const filteredMembers = useMemo(() => {
     let list = [...members];
 
+    // Search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       list = list.filter((member) => {
@@ -188,12 +178,14 @@ export default function MemberListPage({ onMemberClick }) {
       });
     }
 
+    // Placed filter
     if (filterPlaced === "placed") {
       list = list.filter((m) => m.isPlaced === true);
     } else if (filterPlaced === "active") {
       list = list.filter((m) => m.isPlaced !== true);
     }
 
+    // Sidebar filters
     const fieldMap = {
       Gender: "gender",
       Category: "category",
@@ -233,18 +225,35 @@ export default function MemberListPage({ onMemberClick }) {
       }
     });
 
+    // Improved Alphabetical Sort (A → Z)
+    list.sort((a, b) => {
+      const getName = (member) => {
+        const full = `${member.first_name || ""} ${member.last_name || ""}`.trim();
+        if (full) return full;
+        if (member.full_name) return member.full_name.trim();
+        return "ZZZ_NO_NAME"; // Push nameless to bottom
+      };
+
+      const nameA = getName(a).toLowerCase();
+      const nameB = getName(b).toLowerCase();
+
+      return nameA.localeCompare(nameB);
+    });
+
     return list;
   }, [members, searchTerm, filterPlaced, sidebarFilters]);
 
-  // Pagination
+  // Pagination logic with "All" support
   const totalItems = filteredMembers.length;
-  const totalPages = Math.ceil(totalItems / rowsPerPage);
+  const isAllRows = rowsPerPage === 999999;
+  const totalPages = isAllRows ? 1 : Math.ceil(totalItems / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const endIndex = Math.min(startIndex + rowsPerPage, totalItems);
+  const endIndex = isAllRows ? totalItems : Math.min(startIndex + rowsPerPage, totalItems);
   const currentPageData = filteredMembers.slice(startIndex, endIndex);
 
   const handleRowsPerPageChange = (e) => {
-    setRowsPerPage(Number(e.target.value));
+    const value = Number(e.target.value);
+    setRowsPerPage(value);
     setCurrentPage(1);
   };
 
@@ -272,6 +281,48 @@ export default function MemberListPage({ onMemberClick }) {
     "Experience",
   ];
 
+  // Export to Excel (XLSX)
+  const handleExportXLSX = () => {
+    const dataToExport = filteredMembers.map((member) => ({
+      Name: `${member.first_name || ""} ${member.last_name || ""}`.trim() || member.full_name || "No Name",
+      Mobile: member.phone_number || "",
+      Email: member.email || "",
+      Category: member.category || "",
+      Service: member.service || "",
+      Rank: member.rank || "",
+      Gender: member.gender || "",
+      State: member.state || "",
+      City: member.city || "",
+      Education: member.graduation_course || "",
+      Experience: member.experience || "",
+      Status: member.status || "",
+      "Placement Status": member.isPlaced ? "Placed" : "Active",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+    // Auto-size columns
+    const range = XLSX.utils.decode_range(worksheet["!ref"]);
+    worksheet["!cols"] = [];
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      let maxWidth = 10;
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        const cell = worksheet[XLSX.utils.encode_cell({ c: C, r: R })];
+        if (cell && cell.v) {
+          const length = String(cell.v).length;
+          maxWidth = Math.max(maxWidth, length);
+        }
+      }
+      worksheet["!cols"][C] = { wch: Math.min(maxWidth + 2, 60) };
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Members");
+
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Members_${today}.xlsx`);
+  };
+
   // Loading state
   if (members.length === 0) {
     return (
@@ -281,7 +332,7 @@ export default function MemberListPage({ onMemberClick }) {
             <h1>Total Members:- 0</h1>
           </div>
           <div className="header-actions">
-            <button className="btn-purple">Export CSV</button>
+            <button className="btn-purple" disabled>Export XLSX</button>
           </div>
           <button className="filter-toggle-btn" onClick={toggleFilter}>
             Filters {isFilterOpen ? "▲" : "▼"}
@@ -327,7 +378,6 @@ export default function MemberListPage({ onMemberClick }) {
     );
   }
 
-  // Main render
   return (
     <div className="member-list-page with-filters">
       <div className="page-header">
@@ -335,7 +385,9 @@ export default function MemberListPage({ onMemberClick }) {
           <h1>Total Members:- {totalItems}</h1>
         </div>
         <div className="header-actions">
-          <button className="btn-purple">Export CSV</button>
+          <button className="btn-purple" onClick={handleExportXLSX}>
+            Export XLSX
+          </button>
         </div>
 
         <button className="filter-toggle-btn" onClick={toggleFilter}>
@@ -407,10 +459,12 @@ export default function MemberListPage({ onMemberClick }) {
             <div className="rows-per-page">
               <span>Rows per page</span>
               <select value={rowsPerPage} onChange={handleRowsPerPageChange}>
+                <option value={999999}>All</option>
                 <option value={100}>100</option>
                 <option value={500}>500</option>
                 <option value={1000}>1000</option>
                 <option value={5000}>5000</option>
+                
               </select>
             </div>
 
@@ -420,10 +474,14 @@ export default function MemberListPage({ onMemberClick }) {
 
             <div className="page-navigation">
               <button onClick={goToPrevious} disabled={currentPage === 1} className="nav-btn">
-              ‹
+                ‹
               </button>
-              <button onClick={goToNext} disabled={currentPage === totalPages || totalItems === 0} className="nav-btn">
-               ›
+              <button
+                onClick={goToNext}
+                disabled={currentPage === totalPages || totalItems === 0}
+                className="nav-btn"
+              >
+                ›
               </button>
             </div>
           </div>

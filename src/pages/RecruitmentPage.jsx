@@ -1,5 +1,5 @@
 // src/pages/RecruitmentPage.jsx
-import FilterSidebar from "../components/FilterSidebar";
+// import FilterSidebar from "../components/FilterSidebar";
 
 export default function RecruitmentPage({ filterData, filterKeys }) {
   return (
@@ -65,11 +65,11 @@ export default function RecruitmentPage({ filterData, filterKeys }) {
           </div>
         </div>
 
-        <FilterSidebar
+        {/* <FilterSidebar
           filterData={filterData}
           filterKeys={filterKeys}
           pageKey="RecruitmentPage"
-        />
+        /> */}
       </div>
     </div>
   );

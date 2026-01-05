@@ -312,7 +312,7 @@ export default function RequirementsPage() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  if (loading) return <div className="dashboard-container"><div className="loading">Loading jobs & projects…</div></div>;
+  if (loading) return <div className="dashboard-container"><div className="loading">Loading Requirements…</div></div>;
   if (error) return <div className="dashboard-container"><div className="error">{error}</div></div>;
 
   return (
@@ -350,7 +350,7 @@ export default function RequirementsPage() {
         <div className="header-content">
           <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
-            {["All", "Open", "Closed", "Temp Staffing", "Recruitment", "Projects"].map((filter) => (
+            {["All", "Open", "Closed", "TCS", "Recruitment", "Projects"].map((filter) => (
               <button
                 key={filter}
                 className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -409,9 +409,9 @@ export default function RequirementsPage() {
           {activeFilter === "All" && "All Requirements"}
           {activeFilter === "Open" && "Open Requirements"}
           {activeFilter === "Closed" && "Closed Requirements"}
-          {activeFilter === "Projects" && "Projects"}
-          {activeFilter === "Recruitment" && "Job Openings"}
-          {activeFilter === "Temp Staffing" && "Temp Staffing"}
+          {activeFilter === "Projects" && "Projects Requirements"}
+          {activeFilter === "Recruitment" && "Recruitment Requirements"}
+          {activeFilter === "TCS" && "TCS Requirements"}
         </h2>
 
         {filteredRequirements.length === 0 ? (
@@ -726,7 +726,7 @@ export default function RequirementsPage() {
                       fontSize: "14px",
                     }}
                   >
-                    {[100, 500, 1000, 2000, 5000].map((size) => (
+                    {[100, 500, 1000, 5000].map((size) => (
                       <option key={size} value={size}>
                         {size}
                       </option>

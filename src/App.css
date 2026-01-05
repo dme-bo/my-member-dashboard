@@ -2316,6 +2316,63 @@ body {
           }
         }
 
+        .top-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-group label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.select-filter {
+  padding: 10px 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 15px;
+  min-width: 200px;
+  /* background: white; */
+}
+
+.date-range .date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.date-range input[type="date"] {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.clear-date-btn {
+  background: none;
+  border: none;
+  color: #d32f2f;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-top: 8px;
+}
+
+.clear-date-btn:hover {
+  color: #b71c1c;
+}
+
         
 
 

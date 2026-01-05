@@ -8,6 +8,7 @@ import {
   orderBy,
   serverTimestamp,
   Timestamp,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -18,8 +19,13 @@ export default function MemberDetailModal({ member, onClose }) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
+  // State for BO Journey employment status
+  const [currentEmployment, setCurrentEmployment] = useState(null); // null | "TCS" | { name: string }
+  const [employmentLoading, setEmploymentLoading] = useState(false);
+
   const fullName = member.full_name?.trim() || "N/A";
   const userId = member.id || member.uid || member.member_id;
+  const phoneNumber = member.phone_number?.trim();
 
   const tabs = [
     { id: "personal", label: "Personal Info" },
@@ -99,7 +105,7 @@ export default function MemberDetailModal({ member, onClose }) {
     }, 4000);
   };
 
-  // Load saved interactions
+  // Load saved interactions (Interaction tab)
   useEffect(() => {
     if (activeTab !== "interaction" || !userId) return;
 
@@ -146,6 +152,51 @@ export default function MemberDetailModal({ member, onClose }) {
 
     fetchSavedNotes();
   }, [activeTab, userId, fullName]);
+
+  // Check employment status when BO Journey tab is active
+  useEffect(() => {
+    if (activeTab !== "bojourney" || !phoneNumber) {
+      setCurrentEmployment(null);
+      return;
+    }
+
+    const checkEmploymentStatus = async () => {
+      setEmploymentLoading(true);
+      try {
+        // 1. Check tcsusersmaster first
+        const tcsRef = collection(db, "tcsusersmaster");
+        const tcsQuery = query(tcsRef, where("contact_number", "==", phoneNumber));
+        const tcsSnapshot = await getDocs(tcsQuery);
+
+        if (!tcsSnapshot.empty) {
+          setCurrentEmployment("TCS");
+          setEmploymentLoading(false);
+          return;
+        }
+
+        // 2. Check projectsusermaster
+        const projectsRef = collection(db, "projectsusersmaster");
+        const projectsQuery = query(projectsRef, where("phone_number", "==", phoneNumber));
+        const projectsSnapshot = await getDocs(projectsQuery);
+
+        if (!projectsSnapshot.empty) {
+          const docData = projectsSnapshot.docs[0].data();
+          const projectName = docData.projects || "Unknown Project";
+          setCurrentEmployment({ name: projectName });
+        } else {
+          setCurrentEmployment(null);
+        }
+      } catch (error) {
+        console.error("Error checking employment status:", error);
+        showToast("Failed to check current placement.", "error");
+        setCurrentEmployment(null);
+      } finally {
+        setEmploymentLoading(false);
+      }
+    };
+
+    checkEmploymentStatus();
+  }, [activeTab, phoneNumber]);
 
   const addNewNote = () => {
     setNewNotesList([
@@ -336,13 +387,13 @@ export default function MemberDetailModal({ member, onClose }) {
               </div>
             )}
 
-            {/* Other tabs remain unchanged */}
+            {/* EDUCATION TAB */}
             {activeTab === "education" && (
               <div className="detail-grid">
                 <div><strong>Education:</strong> {member.graduation_course || "-"}</div>
-                <div><strong>Graduation %:</strong> {member.graduation_percentage}</div>
-                <div><strong>11th %:</strong> {member.percentage11th}</div>
-                <div><strong>12th %:</strong> {member.percentage12th}</div>
+                <div><strong>Graduation %:</strong> {member.graduation_percentage || "-"}</div>
+                <div><strong>11th %:</strong> {member.percentage11th || "-"}</div>
+                <div><strong>12th %:</strong> {member.percentage12th || "-"}</div>
                 <div><strong>MBA:</strong> {member.mba || "-"}</div>
                 <div><strong>English Proficiency:</strong> {member.english_proficiency || "-"}</div>
                 <div><strong>IT Skills:</strong> {member.it_skills || "-"}</div>
@@ -350,6 +401,7 @@ export default function MemberDetailModal({ member, onClose }) {
               </div>
             )}
 
+            {/* SERVICE TAB */}
             {activeTab === "service" && (
               <div className="detail-grid">
                 <div><strong>Service/Organization:</strong> {member.service || "-"}</div>
@@ -362,25 +414,65 @@ export default function MemberDetailModal({ member, onClose }) {
               </div>
             )}
 
+            {/* EXPERIENCE TAB */}
             {activeTab === "experience" && (
               <div className="detail-grid">
                 <div><strong>Govt Experience:</strong> {member.govt_experience || "-"}</div>
                 <div><strong>Corporate Experience:</strong> {member.corporate_experience || "-"}</div>
                 <div><strong>Total Experience:</strong> {member.total_experience || "-"}</div>
                 <div><strong>Work Experience:</strong> {member.work_experience || "-"}</div>
-                
               </div>
             )}
 
+            {/* BO JOURNEY TAB - UPDATED */}
             {activeTab === "bojourney" && (
               <div className="detail-grid">
-                <div><strong>updating ...</strong></div>
+                <div
+                  style={{
+                    padding: "24px",
+                    backgroundColor: "#f0fdfa",
+                    borderRadius: "12px",
+                    border: "1px solid #99f6e0",
+                    textAlign: "center",
+                  }}
+                >
+                  <strong style={{ fontSize: "18px", display: "block", marginBottom: "16px" }}>
+                    Current Status
+                  </strong>
+
+                  {employmentLoading ? (
+                    <p style={{ color: "#0d9488", fontStyle: "italic" }}>
+                      Checking placement status...
+                    </p>
+                  ) : !phoneNumber ? (
+                    <p style={{ color: "#dc2626" }}>
+                      Phone number not available – cannot verify placement.
+                    </p>
+                  ) : currentEmployment === "TCS" ? (
+                    <div style={{ fontSize: "22px", fontWeight: "700", color: "#0d9488" }}>
+                      Currently working in TCS
+                    </div>
+                  ) : currentEmployment && typeof currentEmployment === "object" ? (
+                    <div style={{ fontSize: "22px", fontWeight: "700", color: "#0d9488" }}>
+                      Currently working in {currentEmployment.name}
+                    </div>
+                  ) : (
+                    <p style={{ color: "#6b7280", fontStyle: "italic", fontSize: "18px" }}>
+                      Not currently associated with any TCS/Jobs/Projects.
+                    </p>
+                  )}
+                </div>
+
+                <div style={{ marginTop: "40px", color: "#6b7280", fontStyle: "italic", textAlign: "center" }}>
+                  More BO journey details will be added soon...
+                </div>
               </div>
             )}
 
+            {/* JOB PREFERENCES TAB */}
             {activeTab === "job" && (
               <div className="detail-grid">
-                <div><strong>Applied Jobs</strong> {member.open_jobs || "-"}</div>
+                <div><strong>Applied Jobs:</strong> {member.open_jobs || "-"}</div>
                 <div><strong>Preferred Job Location:</strong> {member.preferred_job_location || "Anywhere"}</div>
                 <div><strong>Current City:</strong> {member.city || "-"}</div>
                 <div><strong>Current CTC:</strong> {member.current_ctc || "0"}</div>
@@ -389,16 +481,19 @@ export default function MemberDetailModal({ member, onClose }) {
               </div>
             )}
 
+            {/* DOCUMENTS TAB */}
             {activeTab === "documents" && (
               <div className="detail-grid">
-                <div><strong>Resume:</strong> 
+                <div>
+                  <strong>Resume:</strong>{" "}
                   {member.resume_fileurl ? (
                     <a href={member.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
                       View Resume
                     </a>
                   ) : "Not Uploaded"}
                 </div>
-                <div><strong>Photo:</strong> 
+                <div>
+                  <strong>Photo:</strong>{" "}
                   {member.photo_url ? (
                     <a href={member.photo_url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
                       View Photo

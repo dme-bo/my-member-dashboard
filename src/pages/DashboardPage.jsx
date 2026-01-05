@@ -1,7 +1,7 @@
 // src/pages/DashboardPage.jsx
 import { useState, useEffect, useMemo } from 'react';
 import {
-  FaUsers, FaClock, FaUserPlus, FaCalendarWeek, FaCalendarAlt
+  FaUsers, FaClock, FaUserPlus, FaCalendarAlt
 } from 'react-icons/fa';
 import { collection, getDocs, getFirestore } from 'firebase/firestore';
 import { Pie, Bar } from 'react-chartjs-2';
@@ -11,8 +11,13 @@ import { Chart } from 'react-google-charts';
 
 export default function DashboardPage() {
   const [members, setMembers] = useState([]);
-  const [filter, setFilter] = useState('All');
   const [loading, setLoading] = useState(true);
+
+  // Filters
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [serviceFilter, setServiceFilter] = useState('All');
+  const [rankFilter, setRankFilter] = useState('All');
+  const [dateRangeFilter, setDateRangeFilter] = useState('All');
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -30,17 +35,95 @@ export default function DashboardPage() {
     fetchMembers();
   }, []);
 
+  // Extract unique values for dropdowns
+  const filterOptions = useMemo(() => {
+    const categories = ['All', ...new Set(members.map(m => m.category?.trim()).filter(Boolean))].sort();
+    const services = ['All', ...new Set(members.map(m => m.service?.trim()).filter(Boolean))].sort();
+
+    // Top 20 ranks by frequency
+    const rankCounts = members.reduce((acc, m) => {
+      const r = m.rank?.trim();
+      if (r) acc[r] = (acc[r] || 0) + 1;
+      return acc;
+    }, {});
+    const topRanks = Object.keys(rankCounts)
+      .sort((a, b) => rankCounts[b] - rankCounts[a])
+      .slice(0, 20);
+    const ranks = ['All', ...topRanks];
+
+    return { categories, services, ranks };
+  }, [members]);
+
+  // Parse registration date helper
+  const parseRegDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const trimmed = dateStr.trim();
+    const parts = trimmed.split(/\s+/);
+    if (parts.length !== 3) return null;
+    const [dayStr, monthStr, yearStr] = parts;
+    const day = parseInt(dayStr, 10);
+    const year = parseInt(yearStr, 10);
+    if (isNaN(day) || isNaN(year)) return null;
+
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthIndex = monthNames.findIndex(name => 
+      name.toLowerCase().startsWith(monthStr.toLowerCase().replace('.', ''))
+    );
+    if (monthIndex === -1) return null;
+
+    return new Date(year, monthIndex, day);
+  };
+
+  // Filtered members based on all filters
   const filteredMembers = useMemo(() => {
-    if (filter === 'All') return members;
-    return members.filter(m => m.category === filter);
-  }, [members, filter]);
+    return members.filter(member => {
+      // Category filter
+      if (categoryFilter !== 'All' && member.category?.trim() !== categoryFilter) return false;
+
+      // Service filter
+      if (serviceFilter !== 'All' && member.service?.trim() !== serviceFilter) return false;
+
+      // Rank filter
+      if (rankFilter !== 'All' && member.rank?.trim() !== rankFilter) return false;
+
+      // // Date range filter
+      // if (dateRangeFilter !== 'All') {
+      //   const regDate = parseRegDate(member.registration_date);
+      //   if (!regDate) return false;
+
+      //   const now = new Date();
+      //   const daysAgo = (days) => {
+      //     const d = new Date(now);
+      //     d.setDate(now.getDate() - days);
+      //     return d;
+      //   };
+
+      //   switch (dateRangeFilter) {
+      //     case '7days': return regDate >= daysAgo(7);
+      //     case '30days': return regDate >= daysAgo(30);
+      //     case '90days': return regDate >= daysAgo(90);
+      //     case '6months':
+      //       const sixMonthsAgo = new Date(now);
+      //       sixMonthsAgo.setMonth(now.getMonth() - 6);
+      //       return regDate >= sixMonthsAgo;
+      //     case '1year':
+      //       const oneYearAgo = new Date(now);
+      //       oneYearAgo.setFullYear(now.getFullYear() - 1);
+      //       return regDate >= oneYearAgo;
+      //     default: return true;
+      //   }
+      // }
+
+      return true;
+    });
+  }, [members, categoryFilter, serviceFilter, rankFilter, dateRangeFilter]);
 
   const analytics = useMemo(() => {
-    if (loading || !members.length) return null;
+    if (loading || !filteredMembers.length) return null;
 
     const total = filteredMembers.length;
 
-    // Normalize gender
+    // Gender
     const genderCounts = filteredMembers.reduce((acc, m) => {
       const raw = m.gender?.trim()?.toLowerCase();
       if (raw === 'male' || raw === 'm') acc['Male'] = (acc['Male'] || 0) + 1;
@@ -48,42 +131,42 @@ export default function DashboardPage() {
       return acc;
     }, {});
 
-    // Category - sorted descending
+    // Category
     const categoryCountsRaw = filteredMembers.reduce((acc, m) => {
       const c = m.category?.trim();
-      if (c && c !== 'Unknown') acc[c] = (acc[c] || 0) + 1;
+      if (c) acc[c] = (acc[c] || 0) + 1;
       return acc;
     }, {});
     const categoryCounts = Object.fromEntries(
       Object.entries(categoryCountsRaw).sort(([,a], [,b]) => b - a)
     );
 
-    // Service - sorted descending
+    // Service
     const serviceCountsRaw = filteredMembers.reduce((acc, m) => {
       const s = m.service?.trim();
-      if (s && s !== 'Unknown') acc[s] = (acc[s] || 0) + 1;
+      if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
     const serviceCounts = Object.fromEntries(
       Object.entries(serviceCountsRaw).sort(([,a], [,b]) => b - a)
     );
 
-    // Top 10 Ranks - already sorted descending
+    // Top 15 Ranks
     const rankCountsRaw = filteredMembers.reduce((acc, m) => {
       const r = m.rank?.trim();
-      if (r && r !== 'Unknown') acc[r] = (acc[r] || 0) + 1;
+      if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
-    const top10Ranks = Object.fromEntries(
+    const topRanks = Object.fromEntries(
       Object.entries(rankCountsRaw)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 15)
     );
 
-    // State - sorted descending for consistency (though GeoChart doesn't use order)
+    // State
     const stateCountsRaw = filteredMembers.reduce((acc, m) => {
       const s = m.state?.trim();
-      if (s && s !== 'Unknown') acc[s] = (acc[s] || 0) + 1;
+      if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
     const stateCounts = Object.fromEntries(
@@ -94,24 +177,7 @@ export default function DashboardPage() {
     const expSum = filteredMembers.reduce((sum, m) => sum + (parseFloat(m.total_experience) || 0), 0);
     const avgExp = total > 0 ? (expSum / total).toFixed(1) + 'Y' : '0Y';
 
-    // Registration dates
-    const parseRegDate = (dateStr) => {
-      if (!dateStr || typeof dateStr !== 'string') return null;
-      const trimmed = dateStr.trim();
-      const parts = trimmed.split(/\s+/);
-      if (parts.length !== 3) return null;
-      const [dayStr, monthStr, yearStr] = parts;
-      const day = parseInt(dayStr, 10);
-      const year = parseInt(yearStr, 10);
-      if (isNaN(day) || isNaN(year)) return null;
-
-      const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      const monthIndex = monthNames.findIndex(name => name.toLowerCase().startsWith(monthStr.toLowerCase().replace('.', '')));
-      if (monthIndex === -1) return null;
-
-      return new Date(year, monthIndex, day);
-    };
-
+    // Registration counts based on current filtered data
     const parsedDates = filteredMembers
       .map(m => parseRegDate(m.registration_date))
       .filter(d => d !== null);
@@ -135,7 +201,7 @@ export default function DashboardPage() {
       genderCounts,
       categoryCounts,
       serviceCounts,
-      rankCounts: top10Ranks,
+      rankCounts: topRanks,
       stateCounts,
       avgExp,
       registeredToday,
@@ -143,9 +209,7 @@ export default function DashboardPage() {
       registeredMonth,
       registered3Months
     };
-  }, [filteredMembers, loading, members.length]);
-
-  const handleFilter = (selectedFilter) => setFilter(selectedFilter);
+  }, [filteredMembers, loading]);
 
   const createChartData = (counts, colors = [
     '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF',
@@ -193,7 +257,6 @@ export default function DashboardPage() {
   const barOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    indexAxis: 'x', // Vertical bars
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -210,26 +273,10 @@ export default function DashboardPage() {
       }
     },
     scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { stepSize: 1, font: { size: 12 } },
-        grid: { color: '#e0e0e0' }
-      },
-      x: {
-        ticks: {
-          font: { size: 12 },
-          maxRotation: 45,
-          minRotation: 45,
-          autoSkip: false
-        },
-        grid: { display: false }
-      }
+      y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      x: { ticks: { maxRotation: 45, minRotation: 45, autoSkip: false } }
     },
-    layout: {
-      padding: {
-        top: 30 // Extra space for data labels on top
-      }
-    }
+    layout: { padding: { top: 30 } }
   };
 
   if (loading) return <div className="loading">Loading dashboard...</div>;
@@ -239,17 +286,47 @@ export default function DashboardPage() {
     <>
       <header className="top-header">
         <h1>Member Analytics Dashboard</h1>
-        <div className="top-filters">
-          <div className="button-group">
-            <button className={`btn ${filter === 'All' ? 'active' : ''}`} onClick={() => handleFilter('All')}>All</button>
-            <button className={`btn ${filter === 'Military' ? 'active' : ''}`} onClick={() => handleFilter('Military')}>Military</button>
-            <button className={`btn ${filter === 'Paramilitary' ? 'active' : ''}`} onClick={() => handleFilter('Paramilitary')}>Paramilitary</button>
-            <button className={`btn ${filter === 'BRO' ? 'active' : ''}`} onClick={() => handleFilter('BRO')}>BRO</button>
-            <button className={`btn ${filter === 'Police' ? 'active' : ''}`} onClick={() => handleFilter('Police')}>Police</button>
-            <button className={`btn ${filter === 'MES' ? 'active' : ''}`} onClick={() => handleFilter('MES')}>MES</button>
-            <button className={`btn ${filter === 'Civilian' ? 'active' : ''}`} onClick={() => handleFilter('Civilian')}>Civilian</button>
-            
+
+        {/* Dynamic Filters */}
+        <div className="top-filters" style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
+          <div>
+            <label><strong>Category:</strong></label>
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px',backgroundColor:'white', color:'black' }}>
+              {filterOptions.categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
+
+          <div>
+            <label><strong>Service:</strong></label>
+            <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px',backgroundColor:'white', color:'black' }}>
+              {filterOptions.services.map(srv => (
+                <option key={srv} value={srv}>{srv}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label><strong>Rank:</strong></label>
+            <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px',backgroundColor:'white', color:'black' }}>
+              {filterOptions.ranks.map(rank => (
+                <option key={rank} value={rank}>{rank}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* <div>
+            <label><strong>Date Range:</strong></label>
+            <select value={dateRangeFilter} onChange={(e) => setDateRangeFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
+              <option value="All">All Time</option>
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="90days">Last 90 Days</option>
+              <option value="6months">Last 6 Months</option>
+              <option value="1year">Last 1 Year</option>
+            </select>
+          </div> */}
         </div>
       </header>
 
@@ -258,8 +335,6 @@ export default function DashboardPage() {
         <div className="card"><div className="card-icon blue"><FaUsers size={28}/></div><div className="card-label">Total Members</div><div className="card-value">{analytics.total.toLocaleString()}</div></div>
         <div className="card"><div className="card-icon red"><FaClock size={28}/></div><div className="card-label">Avg Experience</div><div className="card-value">{analytics.avgExp}</div></div>
         <div className="card"><div className="card-icon new"><FaUserPlus size={28}/></div><div className="card-label">Registered Today</div><div className="card-value">{analytics.registeredToday}</div></div>
-        <div className="card"><div className="card-icon week"><FaCalendarWeek size={28}/></div><div className="card-label">This Week</div><div className="card-value">{analytics.registeredWeek}</div></div>
-        <div className="card"><div className="card-icon month"><FaCalendarAlt size={28}/></div><div className="card-label">This Month</div><div className="card-value">{analytics.registeredMonth}</div></div>
         <div className="card"><div className="card-icon quarter"><FaCalendarAlt size={28}/></div><div className="card-label">Last 3 Months</div><div className="card-value">{analytics.registered3Months}</div></div>
       </div>
 
@@ -294,13 +369,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        
+
         <div className="chart-card">
           <h3>Registration Trends</h3>
           <div style={{ height: '350px' }}>
             <Bar
               data={createChartData({
                 'Today': analytics.registeredToday,
-                'This Week': analytics.registeredWeek,
+                'Last 7 Days': analytics.registeredWeek,
                 'This Month': analytics.registeredMonth,
                 'Last 3 Months': analytics.registered3Months
               })}
@@ -325,7 +402,6 @@ export default function DashboardPage() {
                 colorAxis: { colors: ['#e3f2fd', '#1976d2'] },
                 backgroundColor: '#ffffff',
                 datalessRegionColor: '#f5f5f5',
-                tooltip: { textStyle: { fontSize: 14 } }
               }}
               width="100%"
               height="100%"
