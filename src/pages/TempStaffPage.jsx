@@ -31,7 +31,7 @@ export default function TempStaffPage() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(100); // Default to 100
+  const [rowsPerPage, setRowsPerPage] = useState(100);
 
   // Helper: Format Date
   const formatDateDDMMMYYYY = (dateInput) => {
@@ -98,7 +98,7 @@ export default function TempStaffPage() {
   // Current data
   const currentData = viewMode === "applications" ? membersData : coordinatorsData;
 
-  // Dynamic filter options – now includes coordinator_name for applications
+  // Dynamic filter options
   const dynamicFilterOptions = useMemo(() => {
     const uniqueCities = new Set();
     const uniqueCoordinatorTypes = new Set();
@@ -197,7 +197,6 @@ export default function TempStaffPage() {
       );
     }
 
-    // Apply filters
     if (filters.city && filters.city !== "All") {
       if (viewMode === "applications") {
         list = list.filter((m) => String(m.city || "").trim() === filters.city);
@@ -220,7 +219,6 @@ export default function TempStaffPage() {
       list = list.filter((m) => String(m.role || "").trim() === filters.role);
     }
 
-    // Fixed: Coordinator name filter for applications
     if (filters.coordinator_name && filters.coordinator_name !== "All") {
       list = list.filter((m) => String(m.coordinator_name || "").trim() === filters.coordinator_name);
     }
@@ -337,7 +335,7 @@ export default function TempStaffPage() {
 
   const filterData = { filters, handleFilterChange, clearFilters, options: dynamicFilterOptions };
   const filterKeys = viewMode === "applications"
-    ? ["coordinator_name","city", "status", "role"]
+    ? ["coordinator_name", "city", "status", "role"]
     : ["city", "coordinator_type"];
 
   if (loading) {
@@ -517,7 +515,7 @@ export default function TempStaffPage() {
                   opacity: currentPage === 1 ? 0.5 : 1,
                 }}
               >
-                ‹ Previous
+                Previous
               </button>
               <span>Page {currentPage} of {totalPages || 1}</span>
               <button
@@ -532,7 +530,7 @@ export default function TempStaffPage() {
                   opacity: (currentPage === totalPages || rowsPerPage === Infinity) ? 0.5 : 1,
                 }}
               >
-                Next ›
+                Next
               </button>
             </div>
           </div>
@@ -541,7 +539,7 @@ export default function TempStaffPage() {
         <FilterSidebar filterData={filterData} filterKeys={filterKeys} pageKey="TempStaffPage" />
       </div>
 
-      {/* MODAL */}
+      {/* MODAL - Fixed Size & Stable */}
       {selectedMember && (
         <>
           {/* Toast */}
@@ -591,32 +589,48 @@ export default function TempStaffPage() {
                 background: "#fff",
                 borderRadius: "12px",
                 width: "100%",
-                maxWidth: "900px",
+                maxWidth: "1000px",
+                height: "90vh",
                 maxHeight: "90vh",
+                display: "flex",
+                flexDirection: "column",
                 overflow: "hidden",
                 boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
-              <div style={{ padding: "24px", borderBottom: "1px solid #eee", display: "flex", alignItems: "center", backgroundColor: "#1e40af" }}>
+              {/* Header */}
+              <div
+                style={{
+                  padding: "24px",
+                  borderBottom: "1px solid #eee",
+                  backgroundColor: "#1e40af",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                }}
+              >
                 <div style={{ flex: 1 }}>
-                  <h2 style={{ margin: 0, fontSize: "24px", color: "#eee" }}>
+                  <h2 style={{ margin: 0, fontSize: "24px" }}>
                     {selectedMember.full_name || "N/A"}
                   </h2>
-                  <p style={{ margin: "8px 0 0", color: "#eee" }}>
+                  <p style={{ margin: "8px 0 0" }}>
                     {selectedMember.type === "application"
                       ? `Resources ID: ${selectedMember.resources_id || "-"} | Role: ${selectedMember.role || "-"}`
                       : `Type: ${selectedMember.coordinator_type || "-"}`}
                   </p>
                 </div>
-                <button onClick={closeModal} style={{ background: "none", border: "none", fontSize: "28px", cursor: "pointer", color: "#eee" }}>
+                <button
+                  onClick={closeModal}
+                  style={{ background: "none", border: "none", fontSize: "28px", cursor: "pointer", color: "#fff" }}
+                >
                   ×
                 </button>
               </div>
 
               {/* Tabs */}
-              <div style={{ display: "flex", borderBottom: "1px solid #eee", background: "#f8fafc" }}>
+              <div style={{ display: "flex", borderBottom: "1px solid #eee", background: "#f8fafc", flexShrink: 0 }}>
                 {(selectedMember.type === "application"
                   ? ["personal", "bank", "documents", "interaction"]
                   : ["personal", "locations", "bank", "interaction"]
@@ -643,8 +657,8 @@ export default function TempStaffPage() {
                 ))}
               </div>
 
-                            {/* Modal Body */}
-              <div style={{ padding: "24px", overflowY: "auto", maxHeight: "calc(90vh - 180px)" }}>
+              {/* Body - Scrollable */}
+              <div style={{ padding: "24px", overflowY: "auto", flex: 1, minHeight: 0 }}>
                 {/* APPLICATION TABS */}
                 {selectedMember.type === "application" && (
                   <>
@@ -657,7 +671,8 @@ export default function TempStaffPage() {
                           <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>State</td><td>{selectedMember.state || "-"}</td></tr>
                           <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>City</td><td>{selectedMember.city || "-"}</td></tr>
                           <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Coordinator</td><td>{selectedMember.coordinator_name || "-"}</td></tr>
-                          <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Status</td>
+                          <tr>
+                            <td style={{ padding: "10px 0", fontWeight: "600" }}>Status</td>
                             <td>
                               <span style={{
                                 padding: "6px 12px",
@@ -750,228 +765,214 @@ export default function TempStaffPage() {
                 )}
 
                 {/* INTERACTION TAB */}
-            {activeTab === "interaction" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
-                {/* Add New Notes */}
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                    <h3 style={{ margin: 0, color: "#1f2937", fontSize: "18px" }}>
-                      Add New Interaction Notes
-                    </h3>
-                    <button
-                      onClick={addNewNote}
-                      disabled={loading}
-                      style={{
-                        padding: "10px 20px",
-                        backgroundColor: "#2563eb",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "6px",
-                        fontWeight: "500",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <span style={{ fontSize: "18px" }}>+</span> ADD NOTE
-                    </button>
-                  </div>
-
-                  {newNotesList.length === 0 ? (
-                    <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "30px 0" }}>
-                      Click "ADD NOTE" to start adding new interactions.
-                    </p>
-                  ) : (
-                    <>
-                      {newNotesList.map((note) => (
-                        <div
-                          key={note.id}
-                          style={{
-                            border: "1px solid #d1d5db",
-                            borderRadius: "8px",
-                            padding: "16px",
-                            marginBottom: "16px",
-                            backgroundColor: "#f9fafb",
-                          }}
-                        >
-                          <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
-                            <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Member Name</label>
-                              <input
-                                type="text"
-                                value={note.contactPerson}
-                                readOnly
-                                style={{
-                                  width: "100%",
-                                  padding: "10px",
-                                  borderRadius: "6px",
-                                  border: "1px solid #3b82f6",
-                                  backgroundColor: "#eff6ff",
-                                  fontWeight: "500",
-                                  color: "#1e40af",
-                                }}
-                              />
-                            </div>
-
-                            <div style={{ flex: 2 }}>
-                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Notes</label>
-                              <textarea
-                                value={note.notes}
-                                onChange={(e) => updateNewNote(note.id, "notes", e.target.value)}
-                                placeholder="Add notes about interaction..."
-                                rows="3"
-                                style={{
-                                  width: "100%",
-                                  padding: "10px",
-                                  borderRadius: "6px",
-                                  border: "1px solid #d1d5db",
-                                  resize: "vertical",
-                                }}
-                              />
-                            </div>
-
-                            <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Next Action</label>
-                              <input
-                                type="text"
-                                value={note.nextAction}
-                                onChange={(e) => updateNewNote(note.id, "nextAction", e.target.value)}
-                                placeholder="e.g., Follow up call"
-                                style={{
-                                  width: "100%",
-                                  padding: "10px",
-                                  borderRadius: "6px",
-                                  border: "1px solid #d1d5db",
-                                }}
-                              />
-                            </div>
-
-                            <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Follow-up Date</label>
-                              <input
-                                type="date"
-                                value={note.followUpDate}
-                                onChange={(e) => updateNewNote(note.id, "followUpDate", e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  padding: "10px",
-                                  borderRadius: "6px",
-                                  border: "1px solid #d1d5db",
-                                }}
-                              />
-                              {note.followUpDate && (
-                                <div style={{ fontSize: "12px", color: "#4b5563", marginTop: "4px" }}>
-                                  {formatDateDDMMMYYYY(note.followUpDate)}
-                                </div>
-                              )}
-                            </div>
-
-                            <div style={{ alignSelf: "flex-end" }}>
-                              <button
-                                onClick={() => deleteNewNote(note.id)}
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  padding: "8px",
-                                  color: "#ef4444",
-                                }}
-                                title="Delete"
-                              >
-                                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                                  <path d="M6 4V2a2 2 0 012-2h4a2 2 0 012 2v2h5a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h5zm2 0h4V2H8v2zm1 4a1 1 0 012 0v7a1 1 0 01-2 0V8zm4 0a1 1 0 012 0v7a1 1 0 01-2 0V8z" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                      <div style={{ textAlign: "right", marginTop: "10px" }}>
+                {activeTab === "interaction" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
+                    {/* Add New Notes */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                        <h3 style={{ margin: 0, color: "#1f2937", fontSize: "18px" }}>
+                          Add New Interaction Notes
+                        </h3>
                         <button
-                          onClick={handleSaveAllNotes}
-                          disabled={loading}
+                          onClick={addNewNote}
+                          disabled={notesLoading}
                           style={{
-                            padding: "12px 32px",
-                            backgroundColor: "#16a34a",
+                            padding: "10px 20px",
+                            backgroundColor: "#2563eb",
                             color: "white",
                             border: "none",
                             borderRadius: "6px",
-                            fontWeight: "600",
-                            cursor: loading ? "not-allowed" : "pointer",
-                            opacity: loading ? 0.7 : 1,
+                            fontWeight: "500",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
                           }}
                         >
-                          {loading ? "Saving..." : "SAVE ALL NOTES"}
+                          <span style={{ fontSize: "18px" }}>+</span> ADD NOTE
                         </button>
                       </div>
-                    </>
-                  )}
-                </div>
 
-                {/* History Table */}
-                <div>
-                  <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
-                    Interaction History ({savedNotes.length})
-                  </h3>
-
-                  {loading && <p style={{ textAlign: "center", color: "#6b7280" }}>Loading history...</p>}
-
-                  {!loading && savedNotes.length === 0 && (
-                    <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
-                      No past interactions recorded yet.
-                    </p>
-                  )}
-
-                  {!loading && savedNotes.length > 0 && (
-                    <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
-                        <thead>
-                          <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Next Action</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Follow-up Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {savedNotes.map((note, index) => (
-                            <tr
+                      {newNotesList.length === 0 ? (
+                        <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "30px 0" }}>
+                          Click "ADD NOTE" to start adding new interactions.
+                        </p>
+                      ) : (
+                        <>
+                          {newNotesList.map((note) => (
+                            <div
                               key={note.id}
                               style={{
-                                backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "8px",
+                                padding: "16px",
+                                marginBottom: "16px",
+                                backgroundColor: "#f9fafb",
                               }}
                             >
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.date}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.contactPerson}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
-                                {note.notes}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.nextAction}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.followUpDate}
-                              </td>
-                            </tr>
+                              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: "13px", color: "#6b7280" }}>Member Name</label>
+                                  <input
+                                    type="text"
+                                    value={note.contactPerson}
+                                    readOnly
+                                    style={{
+                                      width: "100%",
+                                      padding: "10px",
+                                      borderRadius: "6px",
+                                      border: "1px solid #3b82f6",
+                                      backgroundColor: "#eff6ff",
+                                      fontWeight: "500",
+                                      color: "#1e40af",
+                                    }}
+                                  />
+                                </div>
+                                <div style={{ flex: 2 }}>
+                                  <label style={{ fontSize: "13px", color: "#6b7280" }}>Notes</label>
+                                  <textarea
+                                    value={note.notes}
+                                    onChange={(e) => updateNewNote(note.id, "notes", e.target.value)}
+                                    placeholder="Add notes about interaction..."
+                                    rows="3"
+                                    style={{
+                                      width: "100%",
+                                      padding: "10px",
+                                      borderRadius: "6px",
+                                      border: "1px solid #d1d5db",
+                                      resize: "vertical",
+                                    }}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: "13px", color: "#6b7280" }}>Next Action</label>
+                                  <input
+                                    type="text"
+                                    value={note.nextAction}
+                                    onChange={(e) => updateNewNote(note.id, "nextAction", e.target.value)}
+                                    placeholder="e.g., Follow up call"
+                                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d1d5db" }}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: "13px", color: "#6b7280" }}>Follow-up Date</label>
+                                  <input
+                                    type="date"
+                                    value={note.followUpDate}
+                                    onChange={(e) => updateNewNote(note.id, "followUpDate", e.target.value)}
+                                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d1d5db" }}
+                                  />
+                                  {note.followUpDate && (
+                                    <div style={{ fontSize: "12px", color: "#4b5563", marginTop: "4px" }}>
+                                      {formatDateDDMMMYYYY(note.followUpDate)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{ alignSelf: "flex-end" }}>
+                                  <button
+                                    onClick={() => deleteNewNote(note.id)}
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: "8px",
+                                      color: "#ef4444",
+                                    }}
+                                    title="Delete"
+                                  >
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                                      <path d="M6 4V2a2 2 0 012-2h4a2 2 0 012 2v2h5a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h5zm2 0h4V2H8v2zm1 4a1 1 0 012 0v7a1 1 0 01-2 0V8zm4 0a1 1 0 012 0v7a1 1 0 01-2 0V8z" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
                           ))}
-                        </tbody>
-                      </table>
+
+                          <div style={{ textAlign: "right", marginTop: "10px" }}>
+                            <button
+                              onClick={handleSaveAllNotes}
+                              disabled={notesLoading}
+                              style={{
+                                padding: "12px 32px",
+                                backgroundColor: "#16a34a",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "6px",
+                                fontWeight: "600",
+                                cursor: notesLoading ? "not-allowed" : "pointer",
+                                opacity: notesLoading ? 0.7 : 1,
+                              }}
+                            >
+                              {notesLoading ? "Saving..." : "SAVE ALL NOTES"}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
+
+                    {/* History Table */}
+                    <div>
+                      <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
+                        Interaction History ({savedNotes.length})
+                      </h3>
+
+                      {notesLoading && <p style={{ textAlign: "center", color: "#6b7280" }}>Loading history...</p>}
+
+                      {!notesLoading && savedNotes.length === 0 && (
+                        <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
+                          No past interactions recorded yet.
+                        </p>
+                      )}
+
+                      {!notesLoading && savedNotes.length > 0 && (
+                        <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                            <thead>
+                              <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
+                                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
+                                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
+                                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
+                                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Next Action</th>
+                                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Follow-up Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {savedNotes.map((note, index) => (
+                                <tr
+                                  key={note.id}
+                                  style={{
+                                    backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                                  }}
+                                >
+                                  <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                    {note.date}
+                                  </td>
+                                  <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                    {note.contactPerson}
+                                  </td>
+                                  <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
+                                    {note.notes}
+                                  </td>
+                                  <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                    {note.nextAction}
+                                  </td>
+                                  <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                    {note.followUpDate}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
 
               {/* Footer */}
-              <div style={{ padding: "20px 24px", borderTop: "1px solid #eee", textAlign: "right" }}>
+              <div style={{ padding: "20px 24px", borderTop: "1px solid #eee", textAlign: "right", flexShrink: 0 }}>
                 <button
                   onClick={closeModal}
                   style={{

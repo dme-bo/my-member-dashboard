@@ -10,8 +10,9 @@ import MemberListPage from "./pages/MemberListPage";
 import TempStaffPage from "./pages/TempStaffPage";
 import RecruitmentPage from "./pages/RecruitmentPage";
 import ProjectsPage from "./pages/ProjectsPage";
-import RequirementsPage from "./pages/RequirementsPage"
-import ConfigurationPage from "./pages/ConfigurationPage"
+import RequirementsPage from "./pages/RequirementsPage";
+import ConfigurationPage from "./pages/ConfigurationPage";
+import NewsLetterPage from "./pages/NewsLetterPage";
 
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
@@ -89,6 +90,10 @@ function Layout() {
           <Route
             path="/configuration"
             element={<ConfigurationPage/>}
+          />
+          <Route
+            path="/newsletter"
+            element={<NewsLetterPage/>}
           />
           {/* Optional: 404 page */}
           <Route path="*" element={<div>Page not found</div>} />

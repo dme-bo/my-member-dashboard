@@ -11,14 +11,28 @@ export default function Sidebar() {
     expandedMenu === "applications" ||
     ["/tempstaff", "/recruitment", "/projects"].includes(location.pathname);
 
-  // Auto-expand "applications" menu when on any of its subpages
   const isApplicationsExpanded =
     expandedMenu === "applications" ||
     ["/tempstaff", "/recruitment", "/projects"].includes(location.pathname);
 
-  const handleParentClick = (e) => {
+  // NEW: Determine if "Member Master List" parent should look active
+  const isMemberListActive =
+    expandedMenu === "memberlist" ||
+    ["/memberlist", "/memberlist"].includes(location.pathname);
+
+  const isMemberListExpanded =
+    expandedMenu === "memberlist" ||
+    ["/memberlist", "/memberlist"].includes(location.pathname);
+
+  const handleApplicationsClick = (e) => {
     e.preventDefault();
     setExpandedMenu(expandedMenu === "applications" ? null : "applications");
+  };
+
+  // NEW: Handler for Member Master List parent
+  const handleMemberListClick = (e) => {
+    e.preventDefault();
+    setExpandedMenu(expandedMenu === "memberlist" ? null : "memberlist");
   };
 
   return (
@@ -40,25 +54,50 @@ export default function Sidebar() {
           Dashboard
         </NavLink>
 
-        <NavLink
-          to="/memberlist"
-          className={({ isActive }) => (isActive ? "active" : "")}
+        {/* NEW: Expandable Member Master List */}
+        <a
+          href="#"
+          className={isMemberListActive ? "active" : ""}
+          onClick={handleMemberListClick}
+          style={{ cursor: "pointer" }}
         >
-          Member List
-        </NavLink>
+          Member Master List
+          <span className="arrow">
+            {isMemberListExpanded ? "" : ""}
+          </span>
+        </a>
 
-        {/* Parent Menu Item - Clickable to expand/collapse */}
+        {/* Submenu for Member Master List */}
+        {isMemberListExpanded && (
+          <div className="submenu">
+            <NavLink
+              to="/memberlist"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Member List
+            </NavLink>
+            <NavLink
+              to="/memberlist/partners"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Partner Agent List
+            </NavLink>
+          </div>
+        )}
+
+        {/* Existing Member Applications section */}
         <a
           href="#"
           className={isApplicationsActive ? "active" : ""}
-          onClick={handleParentClick}
+          onClick={handleApplicationsClick}
           style={{ cursor: "pointer" }}
         >
           Member Applications
-          <span className="arrow">{isApplicationsExpanded}</span>
+          <span className="arrow">
+            {isApplicationsExpanded ? "" : ""}
+          </span>
         </a>
 
-        {/* Submenu - shown when expanded or when on a subpage */}
         {isApplicationsExpanded && (
           <div className="submenu">
             <NavLink
@@ -81,13 +120,20 @@ export default function Sidebar() {
             </NavLink>
           </div>
         )}
-        <NavLink to="/requirements" className={({ isActive }) => (isActive ? "active" : "")}>
+
+        <NavLink
+          to="/requirements"
+          className={({ isActive }) => (isActive ? "active" : "")}
+        >
           Requirements
         </NavLink>
-        <NavLink to="/configuration" className={({ isActive }) => (isActive ? "active" : "")}>
+
+        <NavLink
+          to="/configuration"
+          className={({ isActive }) => (isActive ? "active" : "")}
+        >
           Configuration
         </NavLink>
-        
       </nav>
     </aside>
   );

@@ -58,7 +58,7 @@ export default function MemberListPage({ onMemberClick }) {
   // Fetch members from Firestore
   useEffect(() => {
     const unsubscribe = onSnapshot(
-      collection(db, "usersmaster"),
+      collection(db, "usersmaster" || "users"),
       (snapshot) => {
         const membersList = snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -73,6 +73,7 @@ export default function MemberListPage({ onMemberClick }) {
     );
     return () => unsubscribe();
   }, []);
+  
 
   // Dynamic filter options
   const filterOptions = useMemo(() => {

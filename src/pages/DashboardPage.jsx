@@ -13,11 +13,35 @@ export default function DashboardPage() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // Filters - Cascading: Category → Service → Rank → State → City
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [serviceFilter, setServiceFilter] = useState('All');
   const [rankFilter, setRankFilter] = useState('All');
-  const [dateRangeFilter, setDateRangeFilter] = useState('All');
+  const [stateFilter, setStateFilter] = useState('All');
+  const [cityFilter, setCityFilter] = useState('All');
+
+  // Parse registration date - placed early to avoid hoisting issues
+  const parseRegDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const trimmed = dateStr.trim();
+    const parts = trimmed.split(/\s+/);
+    if (parts.length !== 3) return null;
+    const [dayStr, monthStr, yearStr] = parts;
+    const day = parseInt(dayStr, 10);
+    const year = parseInt(yearStr, 10);
+    if (isNaN(day) || isNaN(year)) return null;
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const monthIndex = monthNames.findIndex(name =>
+      name.toLowerCase().startsWith(monthStr.toLowerCase().replace('.', ''))
+    );
+    if (monthIndex === -1) return null;
+
+    return new Date(year, monthIndex, day);
+  };
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -35,95 +59,118 @@ export default function DashboardPage() {
     fetchMembers();
   }, []);
 
-  // Extract unique values for dropdowns
+  // Static: Categories & States (top 25)
   const filterOptions = useMemo(() => {
     const categories = ['All', ...new Set(members.map(m => m.category?.trim()).filter(Boolean))].sort();
-    const services = ['All', ...new Set(members.map(m => m.service?.trim()).filter(Boolean))].sort();
 
-    // Top 20 ranks by frequency
-    const rankCounts = members.reduce((acc, m) => {
+    const stateCounts = members.reduce((acc, m) => {
+      const s = m.state?.trim();
+      if (s) acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+    const topStates = Object.keys(stateCounts)
+      .sort((a, b) => stateCounts[b] - stateCounts[a])
+      .slice(0, 25);
+    const states = ['All', ...topStates];
+
+    return { categories, states };
+  }, [members]);
+
+  // Dynamic: Services based on selected Category
+  const availableServices = useMemo(() => {
+    let filtered = members;
+    if (categoryFilter !== 'All') {
+      filtered = members.filter(m => m.category?.trim() === categoryFilter);
+    }
+
+    const serviceCounts = filtered.reduce((acc, m) => {
+      const s = m.service?.trim();
+      if (s) acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+
+    const topServices = Object.keys(serviceCounts)
+      .sort((a, b) => serviceCounts[b] - serviceCounts[a])
+      .slice(0, 30);
+
+    return ['All', ...topServices];
+  }, [members, categoryFilter]);
+
+  // Dynamic: Ranks based on selected Service (and Category)
+  const availableRanks = useMemo(() => {
+    let filtered = members;
+
+    if (categoryFilter !== 'All') {
+      filtered = filtered.filter(m => m.category?.trim() === categoryFilter);
+    }
+    if (serviceFilter !== 'All') {
+      filtered = filtered.filter(m => m.service?.trim() === serviceFilter);
+    }
+
+    const rankCounts = filtered.reduce((acc, m) => {
       const r = m.rank?.trim();
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
+
     const topRanks = Object.keys(rankCounts)
       .sort((a, b) => rankCounts[b] - rankCounts[a])
-      .slice(0, 20);
-    const ranks = ['All', ...topRanks];
+      .slice(0, 25);
 
-    return { categories, services, ranks };
-  }, [members]);
+    return ['All', ...topRanks];
+  }, [members, categoryFilter, serviceFilter]);
 
-  // Parse registration date helper
-  const parseRegDate = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return null;
-    const trimmed = dateStr.trim();
-    const parts = trimmed.split(/\s+/);
-    if (parts.length !== 3) return null;
-    const [dayStr, monthStr, yearStr] = parts;
-    const day = parseInt(dayStr, 10);
-    const year = parseInt(yearStr, 10);
-    if (isNaN(day) || isNaN(year)) return null;
+  // Dynamic: Cities based on selected State
+  const availableCities = useMemo(() => {
+    let filtered = members;
+    if (stateFilter !== 'All') {
+      filtered = members.filter(m => m.state?.trim() === stateFilter);
+    }
 
-    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const monthIndex = monthNames.findIndex(name => 
-      name.toLowerCase().startsWith(monthStr.toLowerCase().replace('.', ''))
-    );
-    if (monthIndex === -1) return null;
+    const cityCounts = filtered.reduce((acc, m) => {
+      const c = m.city?.trim();
+      if (c) acc[c] = (acc[c] || 0) + 1;
+      return acc;
+    }, {});
 
-    return new Date(year, monthIndex, day);
-  };
+    const topCities = Object.keys(cityCounts)
+      .sort((a, b) => cityCounts[b] - cityCounts[a])
+      .slice(0, 30);
 
-  // Filtered members based on all filters
+    return ['All', ...topCities];
+  }, [members, stateFilter]);
+
+  // Reset dependent filters when parent changes
+  useEffect(() => {
+    setServiceFilter('All');
+  }, [categoryFilter]);
+
+  useEffect(() => {
+    setRankFilter('All');
+  }, [serviceFilter, categoryFilter]);
+
+  useEffect(() => {
+    setCityFilter('All');
+  }, [stateFilter]);
+
+  // Apply all filters
   const filteredMembers = useMemo(() => {
     return members.filter(member => {
-      // Category filter
       if (categoryFilter !== 'All' && member.category?.trim() !== categoryFilter) return false;
-
-      // Service filter
       if (serviceFilter !== 'All' && member.service?.trim() !== serviceFilter) return false;
-
-      // Rank filter
       if (rankFilter !== 'All' && member.rank?.trim() !== rankFilter) return false;
-
-      // // Date range filter
-      // if (dateRangeFilter !== 'All') {
-      //   const regDate = parseRegDate(member.registration_date);
-      //   if (!regDate) return false;
-
-      //   const now = new Date();
-      //   const daysAgo = (days) => {
-      //     const d = new Date(now);
-      //     d.setDate(now.getDate() - days);
-      //     return d;
-      //   };
-
-      //   switch (dateRangeFilter) {
-      //     case '7days': return regDate >= daysAgo(7);
-      //     case '30days': return regDate >= daysAgo(30);
-      //     case '90days': return regDate >= daysAgo(90);
-      //     case '6months':
-      //       const sixMonthsAgo = new Date(now);
-      //       sixMonthsAgo.setMonth(now.getMonth() - 6);
-      //       return regDate >= sixMonthsAgo;
-      //     case '1year':
-      //       const oneYearAgo = new Date(now);
-      //       oneYearAgo.setFullYear(now.getFullYear() - 1);
-      //       return regDate >= oneYearAgo;
-      //     default: return true;
-      //   }
-      // }
-
+      if (stateFilter !== 'All' && member.state?.trim() !== stateFilter) return false;
+      if (cityFilter !== 'All' && member.city?.trim() !== cityFilter) return false;
       return true;
     });
-  }, [members, categoryFilter, serviceFilter, rankFilter, dateRangeFilter]);
+  }, [members, categoryFilter, serviceFilter, rankFilter, stateFilter, cityFilter]);
 
+  // Analytics
   const analytics = useMemo(() => {
     if (loading || !filteredMembers.length) return null;
 
     const total = filteredMembers.length;
 
-    // Gender
     const genderCounts = filteredMembers.reduce((acc, m) => {
       const raw = m.gender?.trim()?.toLowerCase();
       if (raw === 'male' || raw === 'm') acc['Male'] = (acc['Male'] || 0) + 1;
@@ -131,53 +178,39 @@ export default function DashboardPage() {
       return acc;
     }, {});
 
-    // Category
     const categoryCountsRaw = filteredMembers.reduce((acc, m) => {
       const c = m.category?.trim();
       if (c) acc[c] = (acc[c] || 0) + 1;
       return acc;
     }, {});
-    const categoryCounts = Object.fromEntries(
-      Object.entries(categoryCountsRaw).sort(([,a], [,b]) => b - a)
-    );
+    const categoryCounts = Object.fromEntries(Object.entries(categoryCountsRaw).sort(([,a], [,b]) => b - a));
 
-    // Service
     const serviceCountsRaw = filteredMembers.reduce((acc, m) => {
       const s = m.service?.trim();
       if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
-    const serviceCounts = Object.fromEntries(
-      Object.entries(serviceCountsRaw).sort(([,a], [,b]) => b - a)
-    );
+    const serviceCounts = Object.fromEntries(Object.entries(serviceCountsRaw).sort(([,a], [,b]) => b - a));
 
-    // Top 15 Ranks
     const rankCountsRaw = filteredMembers.reduce((acc, m) => {
       const r = m.rank?.trim();
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
     const topRanks = Object.fromEntries(
-      Object.entries(rankCountsRaw)
-        .sort(([,a], [,b]) => b - a)
-        .slice(0, 15)
+      Object.entries(rankCountsRaw).sort(([,a], [,b]) => b - a).slice(0, 15)
     );
 
-    // State
     const stateCountsRaw = filteredMembers.reduce((acc, m) => {
       const s = m.state?.trim();
       if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
-    const stateCounts = Object.fromEntries(
-      Object.entries(stateCountsRaw).sort(([,a], [,b]) => b - a)
-    );
+    const stateCounts = Object.fromEntries(Object.entries(stateCountsRaw).sort(([,a], [,b]) => b - a));
 
-    // Average Experience
     const expSum = filteredMembers.reduce((sum, m) => sum + (parseFloat(m.total_experience) || 0), 0);
     const avgExp = total > 0 ? (expSum / total).toFixed(1) + 'Y' : '0Y';
 
-    // Registration counts based on current filtered data
     const parsedDates = filteredMembers
       .map(m => parseRegDate(m.registration_date))
       .filter(d => d !== null);
@@ -210,6 +243,14 @@ export default function DashboardPage() {
       registered3Months
     };
   }, [filteredMembers, loading]);
+
+  const clearAllFilters = () => {
+    setCategoryFilter('All');
+    setServiceFilter('All');
+    setRankFilter('All');
+    setStateFilter('All');
+    setCityFilter('All');
+  };
 
   const createChartData = (counts, colors = [
     '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF',
@@ -287,11 +328,10 @@ export default function DashboardPage() {
       <header className="top-header">
         <h1>Member Analytics Dashboard</h1>
 
-        {/* Dynamic Filters */}
         <div className="top-filters" style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
           <div>
             <label><strong>Category:</strong></label>
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px',backgroundColor:'white', color:'black' }}>
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
               {filterOptions.categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
@@ -300,8 +340,8 @@ export default function DashboardPage() {
 
           <div>
             <label><strong>Service:</strong></label>
-            <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px',backgroundColor:'white', color:'black' }}>
-              {filterOptions.services.map(srv => (
+            <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+              {availableServices.map(srv => (
                 <option key={srv} value={srv}>{srv}</option>
               ))}
             </select>
@@ -309,38 +349,58 @@ export default function DashboardPage() {
 
           <div>
             <label><strong>Rank:</strong></label>
-            <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px',backgroundColor:'white', color:'black' }}>
-              {filterOptions.ranks.map(rank => (
+            <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+              {availableRanks.map(rank => (
                 <option key={rank} value={rank}>{rank}</option>
               ))}
             </select>
           </div>
 
-          {/* <div>
-            <label><strong>Date Range:</strong></label>
-            <select value={dateRangeFilter} onChange={(e) => setDateRangeFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
-              <option value="All">All Time</option>
-              <option value="7days">Last 7 Days</option>
-              <option value="30days">Last 30 Days</option>
-              <option value="90days">Last 90 Days</option>
-              <option value="6months">Last 6 Months</option>
-              <option value="1year">Last 1 Year</option>
+          <div>
+            <label><strong>State:</strong></label>
+            <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+              {filterOptions.states.map(state => (
+                <option key={state} value={state}>{state}</option>
+              ))}
             </select>
-          </div> */}
+          </div>
+
+          <div>
+            <label><strong>City:</strong></label>
+            <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+              {availableCities.map(city => (
+                <option key={city} value={city}>{city}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={clearAllFilters}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              alignSelf: 'center'
+            }}
+          >
+            Clear All Filters
+          </button>
         </div>
       </header>
 
-      {/* Summary Cards */}
-      <div className="stats-grid">
+      {/* Summary Cards & Charts remain the same */}
+      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginTop: '30px' }}>
         <div className="card"><div className="card-icon blue"><FaUsers size={28}/></div><div className="card-label">Total Members</div><div className="card-value">{analytics.total.toLocaleString()}</div></div>
         <div className="card"><div className="card-icon red"><FaClock size={28}/></div><div className="card-label">Avg Experience</div><div className="card-value">{analytics.avgExp}</div></div>
         <div className="card"><div className="card-icon new"><FaUserPlus size={28}/></div><div className="card-label">Registered Today</div><div className="card-value">{analytics.registeredToday}</div></div>
         <div className="card"><div className="card-icon quarter"><FaCalendarAlt size={28}/></div><div className="card-label">Last 3 Months</div><div className="card-value">{analytics.registered3Months}</div></div>
       </div>
 
-      {/* Charts Section */}
       <div className="charts-grid" style={{ marginTop: '40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '30px', padding: '20px' }}>
-
         <div className="chart-card">
           <h3>Gender Wise Distribution</h3>
           <div style={{ height: '300px' }}>
@@ -368,8 +428,6 @@ export default function DashboardPage() {
             <Bar data={createChartData(analytics.rankCounts)} options={barOptions} plugins={[ChartDataLabels]} />
           </div>
         </div>
-
-        
 
         <div className="chart-card">
           <h3>Registration Trends</h3>
@@ -408,7 +466,6 @@ export default function DashboardPage() {
             />
           </div>
         </div>
-
       </div>
     </>
   );
