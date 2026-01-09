@@ -13,6 +13,8 @@ import ProjectsPage from "./pages/ProjectsPage";
 import RequirementsPage from "./pages/RequirementsPage";
 import ConfigurationPage from "./pages/ConfigurationPage";
 import NewsLetterPage from "./pages/NewsLetterPage";
+import PartnerAgentList from "./pages/PartnerAgentList";
+
 
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
@@ -94,6 +96,10 @@ function Layout() {
           <Route
             path="/newsletter"
             element={<NewsLetterPage/>}
+          />
+          <Route
+            path="/partneragent"
+            element={<PartnerAgentList/>}
           />
           {/* Optional: 404 page */}
           <Route path="*" element={<div>Page not found</div>} />

@@ -77,7 +77,7 @@ export default function Sidebar() {
               Member List
             </NavLink>
             <NavLink
-              to="/memberlist/partners"
+              to="/partneragent"
               className={({ isActive }) => (isActive ? "active" : "")}
             >
               Partner Agent List
