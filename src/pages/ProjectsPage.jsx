@@ -401,11 +401,12 @@ export default function ProjectsPage() {
                     }}
                     style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #ccc" }}
                   >
+                    <option value="all">All</option>
                     <option value={100}>100</option>
                     <option value={500}>500</option>
                     <option value={1000}>1000</option>
                     <option value={5000}>5000</option>
-                    <option value="all">All</option>
+                    
                   </select>
                 </div>
 

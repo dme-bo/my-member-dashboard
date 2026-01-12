@@ -129,11 +129,20 @@ export default function Sidebar() {
         </NavLink>
 
         <NavLink
+          to="/newsletter"
+          className={({ isActive }) => (isActive ? "active" : "")}
+        >
+          News Letter
+        </NavLink>
+
+        <NavLink
           to="/configuration"
           className={({ isActive }) => (isActive ? "active" : "")}
         >
           Configuration
         </NavLink>
+
+        
       </nav>
     </aside>
   );

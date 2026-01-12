@@ -8,6 +8,7 @@ import {
   FaSearch,
   FaEye,
   FaProjectDiagram,
+  FaTrashAlt,
 } from "react-icons/fa";
 import {
   collection,
@@ -17,22 +18,20 @@ import {
   addDoc,
   serverTimestamp,
   where,
+  deleteDoc,
+  doc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function RequirementsPage() {
-  const [requirementsData, setRequirementsData] = useState([]); // Combined jobs + projects
+  const [requirementsData, setRequirementsData] = useState([]);
   const [members, setMembers] = useState([]);
   const [filteredMembers, setFilteredMembers] = useState([]);
   const [selectedReq, setSelectedReq] = useState(null);
   const [allocationTitleFilter, setAllocationTitleFilter] = useState("");
   const [allocationCompanyFilter, setAllocationCompanyFilter] = useState("");
-
-  // Global allocations + live counts
   const [allAllocations, setAllAllocations] = useState([]);
   const [allocatedCounts, setAllocatedCounts] = useState({});
-
-  // Active filter for header buttons
   const [activeFilter, setActiveFilter] = useState("All");
 
   // Modals
@@ -43,14 +42,11 @@ export default function RequirementsPage() {
   const [showMemberDetailModal, setShowMemberDetailModal] = useState(false);
   const [showAllocatedMembersModal, setShowAllocatedMembersModal] = useState(false);
   const [showAllAllocationsModal, setShowAllAllocationsModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [allocationToDelete, setAllocationToDelete] = useState(null);
 
-  // Selected members for allocation
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
-
-  // Selected member for detail view
   const [selectedMember, setSelectedMember] = useState(null);
-
-  // Allocated members for current req
   const [allocatedMembers, setAllocatedMembers] = useState([]);
 
   // Member filters
@@ -60,23 +56,20 @@ export default function RequirementsPage() {
   const [cityFilter, setCityFilter] = useState("");
   const [organizationFilter, setOrganizationFilter] = useState("");
 
-  // Pagination for Allocate Modal
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSizeAllocate, setPageSizeAllocate] = useState(100); // New: dynamic rows per page
+  const [pageSizeAllocate, setPageSizeAllocate] = useState(100);
 
   // Toast
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  /* FETCH BOTH JOBS AND PROJECTS */
+  /* FETCH REQUIREMENTS (Jobs + Projects) */
   useEffect(() => {
     const fetchRequirements = async () => {
       try {
         setLoading(true);
-
-        // Fetch Jobs from jobsmaster
         const jobsQuery = query(collection(db, "jobsmaster"));
         const jobsSnapshot = await getDocs(jobsQuery);
         const jobs = jobsSnapshot.docs.map((doc) => ({
@@ -86,7 +79,6 @@ export default function RequirementsPage() {
           ...doc.data(),
         }));
 
-        // Fetch Projects from projectsmaster
         const projectsQuery = query(collection(db, "projectsmaster"));
         const projectsSnapshot = await getDocs(projectsQuery);
         const projects = projectsSnapshot.docs.map((doc) => ({
@@ -97,10 +89,8 @@ export default function RequirementsPage() {
         }));
 
         const combined = [...jobs, ...projects];
-
         const transformed = combined.map((item) => {
           let title, jd, salary, location, company, logo, postedOn, status, benefits;
-
           if (item.type === "job") {
             const min = item.job_salaryrange_minimum ?? 0;
             const max = item.job_salaryrange_maximum ?? 0;
@@ -112,7 +102,6 @@ export default function RequirementsPage() {
             } else if (min > 0) {
               salary = `₹${min.toLocaleString()}/month`;
             }
-
             title = item.job_title ?? "Untitled Job";
             jd = item.job_roleandresponsibilities ?? "No description available.";
             location = item.job_city ?? item.job_location ?? "Location not specified";
@@ -132,7 +121,6 @@ export default function RequirementsPage() {
             benefits = item.project_benefit ?? null;
             status = item.project_status === "Active" ? "active" : "completed";
           }
-
           return {
             id: item.id,
             collection: item.collection,
@@ -166,7 +154,6 @@ export default function RequirementsPage() {
         setLoading(false);
       }
     };
-
     fetchRequirements();
   }, []);
 
@@ -178,7 +165,6 @@ export default function RequirementsPage() {
         ...doc.data(),
       }));
       setAllAllocations(allocs);
-
       const counts = {};
       allocs.forEach((alloc) => {
         counts[alloc.jobId] = (counts[alloc.jobId] || 0) + 1;
@@ -244,14 +230,22 @@ export default function RequirementsPage() {
   }, []);
 
   /* UNIQUE FILTER VALUES */
-  const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
-  const uniqueCities = useMemo(() => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(), [members]);
-  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(), [members]);
+  const uniqueStates = useMemo(
+    () => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(),
+    [members]
+  );
+  const uniqueCities = useMemo(
+    () => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(),
+    [members]
+  );
+  const uniqueOrganizations = useMemo(
+    () => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(),
+    [members]
+  );
 
   /* MEMBER FILTERING */
   useEffect(() => {
     let filtered = members;
-
     if (memberSearchTerm.trim()) {
       const term = memberSearchTerm.toLowerCase();
       filtered = filtered.filter(
@@ -271,15 +265,13 @@ export default function RequirementsPage() {
     setCurrentPage(1);
   }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, organizationFilter, members]);
 
-  /* FILTERED REQUIREMENTS BASED ON HEADER */
+  /* FILTERED REQUIREMENTS */
   const filteredRequirements = useMemo(() => {
     let list = requirementsData;
-
     if (activeFilter === "Open") list = list.filter((r) => r.status === "active");
     if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
     if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
     if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
-
     return list;
   }, [requirementsData, activeFilter]);
 
@@ -299,7 +291,7 @@ export default function RequirementsPage() {
     }
   };
 
-  /* PAGINATION FOR ALLOCATE MODAL (updated with dynamic pageSize) */
+  /* PAGINATION */
   const paginatedMembers = useMemo(() => {
     const start = (currentPage - 1) * pageSizeAllocate;
     return filteredMembers.slice(start, start + pageSizeAllocate);
@@ -350,7 +342,7 @@ export default function RequirementsPage() {
         <div className="header-content">
           <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
-            {["All", "Open", "Closed", "TCS", "Recruitment", "Projects"].map((filter) => (
+            {["All", "Open", "Closed","TCS", "Projects", "Recruitment"].map((filter) => (
               <button
                 key={filter}
                 className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -403,15 +395,14 @@ export default function RequirementsPage() {
         </div>
       </div>
 
-      {/* LIST SECTION */}
+      {/* REQUIREMENTS LIST */}
       <div className="requirements-section">
         <h2 className="section-title">
           {activeFilter === "All" && "All Requirements"}
           {activeFilter === "Open" && "Open Requirements"}
           {activeFilter === "Closed" && "Closed Requirements"}
-          {activeFilter === "Projects" && "Projects Requirements"}
-          {activeFilter === "Recruitment" && "Recruitment Requirements"}
-          {activeFilter === "TCS" && "TCS Requirements"}
+          {activeFilter === "Projects" && "Projects"}
+          {activeFilter === "Recruitment" && "Recruitment"}
         </h2>
 
         {filteredRequirements.length === 0 ? (
@@ -470,7 +461,7 @@ export default function RequirementsPage() {
         )}
       </div>
 
-      {/* JOB / PROJECT DETAILS MODAL */}
+      {/* JOB/PROJECT DETAILS MODAL */}
       {showJobModal && selectedReq && (
         <div className="modal-overlay" onClick={() => setShowJobModal(false)}>
           <div className="modal-contents" onClick={(e) => e.stopPropagation()}>
@@ -536,95 +527,50 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* ALLOCATE MEMBERS MODAL */}
+      {/* ALLOCATE MODAL */}
       {showAllocateModal && selectedReq && (
         <div className="modal-overlay" onClick={() => setShowAllocateModal(false)}>
-          <div
-            className="modal-contents allocate-modal"
-            style={{ maxWidth: "900px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="modal-contents allocate-modal" style={{ maxWidth: "900px" }} onClick={(e) => e.stopPropagation()}>
             <h2>Allocate Members to: <strong>{selectedReq.title}</strong></h2>
             <p>
               <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
             </p>
 
+            {/* Filters */}
             <div style={{ margin: "24px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
               <div style={{ position: "relative", maxWidth: "500px" }}>
-                <FaSearch
-                  style={{
-                    position: "absolute",
-                    left: "16px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#999",
-                    fontSize: "18px",
-                  }}
-                />
+                <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#999", fontSize: "18px" }} />
                 <input
                   type="text"
                   placeholder="Search by name, email, phone, role..."
                   value={memberSearchTerm}
                   onChange={(e) => setMemberSearchTerm(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "14px 16px 14px 50px",
-                    borderRadius: "12px",
-                    border: "2px solid #e2e8f0",
-                    fontSize: "16px",
-                    backgroundColor: "white",
-                    color:"black"
-                  }}
+                  style={{ width: "100%", padding: "14px 16px 14px 50px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px" }}
                 />
               </div>
-
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-                <select
-                  value={genderFilter}
-                  onChange={(e) => setGenderFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor: "white", color: "black" }}
-                >
+                <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
                   <option value="">All Genders</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
                 </select>
-
-                <select
-                  value={stateFilter}
-                  onChange={(e) => setStateFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor: "white", color: "black" }}
-                >
+                <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
                   <option value="">All States</option>
-                  {uniqueStates.map((state) => (
-                    <option key={state} value={state}>{state}</option>
-                  ))}
+                  {uniqueStates.map((state) => <option key={state} value={state}>{state}</option>)}
                 </select>
-
-                <select
-                  value={cityFilter}
-                  onChange={(e) => setCityFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor:"white",color:"black" }}
-                >
+                <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
                   <option value="">All Cities</option>
-                  {uniqueCities.map((city) => (
-                    <option key={city} value={city}>{city}</option>
-                  ))}
+                  {uniqueCities.map((city) => <option key={city} value={city}>{city}</option>)}
                 </select>
-
-                <select
-                  value={organizationFilter}
-                  onChange={(e) => setOrganizationFilter(e.target.value)}
-                  style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px",backgroundColor:"white",color:"black" }}
-                >
+                <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
                   <option value="">All Categories</option>
-                  {uniqueOrganizations.map((org) => (
-                    <option key={org} value={org}>{org}</option>
-                  ))}
+                  {uniqueOrganizations.map((org) => <option key={org} value={org}>{org}</option>)}
                 </select>
               </div>
             </div>
 
+            {/* Members List */}
             <div className="members-list" style={{ maxHeight: "420px", overflowY: "auto" }}>
               {paginatedMembers.length === 0 ? (
                 <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
@@ -643,10 +589,7 @@ export default function RequirementsPage() {
                       cursor: "pointer",
                       borderRadius: "8px",
                       margin: "4px 0",
-                      transition: "background 0.2s",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f9ff")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
                       <input
@@ -662,8 +605,7 @@ export default function RequirementsPage() {
                         style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1e40af" }}
                       />
                       <div>
-                        <strong style={{ fontSize: "16px" }}>{member.name}</strong>
-                        <br />
+                        <strong style={{ fontSize: "16px" }}>{member.name}</strong><br />
                         <small style={{ color: "#666" }}>
                           Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
                         </small>
@@ -685,9 +627,6 @@ export default function RequirementsPage() {
                         cursor: "pointer",
                         fontSize: "14px",
                         fontWeight: "600",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
                       }}
                     >
                       <FaEye /> View Details
@@ -697,18 +636,9 @@ export default function RequirementsPage() {
               )}
             </div>
 
-            {/* PAGINATION WITH ROWS PER PAGE SELECTOR */}
+            {/* Pagination */}
             {totalPages > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  margin: "20px 0",
-                  flexWrap: "wrap",
-                  gap: "16px",
-                }}
-              >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "20px 0", flexWrap: "wrap", gap: "16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <span style={{ fontSize: "14px", color: "#666" }}>Rows per page:</span>
                   <select
@@ -717,51 +647,19 @@ export default function RequirementsPage() {
                       setPageSizeAllocate(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      border: "2px solid #e2e8f0",
-                      backgroundColor: "white",
-                      color: "black",
-                      fontSize: "14px",
-                    }}
+                    style={{ padding: "8px 12px", borderRadius: "8px", border: "2px solid #e2e8f0" }}
                   >
                     {[100, 500, 1000, 5000].map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
+                      <option key={size} value={size}>{size}</option>
                     ))}
                   </select>
                 </div>
-
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => p - 1)}
-                    style={{
-                      padding: "8px 16px",
-                      borderRadius: "8px",
-                      background: currentPage === 1 ? "#e5e7eb" : "#1e40af",
-                      color: "white",
-                      border: "none",
-                    }}
-                  >
+                  <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === 1 ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
                     Previous
                   </button>
-                  <span style={{ padding: "8px", fontSize: "14px" }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((p) => p + 1)}
-                    style={{
-                      padding: "8px 16px",
-                      borderRadius: "8px",
-                      background: currentPage === totalPages ? "#e5e7eb" : "#1e40af",
-                      color: "white",
-                      border: "none",
-                    }}
-                  >
+                  <span style={{ padding: "8px", fontSize: "14px" }}>Page {currentPage} of {totalPages}</span>
+                  <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === totalPages ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
                     Next
                   </button>
                 </div>
@@ -774,39 +672,22 @@ export default function RequirementsPage() {
                 disabled={selectedMemberIds.length === 0}
                 onClick={async () => {
                   try {
-                    // Get already allocated user IDs for this requirement
-                    const alreadyAllocatedUserIds = new Set(
-                      allocatedMembers.map((alloc) => alloc.userId)
-                    );
+                    const alreadyAllocatedUserIds = new Set(allocatedMembers.map(a => a.userId));
+                    const newMembers = selectedMemberIds.filter(id => !alreadyAllocatedUserIds.has(id));
+                    const already = selectedMemberIds.filter(id => alreadyAllocatedUserIds.has(id));
 
-                    // Separate new vs already allocated
-                    const newMembersToAllocate = selectedMemberIds.filter(
-                      (userId) => !alreadyAllocatedUserIds.has(userId)
-                    );
-
-                    const alreadyTried = selectedMemberIds.filter((userId) =>
-                      alreadyAllocatedUserIds.has(userId)
-                    );
-
-                    // Show toast for duplicates
-                    if (alreadyTried.length > 0) {
-                      const names = alreadyTried
-                        .map((id) => members.find((m) => m.id === id)?.name || "Unknown")
-                        .join(", ");
-                      showToast(
-                        `${alreadyTried.length} member(s) already allocated: ${names}`,
-                        "error"
-                      );
+                    if (already.length > 0) {
+                      const names = already.map(id => members.find(m => m.id === id)?.name || "Unknown").join(", ");
+                      showToast(`${already.length} member(s) already allocated: ${names}`, "error");
                     }
 
-                    if (newMembersToAllocate.length === 0) {
+                    if (newMembers.length === 0) {
                       setSelectedMemberIds([]);
                       return;
                     }
 
-                    // Allocate only new members
-                    const promises = newMembersToAllocate.map((userId) => {
-                      const member = members.find((m) => m.id === userId);
+                    const promises = newMembers.map(userId => {
+                      const member = members.find(m => m.id === userId);
                       return addDoc(collection(db, "allocations"), {
                         jobId: selectedReq.id,
                         userId,
@@ -817,12 +698,7 @@ export default function RequirementsPage() {
                     });
 
                     await Promise.all(promises);
-
-                    showToast(
-                      `Successfully allocated ${newMembersToAllocate.length} new member(s)!`,
-                      "success"
-                    );
-
+                    showToast(`Successfully allocated ${newMembers.length} new member(s)!`, "success");
                     setSelectedMemberIds([]);
                     setShowAllocateModal(false);
                     setShowJobModal(true);
@@ -834,14 +710,7 @@ export default function RequirementsPage() {
               >
                 Save Allocation ({selectedMemberIds.length})
               </button>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  setShowAllocateModal(false);
-                  setShowJobModal(true);
-                  setSelectedMemberIds([]);
-                }}
-              >
+              <button className="btn secondary" onClick={() => { setShowAllocateModal(false); setShowJobModal(true); setSelectedMemberIds([]); }}>
                 Cancel
               </button>
             </div>
@@ -849,31 +718,24 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* ALLOCATED MEMBERS PER JOB MODAL */}
+      {/* ALLOCATED MEMBERS MODAL (per requirement) */}
       {showAllocatedMembersModal && selectedReq && (
         <div className="modal-overlay" onClick={() => setShowAllocatedMembersModal(false)}>
           <div className="modal-contents allocate-modal" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
-            <h2>
-              Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})
-            </h2>
-            <p>
-              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
-            </p>
+            <h2>Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})</h2>
+            <p><strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}</p>
 
             <div className="members-list" style={{ maxHeight: "500px", overflowY: "auto", marginTop: "24px" }}>
               {allocatedMembers.length === 0 ? (
-                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
-                  No members allocated yet.
-                </p>
+                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>No members allocated yet.</p>
               ) : (
                 allocatedMembers.map((alloc) => {
-                  const member =
-                    members.find((m) => m.id === alloc.userId) || {
-                      name: alloc.name || "Unknown Member",
-                      email: "—",
-                      phone: alloc.phone,
-                      designation: "—",
-                    };
+                  const member = members.find(m => m.id === alloc.userId) || {
+                    name: alloc.name || "Unknown Member",
+                    email: "—",
+                    phone: alloc.phone,
+                    designation: "—",
+                  };
                   return (
                     <div
                       key={alloc.id}
@@ -889,33 +751,51 @@ export default function RequirementsPage() {
                       }}
                     >
                       <div>
-                        <strong style={{ fontSize: "16px" }}>{member.name}</strong>
-                        <br />
+                        <strong style={{ fontSize: "16px" }}>{member.name}</strong><br />
                         <small style={{ color: "#666" }}>
                           Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
                         </small>
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedMember(member);
-                          setShowMemberDetailModal(true);
-                        }}
-                        style={{
-                          background: "#1e40af",
-                          color: "white",
-                          border: "none",
-                          padding: "10px 18px",
-                          borderRadius: "8px",
-                          cursor: "pointer",
-                          fontSize: "14px",
-                          fontWeight: "600",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <FaEye /> View Details
-                      </button>
+                      <div style={{ display: "flex", gap: "12px" }}>
+                        <button
+                          onClick={() => {
+                            setSelectedMember(member);
+                            setShowMemberDetailModal(true);
+                          }}
+                          style={{
+                            background: "#1e40af",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 18px",
+                            borderRadius: "8px",
+                            fontSize: "14px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          <FaEye /> View
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAllocationToDelete({
+                              allocationId: alloc.id,
+                              memberName: member.name,
+                              requirementTitle: selectedReq.title,
+                            });
+                            setShowDeleteConfirmModal(true);
+                          }}
+                          style={{
+                            background: "#fee2e2",
+                            color: "#dc2626",
+                            border: "1px solid #fecaca",
+                            padding: "10px 14px",
+                            borderRadius: "8px",
+                            fontSize: "14px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          <FaTrashAlt /> Remove
+                        </button>
+                      </div>
                     </div>
                   );
                 })
@@ -923,13 +803,7 @@ export default function RequirementsPage() {
             </div>
 
             <div className="modal-actions" style={{ marginTop: "32px" }}>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  setShowAllocatedMembersModal(false);
-                  setShowJobModal(true);
-                }}
-              >
+              <button className="btn secondary" onClick={() => setShowAllocatedMembersModal(false)}>
                 Close
               </button>
             </div>
@@ -937,180 +811,195 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* GLOBAL ALL ALLOCATIONS MODAL WITH FILTERS */}
+      {/* DELETE CONFIRMATION MODAL */}
+      {showDeleteConfirmModal && allocationToDelete && (
+        <div className="modal-overlay" onClick={() => setShowDeleteConfirmModal(false)}>
+          <div
+            className="modal-contents"
+            style={{ maxWidth: "420px", textAlign: "center" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ color: "#dc2626", marginBottom: "16px" }}>Remove Allocation?</h2>
+            <p style={{ marginBottom: "24px", fontSize: "15px", color: "#374151" }}>
+              Are you sure you want to remove <strong>{allocationToDelete.memberName}</strong><br />
+              from <strong>{allocationToDelete.requirementTitle}</strong>?
+            </p>
+            <div className="modal-actions" style={{ justifyContent: "center", gap: "16px" }}>
+              <button
+                className="btn secondary"
+                onClick={() => {
+                  setShowDeleteConfirmModal(false);
+                  setAllocationToDelete(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn danger"
+                onClick={async () => {
+                  try {
+                    await deleteDoc(doc(db, "allocations", allocationToDelete.allocationId));
+                    showToast(
+                      `${allocationToDelete.memberName} removed from ${allocationToDelete.requirementTitle}`,
+                      "success"
+                    );
+                  } catch (err) {
+                    console.error("Delete allocation error:", err);
+                    showToast("Failed to remove allocation", "error");
+                  } finally {
+                    setShowDeleteConfirmModal(false);
+                    setAllocationToDelete(null);
+                  }
+                }}
+                style={{ backgroundColor: "#dc2626", color: "white", border: "none" }}
+              >
+                Yes, Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL ALL ALLOCATIONS MODAL */}
       {showAllAllocationsModal && (
         <div className="modal-overlay" onClick={() => setShowAllAllocationsModal(false)}>
           <div className="modal-contents stats-modal" style={{ maxWidth: "1100px" }} onClick={(e) => e.stopPropagation()}>
             <h2>All Allocated Members ({stats.totalAllocated})</h2>
 
-            {/* Search & Filter Bar */}
+            {/* Filters */}
             <div style={{ margin: "20px 0", display: "flex", gap: "16px", flexWrap: "wrap" }}>
               <div style={{ position: "relative", flex: "1", minWidth: "300px" }}>
-                <FaSearch
-                  style={{
-                    position: "absolute",
-                    left: "16px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#999",
-                    fontSize: "18px",
-                  }}
-                />
+                <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#999", fontSize: "18px" }} />
                 <input
                   type="text"
                   placeholder="Search by Job/Project Title..."
-                  value={allocationTitleFilter || ""}
+                  value={allocationTitleFilter}
                   onChange={(e) => setAllocationTitleFilter(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "14px 16px 14px 50px",
-                    borderRadius: "12px",
-                    border: "2px solid #e2e8f0",
-                    fontSize: "16px",
-                    backgroundColor: "white",
-                    color: "black",
-                  }}
+                  style={{ width: "100%", padding: "14px 16px 14px 50px", borderRadius: "12px", border: "2px solid #e2e8f0" }}
                 />
               </div>
-
               <div style={{ position: "relative", flex: "1", minWidth: "300px" }}>
-                <FaSearch
-                  style={{
-                    position: "absolute",
-                    left: "16px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#999",
-                    fontSize: "18px",
-                  }}
-                />
+                <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#999", fontSize: "18px" }} />
                 <input
                   type="text"
-                  placeholder="Search by Company/Organization..."
-                  value={allocationCompanyFilter || ""}
+                  placeholder="Search by Company..."
+                  value={allocationCompanyFilter}
                   onChange={(e) => setAllocationCompanyFilter(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "14px 16px 14px 50px",
-                    borderRadius: "12px",
-                    border: "2px solid #e2e8f0",
-                    fontSize: "16px",
-                    backgroundColor: "white",
-                    color: "black",
-                  }}
+                  style={{ width: "100%", padding: "14px 16px 14px 50px", borderRadius: "12px", border: "2px solid #e2e8f0" }}
                 />
               </div>
-
               {(allocationTitleFilter || allocationCompanyFilter) && (
                 <button
                   onClick={() => {
                     setAllocationTitleFilter("");
                     setAllocationCompanyFilter("");
                   }}
-                  style={{
-                    padding: "12px 20px",
-                    backgroundColor: "#ef4444",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "12px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                  }}
+                  style={{ padding: "12px 20px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "12px" }}
                 >
-                  Clear Filters
+                  Clear
                 </button>
               )}
             </div>
 
-            {/* Filtered Allocations */}
+            {/* Table */}
             {(() => {
-              let filteredAllocations = allAllocations;
-
+              let filtered = allAllocations;
               if (allocationTitleFilter) {
                 const term = allocationTitleFilter.toLowerCase();
-                filteredAllocations = filteredAllocations.filter((alloc) => {
-                  const job = requirementsData.find((j) => j.id === alloc.jobId);
+                filtered = filtered.filter(a => {
+                  const job = requirementsData.find(j => j.id === a.jobId);
                   return job?.title?.toLowerCase().includes(term);
                 });
               }
-
               if (allocationCompanyFilter) {
                 const term = allocationCompanyFilter.toLowerCase();
-                filteredAllocations = filteredAllocations.filter((alloc) => {
-                  const job = requirementsData.find((j) => j.id === alloc.jobId);
+                filtered = filtered.filter(a => {
+                  const job = requirementsData.find(j => j.id === a.jobId);
                   return job?.company?.toLowerCase().includes(term);
                 });
               }
 
               return (
                 <div style={{ maxHeight: "600px", overflowY: "auto", marginTop: "16px" }}>
-                  {filteredAllocations.length === 0 ? (
+                  {filtered.length === 0 ? (
                     <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
-                      {allAllocations.length === 0
-                        ? "No allocations yet."
-                        : "No allocations match the current filters."}
+                      {allAllocations.length === 0 ? "No allocations yet." : "No matching allocations."}
                     </p>
                   ) : (
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
-                        <tr style={{ backgroundColor: "#f8fafc", textAlign: "left" }}>
-                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Member Name</th>
-                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Job / Project Title</th>
-                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Company</th>
-                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Type</th>
-                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Phone</th>
-                          <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Actions</th>
+                        <tr style={{ backgroundColor: "#f8fafc" }}>
+                          <th style={{ padding: "12px", textAlign: "left" }}>Member</th>
+                          <th style={{ padding: "12px", textAlign: "left" }}>Requirement</th>
+                          <th style={{ padding: "12px", textAlign: "left" }}>Company</th>
+                          <th style={{ padding: "12px", textAlign: "left" }}>Type</th>
+                          <th style={{ padding: "12px", textAlign: "left" }}>Phone</th>
+                          <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredAllocations.map((alloc) => {
-                          const job = requirementsData.find((j) => j.id === alloc.jobId);
-                          const member =
-                            members.find((m) => m.id === alloc.userId) || {
-                              name: alloc.name || "Unknown Member",
-                              phone: alloc.phone || "—",
-                            };
-
+                        {filtered.map((alloc) => {
+                          const job = requirementsData.find(j => j.id === alloc.jobId);
+                          const member = members.find(m => m.id === alloc.userId) || {
+                            name: alloc.name || "Unknown",
+                            phone: alloc.phone || "—",
+                          };
                           return (
                             <tr key={alloc.id} style={{ borderBottom: "1px solid #eee" }}>
-                              <td style={{ padding: "12px" }}>
-                                <strong>{member.name}</strong>
-                              </td>
-                              <td style={{ padding: "12px" }}>{job?.title || "Unknown Requirement"}</td>
+                              <td style={{ padding: "12px" }}><strong>{member.name}</strong></td>
+                              <td style={{ padding: "12px" }}>{job?.title || "—"}</td>
                               <td style={{ padding: "12px" }}>{job?.company || "—"}</td>
                               <td style={{ padding: "12px" }}>
-                                <span
-                                  style={{
-                                    background: job?.type === "project" ? "#9333ea" : "#2563eb",
-                                    color: "white",
-                                    padding: "4px 8px",
-                                    borderRadius: "6px",
-                                    fontSize: "12px",
-                                    fontWeight: "600",
-                                  }}
-                                >
+                                <span style={{
+                                  background: job?.type === "project" ? "#9333ea" : "#2563eb",
+                                  color: "white",
+                                  padding: "4px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "12px",
+                                }}>
                                   {job?.type === "project" ? "Project" : "Job"}
                                 </span>
                               </td>
                               <td style={{ padding: "12px" }}>{member.phone}</td>
                               <td style={{ padding: "12px" }}>
-                                <button
-                                  onClick={() => {
-                                    setSelectedMember(member);
-                                    setShowMemberDetailModal(true);
-                                  }}
-                                  style={{
-                                    background: "#1e40af",
-                                    color: "white",
-                                    border: "none",
-                                    padding: "6px 12px",
-                                    borderRadius: "6px",
-                                    cursor: "pointer",
-                                    fontSize: "13px",
-                                  }}
-                                >
-                                  <FaEye /> View Details
-                                </button>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedMember(member);
+                                      setShowMemberDetailModal(true);
+                                    }}
+                                    style={{
+                                      background: "#1e40af",
+                                      color: "white",
+                                      border: "none",
+                                      padding: "6px 12px",
+                                      borderRadius: "6px",
+                                      fontSize: "13px",
+                                    }}
+                                  >
+                                    <FaEye /> View
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setAllocationToDelete({
+                                        allocationId: alloc.id,
+                                        memberName: member.name,
+                                        requirementTitle: job?.title || "Unknown Requirement",
+                                      });
+                                      setShowDeleteConfirmModal(true);
+                                    }}
+                                    style={{
+                                      background: "#fee2e2",
+                                      color: "#dc2626",
+                                      border: "1px solid #fecaca",
+                                      padding: "6px 10px",
+                                      borderRadius: "6px",
+                                      fontSize: "13px",
+                                    }}
+                                  >
+                                    <FaTrashAlt /> Remove
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1131,21 +1020,54 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* STATS MODAL */}
+      {/* MEMBER DETAIL MODAL */}
+      {showMemberDetailModal && selectedMember && (
+        <div className="modal-overlay" onClick={() => setShowMemberDetailModal(false)}>
+          <div className="modal-contents" style={{ maxWidth: "900px" }} onClick={(e) => e.stopPropagation()}>
+            <h2>Member Details: <strong>{selectedMember.name}</strong></h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px", marginTop: "24px" }}>
+              <div><strong>Name:</strong> {selectedMember.name}</div>
+              <div><strong>Email:</strong> {selectedMember.email || "—"}</div>
+              <div><strong>Phone:</strong> {selectedMember.phone || "—"}</div>
+              <div><strong>Designation:</strong> {selectedMember.designation || "—"}</div>
+              <div><strong>Gender:</strong> {selectedMember.gender || "—"}</div>
+              <div><strong>City:</strong> {selectedMember.city || "—"}</div>
+              <div><strong>State:</strong> {selectedMember.state || "—"}</div>
+              <div><strong>Category:</strong> {selectedMember.category || "—"}</div>
+              {selectedMember.resume_fileurl && (
+                <div>
+                  <strong>Resume:</strong>{" "}
+                  <a href={selectedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#1e40af" }}>
+                    View Resume
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions" style={{ marginTop: "40px" }}>
+              <button className="btn secondary" onClick={() => setShowMemberDetailModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STATS DETAIL MODAL */}
       {showStatsModal && (
         <div className="modal-overlay" onClick={() => setShowStatsModal(false)}>
-          <div className="modal-contents stats-modal" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-contents" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
             <h2>
               {statsModalType === "total" && "All Requirements"}
               {statsModalType === "active" && "Open Requirements"}
-              {statsModalType === "completed" && "Completed Requirements"}
+              {statsModalType === "completed" && "Closed Requirements"}
             </h2>
-
             <div style={{ maxHeight: "500px", overflowY: "auto", marginTop: "16px" }}>
               {(() => {
-                const list = statsModalType === "total" ? requirementsData :
-                             statsModalType === "active" ? requirementsData.filter(r => r.status === "active") :
-                             requirementsData.filter(r => r.status === "completed");
+                const list =
+                  statsModalType === "total" ? requirementsData :
+                  statsModalType === "active" ? requirementsData.filter(r => r.status === "active") :
+                  requirementsData.filter(r => r.status === "completed");
+
                 return list.length === 0 ? (
                   <p>No requirements found.</p>
                 ) : (
@@ -1159,61 +1081,8 @@ export default function RequirementsPage() {
                 );
               })()}
             </div>
-
             <div className="modal-actions">
               <button className="btn secondary" onClick={() => setShowStatsModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MEMBER DETAIL MODAL */}
-      {showMemberDetailModal && selectedMember && (
-        <div className="modal-overlay" onClick={() => setShowMemberDetailModal(false)}>
-          <div className="modal-contents" style={{ maxWidth: "900px" }} onClick={(e) => e.stopPropagation()}>
-            <h2>
-              Member Details: <strong>{selectedMember.name || `${selectedMember.full_name} ${selectedMember.last_name}`}</strong>
-            </h2>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-                gap: "16px",
-                marginTop: "24px",
-                fontSize: "15px",
-              }}
-            >
-              <div><strong>Name:</strong> {selectedMember.name || `${selectedMember.first_name} ${selectedMember.last_name}`}</div>
-              <div><strong>Email:</strong> {selectedMember.email || "—"}</div>
-              <div><strong>Phone:</strong> {selectedMember.phone || selectedMember.phone_number || "—"}</div>
-              <div><strong>Designation:</strong> {selectedMember.designation || "—"}</div>
-              <div><strong>Gender:</strong> {selectedMember.gender || "—"}</div>
-              <div><strong>City:</strong> {selectedMember.city || "—"}</div>
-              <div><strong>State:</strong> {selectedMember.state || "—"}</div>
-              <div><strong>Country:</strong> {selectedMember.country || "—"}</div>
-              <div><strong>Location:</strong> {selectedMember.location || "—"}</div>
-              <div><strong>Category:</strong> {selectedMember.category || "—"}</div>
-              <div><strong>Graduation Course:</strong> {selectedMember.graduation_course || "—"}</div>
-              <div><strong>Graduation %:</strong> {selectedMember.graduation_percentage || "—"}</div>
-              <div><strong>Post Graduation Course:</strong> {selectedMember.postgraduation_course || "—"}</div>
-              <div><strong>Post Graduation %:</strong> {selectedMember.postgraduation_percentage || "—"}</div>
-              <div><strong>11th %:</strong> {selectedMember.percentage11th || "—"}</div>
-              <div><strong>12th %:</strong> {selectedMember.percentage12th || "—"}</div>
-              {selectedMember.resume_fileurl && (
-                <div>
-                  <strong>Resume:</strong>{" "}
-                  <a href={selectedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#1e40af", textDecoration: "underline" }}>
-                    Open Resume PDF
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-actions" style={{ marginTop: "40px" }}>
-              <button className="btn secondary" onClick={() => setShowMemberDetailModal(false)}>
                 Close
               </button>
             </div>
