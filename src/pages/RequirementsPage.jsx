@@ -268,10 +268,11 @@ export default function RequirementsPage() {
   /* FILTERED REQUIREMENTS */
   const filteredRequirements = useMemo(() => {
     let list = requirementsData;
-    if (activeFilter === "Open") list = list.filter((r) => r.status === "active");
-    if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
-    if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
-    if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
+    if (activeFilter === "All") list = list;
+    else if (activeFilter === "Open") list = list.filter((r) => r.status === "active");
+    else if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
+    else if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
+    else if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
     return list;
   }, [requirementsData, activeFilter]);
 
@@ -342,7 +343,7 @@ export default function RequirementsPage() {
         <div className="header-content">
           <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
-            {["All", "Open", "Closed","TCS", "Projects", "Recruitment"].map((filter) => (
+            {["All", "Open", "Closed", "Projects", "Recruitment"].map((filter) => (
               <button
                 key={filter}
                 className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -419,6 +420,7 @@ export default function RequirementsPage() {
                     setSelectedReq(req);
                     setShowJobModal(true);
                   }}
+                  style={req.status === "completed" ? { opacity: 0.82, cursor: "default" } : {}}
                 >
                   {req.logo && (
                     <img
@@ -484,6 +486,7 @@ export default function RequirementsPage() {
                 {selectedReq.status === "active" ? "Open" : "Closed"}
               </span>
             </p>
+
             <div className="jd-section">
               <strong>{selectedReq.type === "project" ? "Project Description" : "Job Description"}:</strong>
               <div
@@ -495,30 +498,39 @@ export default function RequirementsPage() {
                 }}
               />
             </div>
+
             <div className="modal-actions">
-              <button
-                className="btn primary"
-                onClick={() => {
-                  setShowAllocateModal(true);
-                  setShowJobModal(false);
-                  setMemberSearchTerm("");
-                  setGenderFilter("");
-                  setStateFilter("");
-                  setCityFilter("");
-                  setOrganizationFilter("");
-                  setSelectedMemberIds([]);
-                  setCurrentPage(1);
-                }}
-              >
-                Allocate Members
-              </button>
+              {selectedReq.status === "active" && (
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setShowAllocateModal(true);
+                    setShowJobModal(false);
+                    setMemberSearchTerm("");
+                    setGenderFilter("");
+                    setStateFilter("");
+                    setCityFilter("");
+                    setOrganizationFilter("");
+                    setSelectedMemberIds([]);
+                    setCurrentPage(1);
+                  }}
+                >
+                  Allocate Members
+                </button>
+              )}
+
               <button
                 className="btn outline"
-                style={{ marginLeft: "12px", backgroundColor: "#1e40af" }}
+                style={{
+                  marginLeft: selectedReq.status === "active" ? "12px" : "0",
+                  backgroundColor: "#1e40af",
+                }}
                 onClick={() => setShowAllocatedMembersModal(true)}
               >
                 Allocated Members ({allocatedMembers.length})
+                {selectedReq.status !== "active" && " (View Only)"}
               </button>
+
               <button className="btn secondary" onClick={() => setShowJobModal(false)}>
                 Close
               </button>
@@ -535,6 +547,23 @@ export default function RequirementsPage() {
             <p>
               <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
             </p>
+
+            {selectedReq.status !== "active" && (
+              <div
+                style={{
+                  background: "#fef2f2",
+                  color: "#991b1b",
+                  padding: "12px 16px",
+                  borderRadius: "8px",
+                  margin: "16px 0",
+                  border: "1px solid #fecaca",
+                  fontWeight: "500",
+                }}
+              >
+                <strong>Warning:</strong> This {selectedReq.type} is <strong>closed</strong>. 
+                You cannot allocate new members.
+              </div>
+            )}
 
             {/* Filters */}
             <div style={{ margin: "24px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -602,6 +631,7 @@ export default function RequirementsPage() {
                             setSelectedMemberIds((prev) => prev.filter((id) => id !== member.id));
                           }
                         }}
+                        disabled={selectedReq.status !== "active"}
                         style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1e40af" }}
                       />
                       <div>
@@ -669,8 +699,13 @@ export default function RequirementsPage() {
             <div className="modal-actions" style={{ marginTop: "32px" }}>
               <button
                 className="btn primary"
-                disabled={selectedMemberIds.length === 0}
+                disabled={selectedReq.status !== "active" || selectedMemberIds.length === 0}
                 onClick={async () => {
+                  if (selectedReq.status !== "active") {
+                    showToast("Cannot allocate to a closed requirement", "error");
+                    return;
+                  }
+
                   try {
                     const alreadyAllocatedUserIds = new Set(allocatedMembers.map(a => a.userId));
                     const newMembers = selectedMemberIds.filter(id => !alreadyAllocatedUserIds.has(id));
@@ -718,7 +753,7 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* ALLOCATED MEMBERS MODAL (per requirement) */}
+      {/* ALLOCATED MEMBERS MODAL */}
       {showAllocatedMembersModal && selectedReq && (
         <div className="modal-overlay" onClick={() => setShowAllocatedMembersModal(false)}>
           <div className="modal-contents allocate-modal" style={{ maxWidth: "800px" }} onClick={(e) => e.stopPropagation()}>
