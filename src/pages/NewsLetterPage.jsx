@@ -11,7 +11,7 @@ import {
   Link,
   Image,
 } from '@react-pdf/renderer';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // ── PDF Styles ───────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   },
 });
 
-// ── Helpers for Google Drive → Base64 ─────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────
 const extractGoogleDriveFileId = (url) => {
   if (!url) return null;
   const patterns = [
@@ -106,11 +106,9 @@ const extractGoogleDriveFileId = (url) => {
 
 const getBase64FromUrl = async (url) => {
   if (!url) return null;
-
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (!res.ok) return null;
-    
     const blob = await res.blob();
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -263,7 +261,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
   } = content;
 
   const quickLinks = footer?.quickLinks || [];
-
   const currentDate = formatNewsletterDate();
 
   return (
@@ -283,12 +280,14 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
         <Text style={styles.greeting}>{greeting}</Text>
 
         {/* Introduction */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{intro.title || 'A BRIEF INTRODUCTION TO BRISK OLIVE'}</Text>
-          <Text style={styles.bodyText}>{intro.text}</Text>
-          {images.servicesSummary && <Image style={styles.image} src={images.servicesSummary} />}
-          <Text style={styles.bodyText}>{intro.clientsIntro}</Text>
-          {images.clientLogos && <Image style={styles.image} src={images.clientLogos} />}
+        <View wrap={false}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{intro.title || 'A BRIEF INTRODUCTION TO BRISK OLIVE'}</Text>
+            <Text style={styles.bodyText}>{intro.text}</Text>
+            {images.servicesSummary && <Image style={styles.image} src={images.servicesSummary} />}
+            <Text style={styles.bodyText}>{intro.clientsIntro}</Text>
+            {images.clientLogos && <Image style={styles.image} src={images.clientLogos} />}
+          </View>
         </View>
 
         {/* Opportunities Summary */}
@@ -333,17 +332,17 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
               </Text>
 
               {jobsSection.successStoryText && (
-                <>
+                <View>
                   <Text style={[styles.bodyText, { marginTop: 10 }]}>{jobsSection.successStoryText}</Text>
                   {images.successStory && <Image style={styles.image} src={images.successStory} />}
                   {images.successStory1 && <Image style={styles.image} src={images.successStory1} />}
-                </>
+                </View>
               )}
             </View>
           )}
 
           {/* Temporary Staffing */}
-          <View>
+          <View wrap={false}>
             <Text style={styles.subsectionTitle}>
               {tempStaffing.title || '2. Temporary Staffing Assignments for You'}
             </Text>
@@ -389,18 +388,18 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
                     <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
                     <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
                     <Text style={styles.tableCell}>
-                      <Link src={proj.project_apply_link || '#'}>Apply</Link>
+                      <Link src={proj.project_apply_link || '#'}>{'Apply'}</Link>
                     </Text>
                   </View>
                 ))}
               </View>
 
-              <Text style={[styles.bodyText, { marginTop: 10 }]}>{projectsSection.otherProjectsTitle}</Text>
-              <Text style={styles.bodyText}>{projectsSection.jewarText}</Text>
-              {images.jewarAirport && <Image style={styles.image} src={images.jewarAirport} />}
+                <Text style={[styles.bodyText, { marginTop: 10 }]}>{projectsSection.otherProjectsTitle}</Text>
+                <Text style={styles.bodyText}>{projectsSection.jewarText}</Text>
+                {images.jewarAirport && <Image style={styles.image} src={images.jewarAirport} />}
 
-              <Text style={styles.bodyText}>{projectsSection.solarText}</Text>
-              {images.solarOandM && <Image style={styles.image} src={images.solarOandM} />}
+                <Text style={styles.bodyText}>{projectsSection.solarText}</Text>
+                {images.solarOandM && <Image style={styles.image} src={images.solarOandM} />}
             </View>
           )}
 
@@ -428,44 +427,44 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
           </View>
 
           {/* Defence Projects */}
-          <View>
+          <View wrap={false}>
             <Text style={styles.subsectionTitle}>{defence.title || '5. Defence Projects'}</Text>
             <Text style={styles.bodyText}>{defence.text}</Text>
-            {images.defenceProject && <Image style={styles.image} src={images.defenceProject}></Image>}
+            {images.defenceProject && <Image style={styles.image} src={images.defenceProject} />}
           </View>
 
-          {/* Quick Links + About */}
-          <View style={{ marginTop: 25, marginBottom: 20 }}>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{aboutus.title || 'About Brisk Olive - Your Partner in Growth'}</Text>
-              <Text style={styles.bodyText}>{aboutus.text}</Text>
-            </View>
+          {/* About Us + Quick Links */}
+          <View wrap={false}>
+            <View style={{ marginTop: 25, marginBottom: 20 }}>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{aboutus.title || 'About Brisk Olive - Your Partner in Growth'}</Text>
+                <Text style={styles.bodyText}>{aboutus.text}</Text>
+              </View>
 
-            {quickLinks.length === 0 ? (
-              <Text style={styles.bodyText}>(No quick links configured)</Text>
-            ) : (
-              quickLinks.map((link, i) => {
-                let fullUrl = link.url || '';
-                if (fullUrl && !fullUrl.startsWith('http')) {
-                  fullUrl = `https://briskolive.com${fullUrl.startsWith('/') ? '' : '/'}${fullUrl}`;
-                }
-                return (
-                  <Text key={i} style={styles.bodyText}>
-                    <Link style={styles.link} src={fullUrl}>
-                      → {link.text || 'Link'}
-                    </Link>
-                  </Text>
-                );
-              })
-            )}
+              {quickLinks.length === 0 ? (
+                <Text style={styles.bodyText}>(No quick links configured)</Text>
+              ) : (
+                quickLinks.map((link, i) => {
+                  let fullUrl = link.url || '';
+                  if (fullUrl && !fullUrl.startsWith('http')) {
+                    fullUrl = `https://briskolive.com${fullUrl.startsWith('/') ? '' : '/'}${fullUrl}`;
+                  }
+                  return (
+                    <Text key={i} style={styles.bodyText}>
+                      <Link style={styles.link} src={fullUrl}>
+                        → {link.text || 'Link'}
+                      </Link>
+                    </Text>
+                  );
+                })
+              )}
+            </View>
           </View>
 
           {/* Closing */}
           <Text style={{ marginTop: 30, fontSize: 12 }}>
             Thanks!{'\n\n'}
             (Team Brisk Olive){'\n'}
-            Col Sunil Prem{'\n'}
-            MD & CEO
           </Text>
 
           {/* Footer */}
@@ -487,7 +486,7 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
   );
 };
 
-// ── Main Component ───────────────────────────────────────────────────
+// ── MAIN COMPONENT ────────────────────────────────────────────────────
 export default function BriskOliveNewsletterApp() {
   const [jobs, setJobs] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -496,12 +495,13 @@ export default function BriskOliveNewsletterApp() {
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedProjects, setSelectedProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState({});
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-
         const [jobsData, projectsData, partnersData, contentData] = await Promise.all([
           fetchOpenJobs(),
           fetchOpenProjects(),
@@ -509,147 +509,162 @@ export default function BriskOliveNewsletterApp() {
           fetchNewsletterContent(),
         ]);
 
-        // Convert all Google Drive images to base64
         const processedImages = {};
         if (contentData?.images) {
-          const imageKeys = Object.keys(contentData.images);
-          
-          await Promise.all(
-            imageKeys.map(async (key) => {
-              const base64 = await getBase64FromUrl(contentData.images[key]);
-              if (base64) {
-                processedImages[key] = base64;
-              } else {
-                console.warn(`Failed to convert image to base64: ${key}`);
-              }
-            })
-          );
+          for (const key of Object.keys(contentData.images)) {
+            const base64 = await getBase64FromUrl(contentData.images[key]);
+            if (base64) processedImages[key] = base64;
+          }
         }
 
+        const finalContent = { ...contentData, images: processedImages };
         setJobs(jobsData);
         setProjects(projectsData);
         setRegionalPartners(partnersData);
-        setContent({
-          ...contentData,
-          images: processedImages, // ← now contains data:image/... strings
-        });
+        setContent(finalContent);
+
+        // Prepare clean copy for editing (original URLs only)
+        setEditedContent(structuredClone({ ...contentData, images: contentData.images || {} }));
       } catch (err) {
-        console.error('Failed to load newsletter data:', err);
+        console.error('Data loading error:', err);
       } finally {
         setLoading(false);
       }
     };
-
     loadData();
   }, []);
 
-  const jobOptions = jobs.map((job) => ({
-    value: job.id,
-    label: `${job.job_company || '?'} • ${job.job_title || 'Position'}`,
+  const jobOptions = jobs.map(j => ({
+    value: j.id,
+    label: `${j.job_company || '?'} • ${j.job_title || 'Position'}`
   }));
 
-  const projectOptions = projects.map((proj) => ({
-    value: proj.id,
-    label: proj.project_title || 'Project',
+  const projectOptions = projects.map(p => ({
+    value: p.id,
+    label: p.project_title || 'Project'
   }));
 
-  const filteredJobs = jobs.filter((j) => selectedJobs.some((s) => s.value === j.id));
-  const filteredProjects = projects.filter((p) => selectedProjects.some((s) => s.value === p.id));
+  const filteredJobs = jobs.filter(j => selectedJobs.some(s => s.value === j.id));
+  const filteredProjects = projects.filter(p => selectedProjects.some(s => s.value === p.id));
 
-  if (loading) {
-    return <div style={{ textAlign: 'center', padding: '120px 20px' }}>Loading newsletter data & converting images...</div>;
-  }
+  // ── Edit Handlers ──────────────────────────────────────────────────
+  const updateNestedField = (path, value) => {
+    setEditedContent(prev => {
+      const copy = structuredClone(prev);
+      const parts = path.split('.');
+      let current = copy;
+      for (let i = 0; i < parts.length - 1; i++) {
+        current[parts[i]] = current[parts[i]] || {};
+        current = current[parts[i]];
+      }
+      current[parts[parts.length - 1]] = value;
+      return copy;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!window.confirm('Save changes to newsletter configuration?')) return;
+
+    try {
+      const docRef = doc(db, 'newsletter_config', 'weekly_config');
+      await updateDoc(docRef, {
+        ...editedContent,
+        // Important: keep original image URLs, not base64
+        images: content.images
+          ? Object.fromEntries(
+              Object.entries(content.images).map(([k]) => [k, contentData?.images?.[k] || ''])
+            )
+          : {}
+      });
+
+      setContent(prev => ({
+        ...prev,
+        ...editedContent,
+        images: prev.images // keep processed base64 for preview
+      }));
+
+      alert('Configuration saved successfully!');
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Save failed:', err);
+      alert('Failed to save changes: ' + err.message);
+    }
+  };
+
+  const Field = ({ label, path, type = 'text', rows = 3 }) => {
+    const parts = path.split('.');
+    let value = editedContent;
+    for (const p of parts) {
+      value = value?.[p] ?? '';
+    }
+
+    return (
+      <div className="edit-field">
+        <label>{label}</label>
+        {type === 'textarea' ? (
+          <textarea
+            value={value}
+            onChange={e => updateNestedField(path, e.target.value)}
+            rows={rows}
+          />
+        ) : (
+          <input
+            type={type}
+            value={value}
+            onChange={e => updateNestedField(path, e.target.value)}
+          />
+        )}
+      </div>
+    );
+  };
+
+  if (loading) return <div className="loading">Loading newsletter data...</div>;
 
   return (
-    <div
-      style={{
-        fontFamily: 'Arial, Helvetica, sans-serif',
-        padding: 'clamp(24px, 4vw, 48px) clamp(16px, 3vw, 32px)',
-        maxWidth: '1800px',
-        margin: '0 auto',
-        width: '100%',
-      }}
-    >
-      <h1
-        style={{
-          color: '#4a7c2c',
-          textAlign: 'center',
-          marginBottom: '40px',
-          fontSize: '3.5rem',
-        }}
-      >
-        Brisk Olive Weekly Newsletter Generator
-      </h1>
+    <div className="newsletter-app">
+      <header className="app-header">
+        <h1>Weekly Newsletter</h1>
+        <button
+          type="button"                    // ← Prevents refresh
+          className="edit-btn"
+          onClick={() => setIsEditing(true)}
+        >
+          Edit Content
+        </button>
+      </header>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '40px',
-          marginBottom: '50px',
-        }}
-      >
-        <div>
-          <label
-            style={{
-              display: 'block',
-              marginBottom: '12px',
-              fontWeight: 'bold',
-              color: '#2c5e1f',
-            }}
-          >
-            Select Jobs to Include ({selectedJobs.length} / {jobOptions.length})
-          </label>
+      <div className="selectors-container">
+        <div className="select-card">
+          <label>Select Jobs ({selectedJobs.length}/{jobOptions.length})</label>
           <Select
             isMulti
             closeMenuOnSelect={false}
-            hideSelectedOptions={false}
             components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
             options={jobOptions}
             value={selectedJobs}
             onChange={setSelectedJobs}
-            placeholder="Choose jobs to show in newsletter..."
+            placeholder="Select jobs to include..."
             styles={customSelectStyles}
           />
         </div>
 
-        <div>
-          <label
-            style={{
-              display: 'block',
-              marginBottom: '12px',
-              fontWeight: 'bold',
-              color: '#2c5e1f',
-            }}
-          >
-            Select Projects to Include ({selectedProjects.length} / {projectOptions.length})
-          </label>
+        <div className="select-card">
+          <label>Select Projects ({selectedProjects.length}/{projectOptions.length})</label>
           <Select
             isMulti
             closeMenuOnSelect={false}
-            hideSelectedOptions={false}
             components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
             options={projectOptions}
             value={selectedProjects}
             onChange={setSelectedProjects}
-            placeholder="Choose projects to show in newsletter..."
+            placeholder="Select projects to include..."
             styles={customSelectStyles}
           />
         </div>
       </div>
 
-      <div
-        style={{
-          border: '1px solid #ddd',
-          height: '820px',
-          marginBottom: '40px',
-          borderRadius: '8px',
-          overflow: 'hidden',
-          backgroundColor: '#fff',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-        }}
-      >
-        <PDFViewer width="100%" height="100%">
+      <div className="preview-container">
+        <PDFViewer className="pdf-viewer">
           <NewsletterDocument
             jobs={filteredJobs}
             projects={filteredProjects}
@@ -659,7 +674,7 @@ export default function BriskOliveNewsletterApp() {
         </PDFViewer>
       </div>
 
-      <div style={{ textAlign: 'center' }}>
+      <div className="download-section">
         <PDFDownloadLink
           document={
             <NewsletterDocument
@@ -669,22 +684,322 @@ export default function BriskOliveNewsletterApp() {
               content={content}
             />
           }
-          fileName={`BriskOlive_Newsletter_${formatNewsletterDate().replace(/ /g, '_')}.pdf`}
-          style={{
-            backgroundColor: '#4a7c2c',
-            color: 'white',
-            padding: '16px 60px',
-            borderRadius: '8px',
-            textDecoration: 'none',
-            fontSize: '1.2rem',
-            fontWeight: 'bold',
-            display: 'inline-block',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          }}
+          fileName={`Newsletter_${formatNewsletterDate().replace(/ /g, '_')}.pdf`}
+          className="download-btn"
         >
-          {({ loading }) => (loading ? 'Generating PDF...' : 'Download Newsletter PDF')}
+          {({ loading }) => (
+            <button type="button" disabled={loading} className="download-btn-inner">
+              {loading ? 'Generating...' : 'Download PDF'}
+            </button>
+          )}
         </PDFDownloadLink>
       </div>
+
+      {/* ── EDIT MODAL ─────────────────────────────────────────────── */}
+      {isEditing && (
+        <div className="modal-overlay">
+          <div className="edit-modal">
+            <div className="modal-header">
+              <h2>Edit Newsletter Content</h2>
+              <button
+                type="button"               // ← Prevents refresh
+                className="close-btn"
+                onClick={() => setIsEditing(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="edit-sections">
+              <section>
+                <h3>Header & Greeting</h3>
+                <Field label="Company Name" path="companyName" />
+                <Field label="Main Title" path="mainTitle" />
+                <Field label="Weekly Subtitle" path="weeklySubtitle" />
+                <Field label="Greeting Message" path="greeting" type="textarea" rows={5} />
+              </section>
+
+              <section>
+                <h3>Introduction Section</h3>
+                <Field label="Intro Title" path="intro.title" />
+                <Field label="Intro Text" path="intro.text" type="textarea" rows={8} />
+                <Field label="Clients Intro" path="intro.clientsIntro" type="textarea" rows={4} />
+              </section>
+
+              <section>
+                <h3>Jobs Section</h3>
+                <Field label="Section Title" path="jobsSection.title" />
+                <Field label="Description" path="jobsSection.description" type="textarea" rows={5} />
+                <Field label="Registration Text" path="jobsSection.registrationText" />
+                <Field label="Registration Link" path="jobsSection.registrationLink" />
+                <Field label="Success Story Text" path="jobsSection.successStoryText" type="textarea" rows={4} />
+              </section>
+
+              <section>
+                <h3>Projects Section</h3>
+                <Field label="Section Title" path="projectsSection.title" />
+                <Field label="Intro Text" path="projectsSection.intro" type="textarea" rows={5} />
+                <Field label="Other Projects Title" path="projectsSection.otherProjectsTitle" />
+                <Field label="Jewar Airport Text" path="projectsSection.jewarText" type="textarea" rows={4} />
+                <Field label="Solar O&M Text" path="projectsSection.solarText" type="textarea" rows={4} />
+              </section>
+
+              {/* You can continue adding more Field components for other sections */}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"               // ← Prevents refresh
+                className="cancel-btn"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"               // ← The most important one!
+                className="save-btn"
+                onClick={handleSave}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Basic CSS - put in separate file or use styled-components in real project */}
+      <style jsx global>{`
+        .newsletter-app {
+          font-family: 'Segoe UI', system-ui, sans-serif;
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 2rem 1.5rem;
+        }
+
+        .app-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 2.5rem;
+          gap: 340px;
+        }
+
+        .app-header h1 {
+  color: white;                    /* text color */
+  background-color: #1e40af;       /* nice blue background */
+  font-size: 2.9rem;
+  margin: 0;
+  padding: 1.2rem 8rem;           /* some inner spacing - looks better with background */
+  border-radius: 12px;            /* modern rounded corners - you can change to 8px/16px/20px */
+  display: inline-block;          /* important - makes the background hug the text */
+}
+
+        .edit-btn {
+          background: #1e40af;
+          color: white;
+          border: none;
+          padding: 0.8rem 1.8rem;
+          border-radius: 8px;
+          font-size: 1.1rem;
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .edit-btn:hover { background: #1e40af; }
+
+        .selectors-container {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+          margin-bottom: 2.5rem;
+        }
+
+        .select-card {
+          background: white;
+          border-radius: 12px;
+          padding: 1.5rem;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        .select-card label {
+          display: block;
+          font-weight: 600;
+          margin-bottom: 0.8rem;
+          color: #1e40af;
+        }
+
+        .preview-container {
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+          margin-bottom: 2rem;
+          height: 800px;
+          background: white;
+        }
+
+        .pdf-viewer {
+          width: 100%;
+          height: 100%;
+          border: none;
+        }
+
+        .download-section {
+          text-align: center;
+        }
+
+        .download-btn {
+          background: #1e40af;
+          color: white;
+          padding: 1rem 3rem;
+          border-radius: 10px;
+          text-decoration: none;
+          font-size: 1.3rem;
+          font-weight: bold;
+          box-shadow: 0 4px 16px rgba(21,128,61,0.3);
+          display: inline-block;
+        }
+
+        .download-btn:hover { background: #1e40af; }
+
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.65);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          padding: 1rem;
+        }
+
+        .edit-modal {
+          background: white;
+          border-radius: 16px;
+          width: 100%;
+          max-width: 1155px;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+
+        .modal-header {
+          padding: 1.5rem 2rem;
+          border-bottom: 1px solid #e5e7eb;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          position: sticky;
+          top: 0;
+          background: white;
+          z-index: 10;
+        }
+
+        .modal-header h2 {
+          margin: 0;
+          color: #1e40af;
+        }
+
+        .close-btn {
+          background: none;
+          border: none;
+          font-size: 2rem;
+          cursor: pointer;
+          color: #6b7280;
+        }
+
+        .edit-sections {
+          padding: 1.5rem 2rem;
+        }
+
+        .edit-sections section {
+          margin-bottom: 2.5rem;
+        }
+
+        .edit-sections h3 {
+          color: #1e40af;
+          margin: 0 0 1.2rem 0;
+          font-size: 1.4rem;
+          border-bottom: 2px solid #dcfce7;
+          padding-bottom: 0.5rem;
+        }
+
+        .edit-field {
+          margin-bottom: 1.6rem;
+        }
+
+        .edit-field label {
+          display: block;
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          color: #374151;
+        }
+
+        .edit-field input,
+        .edit-field textarea {
+          width: 100%;
+          padding: 0.75rem 1rem;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          font-size: 1rem;
+          font-family: inherit;
+          background-color: white;
+          color: black;
+        }
+
+        .edit-field textarea {
+          min-height: 100px;
+          resize: vertical;
+        }
+
+        .modal-actions {
+          padding: 1.5rem 2rem;
+          border-top: 1px solid #e5e7eb;
+          text-align: right;
+        }
+
+        .cancel-btn, .save-btn {
+          padding: 0.9rem 2rem;
+          border-radius: 8px;
+          font-size: 1.05rem;
+          cursor: pointer;
+        }
+
+        .cancel-btn {
+          background: light-red;
+          border: none;
+          margin-right: 1rem;
+        }
+
+        .save-btn {
+          background: #1e40af;
+          color: white;
+          border: none;
+        }
+
+        .loading {
+          text-align: center;
+          padding: 8rem 2rem;
+          font-size: 1.4rem;
+          color: #4b5563;
+        }
+          .download-btn-inner {
+          background: #1e40af;
+          color: white;
+          padding: 1rem 3rem;
+          border: none;
+          border-radius: 10px;
+          font-size: 1.3rem;
+          font-weight: bold;
+          cursor: pointer;
+          box-shadow: 0 4px 16px rgba(21,128,61,0.3);
+        }
+        
+        .download-btn-inner:disabled {
+          background: #6b7280;
+          cursor: not-allowed;
+        }
+      `}</style>
     </div>
   );
 }

@@ -343,7 +343,7 @@ export default function RequirementsPage() {
         <div className="header-content">
           <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
-            {["All", "Open", "Closed", "Projects", "Recruitment"].map((filter) => (
+            {["All", "Open", "Closed","TCS", "Projects", "Recruitment"].map((filter) => (
               <button
                 key={filter}
                 className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -574,25 +574,25 @@ export default function RequirementsPage() {
                   placeholder="Search by name, email, phone, role..."
                   value={memberSearchTerm}
                   onChange={(e) => setMemberSearchTerm(e.target.value)}
-                  style={{ width: "100%", padding: "14px 16px 14px 50px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px" }}
+                  style={{ width: "100%", padding: "14px 16px 14px 50px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor: "white",color:"black" }}
                 />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-                <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
+                <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
                   <option value="">All Genders</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
                 </select>
-                <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
+                <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
                   <option value="">All States</option>
                   {uniqueStates.map((state) => <option key={state} value={state}>{state}</option>)}
                 </select>
-                <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
+                <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
                   <option value="">All Cities</option>
                   {uniqueCities.map((city) => <option key={city} value={city}>{city}</option>)}
                 </select>
-                <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}>
+                <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
                   <option value="">All Categories</option>
                   {uniqueOrganizations.map((org) => <option key={org} value={org}>{org}</option>)}
                 </select>
@@ -679,7 +679,7 @@ export default function RequirementsPage() {
                     }}
                     style={{ padding: "8px 12px", borderRadius: "8px", border: "2px solid #e2e8f0" }}
                   >
-                    {[100, 500, 1000, 5000].map((size) => (
+                    {[100, 500, 1000, 5000, "All"].map((size) => (
                       <option key={size} value={size}>{size}</option>
                     ))}
                   </select>
