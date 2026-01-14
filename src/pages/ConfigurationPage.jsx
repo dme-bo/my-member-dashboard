@@ -1942,9 +1942,9 @@ const NewsletterDataMigrator = () => {
   // ── Jobs Section (static parts only) ─────────────────────────
   jobsSection: {
     title:              "1. Get jobs across India",
-    description:        "You can get a job through us with companies like Accenture, Amazon, Bharti, Bajaj Electricals, Flipkart, Pharmeasy, etc. A list of open vacancies is given below...",
+    description:        "You can get a job through us with companies like Accenture, Amazon, Bharti, Bajaj Electricals, Flipkart, Pharmeasy, etc. A list of open vacancies is given below. To get a job through us, please\nfill in your details in this form: https://forms.gle/UrAKH1y98j3q7QmT6. If your profile fits any of the\nexisting vacancies, we will get back to you. We will also contact you for future opportunities.",
     registrationLink:   "https://forms.gle/UrAKH1y98j3q7QmT6",
-    registrationText:   "To get a job through us, please fill in your details in this form:",
+    registrationText:   "(a) Open Jobs from Brisk Olive",
     extraNote:          "Please fill out the form",
     alternativeRegLink: "https://script.google.com/a/briskolive.com/macros/s/AKfycbyrNSun6HSF2nXnET46zTt1g1VNBjBflykFk59hjUHhlnC_R6RbqhyPf_8gTpIJimZF/exec?v=newMember",
     successStoryText:   "Here's a recent success story - of a veteran placed through Brisk Olive:"
@@ -1953,7 +1953,7 @@ const NewsletterDataMigrator = () => {
   // ── Temp Staffing Section ───────────────────────────────────
   tempStaffing: {
     title: "2. Temporary Staffing Assignments for You",
-    introText: `You can work as Exam Invigilators (Temporary Staff) through us, for companies like TCS and Aptech\n\nHundreds of our ex-soldiers are working for 1 to 20 days each month - through Brisk Olive - as part-time invigilators for government exams...`,
+    introText: `You can work as Exam Invigilators (Temporary Staff) through us, for companies like TCS and Aptech\n\nHundreds of our ex-soldiers are working for 1 to 20 days each month - through Brisk Olive - as part-time invigilators for government exams. Our city-coordinators - who are also ex-soldiers - help them in delivering these duties. For such a duty, you get paid a daily rate - you receive your payment by the end of the following month, for duties delivered by you during this month. If you too want to take on such duties, then please click the link in the last column below for your state. Our staff will get back to you:`,
     // The table with state-wise links should preferably be moved to its own collection
     // but for quick migration you can keep important links here:
     importantLinks: {
@@ -1982,7 +1982,12 @@ const NewsletterDataMigrator = () => {
 
   defence: {
     title: "6. Defence Projects",
-    text:  "Brisk Olive is also doing Defence Projects for the Indian Army...\nThe Rapid Folding Floating Foot Assault Bridge for the Indian Army..."
+    text:  "Brisk Olive is also doing Defence Projects for the Indian Army.\nHere are some interesting products built by us.\nThe Rapid Folding Floating Foot Assault Bridge for the Indian Army.\nIn partnership with the Ministry of Defence Production, we have developed a unique foot assault bridge, for our dismounted soldiers to attack an enemy across a water obstacle. This patented bridge is man portable and can be launched extremely fast across obstacles up to 50 to 100 meters wide.\nApart from the Indian Army, the bridge provides a versatile solution to our Paramilitary Forces, and Disaster Relief forces at the Center and State levels, to instantly restore communications and provide relief to affected communities."
+  },
+
+  aboutus:{
+    tittle:"About Brisk Olive - Your Partner in Growth ",
+    text: "Brisk Olive stands as a pioneer in the field of consultancy and operational support,providing an unmatched advantage through our 30,000+ strong community of skilledex-soldiers. Our unique strength lies in our highly reliable operational field force, eachmember possessing 15 to 20 years of experience across various domains. This expertise translates into exceptional reach, scale, and quality, ensuring that we consistently deliver on-time, on-cost, and on-quality results."
   },
 
   // ── Footer & General Links ──────────────────────────────────
