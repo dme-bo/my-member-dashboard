@@ -55,6 +55,7 @@ export default function RequirementsPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [organizationFilter, setOrganizationFilter] = useState("");
+  
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -582,7 +583,6 @@ export default function RequirementsPage() {
                   <option value="">All Genders</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
-                  <option value="Other">Other</option>
                 </select>
                 <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
                   <option value="">All States</option>

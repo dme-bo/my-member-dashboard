@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Select, { components } from 'react-select';
 import {
   Page,
@@ -14,7 +14,7 @@ import {
 import { collection, getDocs, query, where, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-// ── PDF Styles ───────────────────────────────────────────────────────
+// ── PDF Styles ─────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   page: {
     padding: 40,
@@ -54,7 +54,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   bodyText: { marginBottom: 10, whiteSpace: 'pre-line' },
-  bold: { fontWeight: 'bold' },
   link: { color: '#0066cc', textDecoration: 'underline' },
   table: {
     display: 'table',
@@ -88,22 +87,7 @@ const styles = StyleSheet.create({
   },
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────
-const extractGoogleDriveFileId = (url) => {
-  if (!url) return null;
-  const patterns = [
-    /\/d\/([a-zA-Z0-9_-]{25,})/,
-    /\/open\?id=([a-zA-Z0-9_-]+)/,
-    /uc\?id=([a-zA-Z0-9_-]+)/,
-    /([a-zA-Z0-9_-]{25,})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match?.[1]) return match[1];
-  }
-  return null;
-};
-
+// ── Helpers ────────────────────────────────────────────────────────────────
 const getBase64FromUrl = async (url) => {
   if (!url) return null;
   try {
@@ -121,7 +105,6 @@ const getBase64FromUrl = async (url) => {
   }
 };
 
-// ── Data Fetching ────────────────────────────────────────────────────
 const fetchOpenJobs = async () => {
   const q = query(collection(db, 'jobsmaster'), where('job_status', '==', 'Open'));
   const snap = await getDocs(q);
@@ -161,7 +144,7 @@ const formatNewsletterDate = () => {
   return `${day} ${monthNames[today.getMonth()]} ${today.getFullYear()}`;
 };
 
-// ── Custom react-select components ──────────────────────────────────
+// ── Custom react-select components ─────────────────────────────────────────
 const CustomCheckboxOption = (props) => (
   <components.Option {...props}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', cursor: 'pointer' }}>
@@ -242,7 +225,7 @@ const customSelectStyles = {
   menu: (base) => ({ ...base, zIndex: 1000 }),
 };
 
-// ── PDF Document Component ──────────────────────────────────────────
+// ── PDF Document Component (full structure) ────────────────────────────────
 const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
   const {
     companyName = 'Brisk Olive Business Solutions Pvt Ltd',
@@ -258,7 +241,7 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
     footer = {},
     images = {},
     aboutus = {},
-  } = content;
+  } = content || {};
 
   const quickLinks = footer?.quickLinks || [];
   const currentDate = formatNewsletterDate();
@@ -276,7 +259,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
         </View>
 
         {images.mainLogo && <Image style={styles.image} src={images.mainLogo} />}
-
         <Text style={styles.greeting}>{greeting}</Text>
 
         {/* Introduction */}
@@ -304,7 +286,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
               <Text style={[styles.bodyText, { marginTop: 8, fontWeight: 'bold' }]}>
                 {jobsSection.registrationText || 'Open Jobs from Brisk Olive:'}
               </Text>
-
               <View style={styles.table}>
                 <View style={styles.tableHeader}>
                   <Text style={styles.tableCell}>Company</Text>
@@ -323,14 +304,12 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
                   </View>
                 ))}
               </View>
-
               <Text style={styles.bodyText}>
                 To apply / register:{' '}
                 <Link style={styles.link} src={jobsSection.registrationLink}>
                   {jobsSection.registrationLink}
                 </Link>
               </Text>
-
               {jobsSection.successStoryText && (
                 <View>
                   <Text style={[styles.bodyText, { marginTop: 10 }]}>{jobsSection.successStoryText}</Text>
@@ -348,7 +327,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
             </Text>
             <Text style={styles.bodyText}>{tempStaffing.introText}</Text>
             {images.examInvigilator && <Image style={styles.image} src={images.examInvigilator} />}
-
             <View style={styles.table}>
               <View style={styles.tableHeader}>
                 <Text style={styles.tableCell}>State</Text>
@@ -374,7 +352,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
                 {projectsSection.title || '3. Work in our Projects / Surveys / Audits & Consultancies'}
               </Text>
               <Text style={styles.bodyText}>{projectsSection.intro}</Text>
-
               <View style={styles.table}>
                 <View style={styles.tableHeader}>
                   <Text style={styles.tableCell}>Ser</Text>
@@ -393,13 +370,11 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
                   </View>
                 ))}
               </View>
-
-                <Text style={[styles.bodyText, { marginTop: 10 }]}>{projectsSection.otherProjectsTitle}</Text>
-                <Text style={styles.bodyText}>{projectsSection.jewarText}</Text>
-                {images.jewarAirport && <Image style={styles.image} src={images.jewarAirport} />}
-
-                <Text style={styles.bodyText}>{projectsSection.solarText}</Text>
-                {images.solarOandM && <Image style={styles.image} src={images.solarOandM} />}
+              <Text style={[styles.bodyText, { marginTop: 10 }]}>{projectsSection.otherProjectsTitle}</Text>
+              <Text style={styles.bodyText}>{projectsSection.jewarText}</Text>
+              {images.jewarAirport && <Image style={styles.image} src={images.jewarAirport} />}
+              <Text style={styles.bodyText}>{projectsSection.solarText}</Text>
+              {images.solarOandM && <Image style={styles.image} src={images.solarOandM} />}
             </View>
           )}
 
@@ -407,7 +382,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
           <View>
             <Text style={styles.subsectionTitle}>{rpSettings.title || '4. Regional Partners'}</Text>
             <Text style={styles.bodyText}>{rpSettings.intro}</Text>
-
             {regionalPartners.length === 0 ? (
               <Text style={styles.bodyText}>No regional partners registered yet.</Text>
             ) : (
@@ -417,7 +391,6 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
                 </Text>
               ))
             )}
-
             <Text style={[styles.bodyText, { marginTop: 12 }]}>
               {rpSettings.becomePartnerText}{' '}
               <Link style={styles.link} src={rpSettings.partnerFormLink}>
@@ -433,11 +406,13 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
             {images.defenceProject && <Image style={styles.image} src={images.defenceProject} />}
           </View>
 
-          {/* About Us + Quick Links */}
+          {/* About Us */}
           <View wrap={false}>
             <View style={{ marginTop: 25, marginBottom: 20 }}>
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{aboutus.title || 'About Brisk Olive - Your Partner in Growth'}</Text>
+                <Text style={styles.sectionTitle}>
+                  {aboutus.title || 'About Brisk Olive - Your Partner in Growth'}
+                </Text>
                 <Text style={styles.bodyText}>{aboutus.text}</Text>
               </View>
 
@@ -486,17 +461,43 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
   );
 };
 
-// ── MAIN COMPONENT ────────────────────────────────────────────────────
+// ── Editable Field Component ───────────────────────────────────────────────
+const EditableField = ({ label, value, onChange, type = 'text', rows = 4 }) => (
+  <div className="modal-edit-field">
+    <label>{label}</label>
+    {type === 'textarea' ? (
+      <textarea
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+      />
+    ) : (
+      <input
+        type={type}
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    )}
+  </div>
+);
+
+
+// ── Main Component ─────────────────────────────────────────────────────────
 export default function BriskOliveNewsletterApp() {
   const [jobs, setJobs] = useState([]);
   const [projects, setProjects] = useState([]);
   const [regionalPartners, setRegionalPartners] = useState([]);
   const [content, setContent] = useState({});
+  const [editedContent, setEditedContent] = useState({});
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedProjects, setSelectedProjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState({});
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const scrollContainerRef = useRef(null);
+  const scrollPosition = useRef(0);
 
   useEffect(() => {
     const loadData = async () => {
@@ -511,45 +512,61 @@ export default function BriskOliveNewsletterApp() {
 
         const processedImages = {};
         if (contentData?.images) {
-          for (const key of Object.keys(contentData.images)) {
-            const base64 = await getBase64FromUrl(contentData.images[key]);
+          for (const [key, url] of Object.entries(contentData.images)) {
+            const base64 = await getBase64FromUrl(url);
             if (base64) processedImages[key] = base64;
           }
         }
 
-        const finalContent = { ...contentData, images: processedImages };
+        const fullContent = { ...contentData, images: processedImages };
         setJobs(jobsData);
         setProjects(projectsData);
         setRegionalPartners(partnersData);
-        setContent(finalContent);
-
-        // Prepare clean copy for editing (original URLs only)
-        setEditedContent(structuredClone({ ...contentData, images: contentData.images || {} }));
+        setContent(fullContent);
+        setEditedContent(structuredClone(contentData || {}));
       } catch (err) {
         console.error('Data loading error:', err);
       } finally {
         setLoading(false);
       }
     };
+
     loadData();
   }, []);
 
-  const jobOptions = jobs.map(j => ({
-    value: j.id,
-    label: `${j.job_company || '?'} • ${j.job_title || 'Position'}`
-  }));
+  useEffect(() => {
+    if (showEditModal || showConfirmModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showEditModal, showConfirmModal]);
 
-  const projectOptions = projects.map(p => ({
-    value: p.id,
-    label: p.project_title || 'Project'
-  }));
+  const saveScroll = () => {
+    if (scrollContainerRef.current) {
+      scrollPosition.current = scrollContainerRef.current.scrollTop;
+    }
+  };
 
-  const filteredJobs = jobs.filter(j => selectedJobs.some(s => s.value === j.id));
-  const filteredProjects = projects.filter(p => selectedProjects.some(s => s.value === p.id));
+  const restoreScroll = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollPosition.current;
+    }
+  };
 
-  // ── Edit Handlers ──────────────────────────────────────────────────
-  const updateNestedField = (path, value) => {
-    setEditedContent(prev => {
+  useEffect(() => {
+    if (showEditModal) {
+      const timer = setTimeout(restoreScroll, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [editedContent, showEditModal]);
+
+  const updateField = (path, value) => {
+    saveScroll();
+    setEditedContent((prev) => {
       const copy = structuredClone(prev);
       const parts = path.split('.');
       let current = copy;
@@ -562,79 +579,133 @@ export default function BriskOliveNewsletterApp() {
     });
   };
 
-  const handleSave = async () => {
-    if (!window.confirm('Save changes to newsletter configuration?')) return;
+  const getChangedFields = (original, modified) => {
+    const changes = {};
 
+    const compareObjects = (obj1, obj2, prefix = '') => {
+      if (!obj1 || !obj2) return;
+
+      Object.keys(obj2).forEach(key => {
+        const path = prefix ? `${prefix}.${key}` : key;
+        const val1 = obj1[key];
+        const val2 = obj2[key];
+
+        if (typeof val2 === 'object' && val2 !== null && !Array.isArray(val2)) {
+          compareObjects(val1, val2, path);
+        } else if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+          changes[path] = val2;
+        }
+      });
+    };
+
+    compareObjects(original, modified);
+    return changes;
+  };
+
+  const performSave = async () => {
     try {
       const docRef = doc(db, 'newsletter_config', 'weekly_config');
-      await updateDoc(docRef, {
-        ...editedContent,
-        // Important: keep original image URLs, not base64
-        images: content.images
-          ? Object.fromEntries(
-              Object.entries(content.images).map(([k]) => [k, contentData?.images?.[k] || ''])
-            )
-          : {}
-      });
+
+      const changes = getChangedFields(content, editedContent);
+
+      if ('images' in changes) {
+        changes.images = Object.fromEntries(
+          Object.entries(changes.images || {}).map(([k, v]) => [
+            k,
+            typeof v === 'string' ? v : content.images?.[k] || ''
+          ])
+        );
+      }
+
+      if (Object.keys(changes).length === 0) {
+        setToast({ show: true, message: 'No changes to save!', type: 'info' });
+        setShowEditModal(false);
+        return;
+      }
+
+      await updateDoc(docRef, changes);
+
+      const newImages = { ...content.images };
+      for (const [key, url] of Object.entries(changes.images || {})) {
+        const base64 = await getBase64FromUrl(url);
+        if (base64) newImages[key] = base64;
+      }
 
       setContent(prev => ({
         ...prev,
         ...editedContent,
-        images: prev.images // keep processed base64 for preview
+        images: newImages,
       }));
 
-      alert('Configuration saved successfully!');
-      setIsEditing(false);
+      setToast({
+        show: true,
+        message: `Successfully saved ${Object.keys(changes).length} change(s)!`,
+        type: 'success'
+      });
+
+      setShowEditModal(false);
     } catch (err) {
       console.error('Save failed:', err);
-      alert('Failed to save changes: ' + err.message);
+      setToast({
+        show: true,
+        message: 'Failed to save: ' + (err.message || 'Unknown error'),
+        type: 'error'
+      });
     }
   };
 
-  const Field = ({ label, path, type = 'text', rows = 3 }) => {
-    const parts = path.split('.');
-    let value = editedContent;
-    for (const p of parts) {
-      value = value?.[p] ?? '';
+  const handleSaveClick = () => {
+    const changes = getChangedFields(content, editedContent);
+    if (Object.keys(changes).length === 0) {
+      setToast({ show: true, message: 'No changes detected!', type: 'info' });
+      return;
     }
-
-    return (
-      <div className="edit-field">
-        <label>{label}</label>
-        {type === 'textarea' ? (
-          <textarea
-            value={value}
-            onChange={e => updateNestedField(path, e.target.value)}
-            rows={rows}
-          />
-        ) : (
-          <input
-            type={type}
-            value={value}
-            onChange={e => updateNestedField(path, e.target.value)}
-          />
-        )}
-      </div>
-    );
+    setShowConfirmModal(true);
   };
+
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast({ show: false, message: '', type: '' });
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  const jobOptions = jobs.map((j) => ({
+    value: j.id,
+    label: `${j.job_company || '?'} • ${j.job_title || 'Position'}`,
+  }));
+
+  const projectOptions = projects.map((p) => ({
+    value: p.id,
+    label: `${p.project_company || '?'} • ${p.project_title || 'Project'}`,
+  }));
+
+  const filteredJobs = jobs.filter((j) => selectedJobs.some((s) => s.value === j.id));
+  const filteredProjects = projects.filter((p) => selectedProjects.some((s) => s.value === p.id));
 
   if (loading) return <div className="loading">Loading newsletter data...</div>;
 
   return (
     <div className="newsletter-app">
+
       <header className="app-header">
         <h1>Weekly Newsletter</h1>
         <button
-          type="button"                    // ← Prevents refresh
-          className="edit-btn"
-          onClick={() => setIsEditing(true)}
+          type="button"
+          className="edit-content-btn"
+          onClick={() => {
+            setEditedContent(structuredClone(content || {}));
+            setShowEditModal(true);
+          }}
         >
           Edit Content
         </button>
       </header>
 
       <div className="selectors-container">
-        <div className="select-card">
+        <div className="select-group">
           <label>Select Jobs ({selectedJobs.length}/{jobOptions.length})</label>
           <Select
             isMulti
@@ -648,7 +719,7 @@ export default function BriskOliveNewsletterApp() {
           />
         </div>
 
-        <div className="select-card">
+        <div className="select-group">
           <label>Select Projects ({selectedProjects.length}/{projectOptions.length})</label>
           <Select
             isMulti
@@ -663,7 +734,7 @@ export default function BriskOliveNewsletterApp() {
         </div>
       </div>
 
-      <div className="preview-container">
+      <div className="pdf-preview-container">
         <PDFViewer className="pdf-viewer">
           <NewsletterDocument
             jobs={filteredJobs}
@@ -685,81 +756,116 @@ export default function BriskOliveNewsletterApp() {
             />
           }
           fileName={`Newsletter_${formatNewsletterDate().replace(/ /g, '_')}.pdf`}
-          className="download-btn"
         >
           {({ loading }) => (
-            <button type="button" disabled={loading} className="download-btn-inner">
+            <button type="button" disabled={loading} className="download-btn">
               {loading ? 'Generating...' : 'Download PDF'}
             </button>
           )}
         </PDFDownloadLink>
       </div>
 
-      {/* ── EDIT MODAL ─────────────────────────────────────────────── */}
-      {isEditing && (
+      {/* ── EDIT MODAL ────────────────────────────────────────────────────── */}
+      {showEditModal && (
         <div className="modal-overlay">
           <div className="edit-modal">
+
             <div className="modal-header">
               <h2>Edit Newsletter Content</h2>
               <button
-                type="button"               // ← Prevents refresh
-                className="close-btn"
-                onClick={() => setIsEditing(false)}
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowEditModal(false)}
               >
                 ×
               </button>
             </div>
 
-            <div className="edit-sections">
+            <div
+              className="modal-content-scroll"
+              ref={scrollContainerRef}
+              onScroll={saveScroll}
+            >
               <section>
                 <h3>Header & Greeting</h3>
-                <Field label="Company Name" path="companyName" />
-                <Field label="Main Title" path="mainTitle" />
-                <Field label="Weekly Subtitle" path="weeklySubtitle" />
-                <Field label="Greeting Message" path="greeting" type="textarea" rows={5} />
+                <EditableField label="Company Name" value={editedContent.companyName} onChange={v => updateField('companyName', v)} />
+                <EditableField label="Main Title" value={editedContent.mainTitle} onChange={v => updateField('mainTitle', v)} />
+                <EditableField label="Weekly Subtitle" value={editedContent.weeklySubtitle} onChange={v => updateField('weeklySubtitle', v)} />
+                <EditableField label="Greeting Message" value={editedContent.greeting} onChange={v => updateField('greeting', v)} type="textarea" rows={6} />
               </section>
 
               <section>
-                <h3>Introduction Section</h3>
-                <Field label="Intro Title" path="intro.title" />
-                <Field label="Intro Text" path="intro.text" type="textarea" rows={8} />
-                <Field label="Clients Intro" path="intro.clientsIntro" type="textarea" rows={4} />
+                <h3>Introduction</h3>
+                <EditableField label="Intro Title" value={editedContent.intro?.title} onChange={v => updateField('intro.title', v)} />
+                <EditableField label="Intro Text" value={editedContent.intro?.text} onChange={v => updateField('intro.text', v)} type="textarea" rows={10} />
+                <EditableField label="Clients Intro Text" value={editedContent.intro?.clientsIntro} onChange={v => updateField('intro.clientsIntro', v)} type="textarea" rows={5} />
               </section>
 
               <section>
                 <h3>Jobs Section</h3>
-                <Field label="Section Title" path="jobsSection.title" />
-                <Field label="Description" path="jobsSection.description" type="textarea" rows={5} />
-                <Field label="Registration Text" path="jobsSection.registrationText" />
-                <Field label="Registration Link" path="jobsSection.registrationLink" />
-                <Field label="Success Story Text" path="jobsSection.successStoryText" type="textarea" rows={4} />
+                <EditableField label="Section Title" value={editedContent.jobsSection?.title} onChange={v => updateField('jobsSection.title', v)} />
+                <EditableField label="Description" value={editedContent.jobsSection?.description} onChange={v => updateField('jobsSection.description', v)} type="textarea" rows={8} />
+                <EditableField label="Registration Text" value={editedContent.jobsSection?.registrationText} onChange={v => updateField('jobsSection.registrationText', v)} />
+                <EditableField label="Registration Link" value={editedContent.jobsSection?.registrationLink} onChange={v => updateField('jobsSection.registrationLink', v)} />
+                <EditableField label="Success Story Text" value={editedContent.jobsSection?.successStoryText} onChange={v => updateField('jobsSection.successStoryText', v)} type="textarea" rows={5} />
+              </section>
+
+              <section>
+                <h3>Temporary Staffing</h3>
+                <EditableField label="Section Title" value={editedContent.tempStaffing?.title} onChange={v => updateField('tempStaffing.title', v)} />
+                <EditableField label="Intro Text" value={editedContent.tempStaffing?.introText} onChange={v => updateField('tempStaffing.introText', v)} type="textarea" rows={6} />
               </section>
 
               <section>
                 <h3>Projects Section</h3>
-                <Field label="Section Title" path="projectsSection.title" />
-                <Field label="Intro Text" path="projectsSection.intro" type="textarea" rows={5} />
-                <Field label="Other Projects Title" path="projectsSection.otherProjectsTitle" />
-                <Field label="Jewar Airport Text" path="projectsSection.jewarText" type="textarea" rows={4} />
-                <Field label="Solar O&M Text" path="projectsSection.solarText" type="textarea" rows={4} />
+                <EditableField label="Section Title" value={editedContent.projectsSection?.title} onChange={v => updateField('projectsSection.title', v)} />
+                <EditableField label="Intro Text" value={editedContent.projectsSection?.intro} onChange={v => updateField('projectsSection.intro', v)} type="textarea" rows={8} />
+                <EditableField label="Other Projects Title" value={editedContent.projectsSection?.otherProjectsTitle} onChange={v => updateField('projectsSection.otherProjectsTitle', v)} />
+                <EditableField label="Jewar Airport Text" value={editedContent.projectsSection?.jewarText} onChange={v => updateField('projectsSection.jewarText', v)} type="textarea" rows={5} />
+                <EditableField label="Solar O&M Text" value={editedContent.projectsSection?.solarText} onChange={v => updateField('projectsSection.solarText', v)} type="textarea" rows={5} />
               </section>
 
-              {/* You can continue adding more Field components for other sections */}
+              <section>
+                <h3>Regional Partners</h3>
+                <EditableField label="Section Title" value={editedContent.regionalPartners?.title} onChange={v => updateField('regionalPartners.title', v)} />
+                <EditableField label="Intro Text" value={editedContent.regionalPartners?.intro} onChange={v => updateField('regionalPartners.intro', v)} type="textarea" rows={6} />
+                <EditableField label="Become Partner Text" value={editedContent.regionalPartners?.becomePartnerText} onChange={v => updateField('regionalPartners.becomePartnerText', v)} type="textarea" rows={4} />
+                <EditableField label="Partner Form Link" value={editedContent.regionalPartners?.partnerFormLink} onChange={v => updateField('regionalPartners.partnerFormLink', v)} />
+              </section>
+
+              <section>
+                <h3>Defence Projects</h3>
+                <EditableField label="Section Title" value={editedContent.defence?.title} onChange={v => updateField('defence.title', v)} />
+                <EditableField label="Main Text" value={editedContent.defence?.text} onChange={v => updateField('defence.text', v)} type="textarea" rows={6} />
+              </section>
+
+              <section>
+                <h3>About Us</h3>
+                <EditableField label="Section Title" value={editedContent.aboutus?.title} onChange={v => updateField('aboutus.title', v)} />
+                <EditableField label="Main Text" value={editedContent.aboutus?.text} onChange={v => updateField('aboutus.text', v)} type="textarea" rows={8} />
+              </section>
+
+              <section>
+                <h3>Footer</h3>
+                <EditableField label="Address" value={editedContent.footer?.address} onChange={v => updateField('footer.address', v)} />
+                <EditableField label="Website URL" value={editedContent.footer?.website} onChange={v => updateField('footer.website', v)} />
+                <EditableField label="Email" value={editedContent.footer?.email} onChange={v => updateField('footer.email', v)} />
+                <EditableField label="Copyright Text" value={editedContent.footer?.copyright} onChange={v => updateField('footer.copyright', v)} />
+              </section>
             </div>
 
-            <div className="modal-actions">
+            <div className="modal-footer">
               <button
-                type="button"               // ← Prevents refresh
-                className="cancel-btn"
-                onClick={() => setIsEditing(false)}
+                type="button"
+                className="modal-cancel-btn"
+                onClick={() => setShowEditModal(false)}
               >
                 Cancel
               </button>
-
               <button
-                type="button"               // ← The most important one!
-                className="save-btn"
-                onClick={handleSave}
+                type="button"
+                className="modal-save-btn"
+                onClick={handleSaveClick}
               >
                 Save Changes
               </button>
@@ -767,8 +873,74 @@ export default function BriskOliveNewsletterApp() {
           </div>
         </div>
       )}
-      
-      {/* Basic CSS - put in separate file or use styled-components in real project */}
+
+      {/* ── CONFIRMATION MODAL ────────────────────────────────────────────── */}
+      {showConfirmModal && (
+        <div className="modal-overlay" style={{ zIndex: 3000 }}>
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '420px',
+              width: '90%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              textAlign: 'center'
+            }}
+          >
+            <h3 style={{ marginTop: 0, color: '#1e40af' }}>Save Changes?</h3>
+            <p style={{ color: '#4b5563', margin: '1rem 0 1.8rem' }}>
+              This will update the newsletter configuration with the modified fields.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                className="modal-cancel-btn"
+                onClick={() => setShowConfirmModal(false)}
+                style={{ minWidth: '100px' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-save-btn"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  performSave();
+                }}
+                style={{ minWidth: '100px' }}
+              >
+                Yes, Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TOAST NOTIFICATION ────────────────────────────────────────────── */}
+      {toast.show && (
+        <div
+          style={{
+      position: 'fixed',
+      top: '24px',                    // ← Changed from bottom
+      right: '24px',
+      padding: '14px 24px',
+      borderRadius: '8px',
+      color: 'white',
+      fontWeight: '500',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+      backgroundColor:
+        toast.type === 'error' ? '#dc2626' :
+        toast.type === 'info' ? '#6b7280' : '#16a34a',
+      zIndex: 4000,
+      transition: 'all 0.4s ease',
+      transform: toast.show ? 'translateY(0)' : 'translateY(-20px)',
+      opacity: toast.show ? 1 : 0,
+    }}
+        >
+          {toast.message}
+        </div>
+      )}
+
+      {/* ── STYLES ───────────────────────────────────────────────────────────── */}
       <style jsx global>{`
         .newsletter-app {
           font-family: 'Segoe UI', system-ui, sans-serif;
@@ -782,31 +954,28 @@ export default function BriskOliveNewsletterApp() {
           justify-content: space-between;
           align-items: center;
           margin-bottom: 2.5rem;
-          gap: 340px;
+          gap: 342px;
         }
 
         .app-header h1 {
-  color: white;                    /* text color */
-  background-color: #1e40af;       /* nice blue background */
-  font-size: 2.9rem;
-  margin: 0;
-  padding: 1.2rem 8rem;           /* some inner spacing - looks better with background */
-  border-radius: 12px;            /* modern rounded corners - you can change to 8px/16px/20px */
-  display: inline-block;          /* important - makes the background hug the text */
-}
+              color: white;
+    background-color: #1e40af;
+    font-size: 2.9rem;
+    margin: 0;
+    padding: 1.2rem 8rem;
+    border-radius: 12px;
+    display: inline-block;
+        }
 
-        .edit-btn {
+        .edit-content-btn {
           background: #1e40af;
           color: white;
           border: none;
           padding: 0.8rem 1.8rem;
           border-radius: 8px;
-          font-size: 1.1rem;
           cursor: pointer;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          font-size: 1.1rem;
         }
-
-        .edit-btn:hover { background: #1e40af; }
 
         .selectors-container {
           display: grid;
@@ -815,26 +984,19 @@ export default function BriskOliveNewsletterApp() {
           margin-bottom: 2.5rem;
         }
 
-        .select-card {
-          background: white;
-          border-radius: 12px;
-          padding: 1.5rem;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        }
-
-        .select-card label {
+        .select-group label {
           display: block;
           font-weight: 600;
-          margin-bottom: 0.8rem;
+          margin-bottom: 0.6rem;
           color: #1e40af;
         }
 
-        .preview-container {
+        .pdf-preview-container {
           border-radius: 12px;
           overflow: hidden;
           box-shadow: 0 8px 30px rgba(0,0,0,0.12);
           margin-bottom: 2rem;
-          height: 800px;
+          height: 900px;
           background: white;
         }
 
@@ -852,15 +1014,16 @@ export default function BriskOliveNewsletterApp() {
           background: #1e40af;
           color: white;
           padding: 1rem 3rem;
+          border: none;
           border-radius: 10px;
-          text-decoration: none;
           font-size: 1.3rem;
-          font-weight: bold;
-          box-shadow: 0 4px 16px rgba(21,128,61,0.3);
-          display: inline-block;
+          cursor: pointer;
         }
 
-        .download-btn:hover { background: #1e40af; }
+        .download-btn:disabled {
+          background: #9ca3af;
+          cursor: not-allowed;
+        }
 
         .modal-overlay {
           position: fixed;
@@ -877,127 +1040,104 @@ export default function BriskOliveNewsletterApp() {
           background: white;
           border-radius: 16px;
           width: 100%;
-          max-width: 1155px;
+          max-width: 1150px;
           max-height: 90vh;
-          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
           box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+          overflow: hidden;
         }
 
         .modal-header {
-          padding: 1.5rem 2rem;
+          padding: 1.4rem 2rem;
           border-bottom: 1px solid #e5e7eb;
           display: flex;
           justify-content: space-between;
           align-items: center;
           position: sticky;
           top: 0;
-          background: white;
           z-index: 10;
         }
 
-        .modal-header h2 {
-          margin: 0;
-          color: #1e40af;
-        }
-
-        .close-btn {
+        .modal-close-btn {
           background: none;
           border: none;
-          font-size: 2rem;
+          font-size: 2.4rem;
           cursor: pointer;
-          color: #6b7280;
+          color: white;
         }
 
-        .edit-sections {
-          padding: 1.5rem 2rem;
+        .modal-content-scroll {
+          flex: 1;
+          overflow-y: auto;
+          padding: 1.6rem 2.2rem;
+          -webkit-overflow-scrolling: touch;
         }
 
-        .edit-sections section {
-          margin-bottom: 2.5rem;
+        .modal-edit-field {
+          margin-bottom: 1.8rem;
         }
 
-        .edit-sections h3 {
-          color: #1e40af;
-          margin: 0 0 1.2rem 0;
-          font-size: 1.4rem;
-          border-bottom: 2px solid #dcfce7;
-          padding-bottom: 0.5rem;
-        }
-
-        .edit-field {
-          margin-bottom: 1.6rem;
-        }
-
-        .edit-field label {
+        .modal-edit-field label {
           display: block;
           font-weight: 600;
-          margin-bottom: 0.5rem;
-          color: #374151;
+          margin-bottom: 0.6rem;
+          color: #1f2937;
         }
 
-        .edit-field input,
-        .edit-field textarea {
+        .modal-edit-field input,
+        .modal-edit-field textarea {
           width: 100%;
-          padding: 0.75rem 1rem;
+          padding: 0.8rem 1rem;
           border: 1px solid #d1d5db;
           border-radius: 8px;
           font-size: 1rem;
           font-family: inherit;
-          background-color: white;
+          background: white;
           color: black;
         }
 
-        .edit-field textarea {
-          min-height: 100px;
+        .modal-edit-field textarea {
+          min-height: 120px;
           resize: vertical;
         }
 
-        .modal-actions {
-          padding: 1.5rem 2rem;
+        .modal-footer {
+          padding: 1.4rem 2rem;
           border-top: 1px solid #e5e7eb;
-          text-align: right;
+          display: flex;
+          justify-content: flex-end;
+          gap: 1rem;
+          background: white;
+          position: sticky;
+          bottom: 0;
+          z-index: 10;
         }
 
-        .cancel-btn, .save-btn {
-          padding: 0.9rem 2rem;
+        .modal-cancel-btn,
+        .modal-save-btn {
+          padding: 0.8rem 1.6rem;
           border-radius: 8px;
-          font-size: 1.05rem;
-          cursor: pointer;
-        }
-
-        .cancel-btn {
-          background: light-red;
           border: none;
-          margin-right: 1rem;
+          cursor: pointer;
+          font-size: 1.05rem;
         }
 
-        .save-btn {
+        .modal-cancel-btn {
+          background: #d1d5db;
+          color: #374151;
+        }
+
+        .modal-save-btn {
           background: #1e40af;
           color: white;
-          border: none;
         }
 
         .loading {
           text-align: center;
-          padding: 8rem 2rem;
+          padding: 8rem 0;
           font-size: 1.4rem;
           color: #4b5563;
-        }
-          .download-btn-inner {
-          background: #1e40af;
-          color: white;
-          padding: 1rem 3rem;
-          border: none;
-          border-radius: 10px;
-          font-size: 1.3rem;
-          font-weight: bold;
-          cursor: pointer;
-          box-shadow: 0 4px 16px rgba(21,128,61,0.3);
-        }
-        
-        .download-btn-inner:disabled {
-          background: #6b7280;
-          cursor: not-allowed;
         }
       `}</style>
     </div>
