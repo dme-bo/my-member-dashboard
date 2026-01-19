@@ -1422,7 +1422,7 @@ footer {
 /* Make category buttons full width inside the container but still centered */
 .header-content {
   width: 100%;
-  max-width: 1000px;  /* Prevents it from stretching too wide */
+  max-width: 1030px;  /* Prevents it from stretching too wide */
   justify-content: center;
 }
 

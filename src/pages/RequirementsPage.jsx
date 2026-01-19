@@ -55,7 +55,9 @@ export default function RequirementsPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [organizationFilter, setOrganizationFilter] = useState("");
-  
+  const [serviceFilter, setServiceFilter] = useState("");
+  const [rankFilter, setRankFilter] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -219,6 +221,9 @@ export default function RequirementsPage() {
           state: doc.data().state || "",
           city: doc.data().city || "",
           category: doc.data().category || "",
+          service: doc.data().service || "",
+          rank: doc.data().rank || "",
+          level: doc.data().level || "",
           ...doc.data(),
         }));
         setMembers(membersList);
@@ -243,6 +248,18 @@ export default function RequirementsPage() {
     () => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(),
     [members]
   );
+  const uniqueServices = useMemo(
+    () => [...new Set(members.map((m) => m.service).filter(Boolean))].sort(),
+    [members]
+  );
+  const uniqueRanks = useMemo(
+    () => [...new Set(members.map((m) => m.rank).filter(Boolean))].sort(),
+    [members]
+  );
+  const uniqueLevels = useMemo(
+    () => [...new Set(members.map((m) => m.level).filter(Boolean))].sort(),
+    [members]
+  );
 
   /* MEMBER FILTERING */
   useEffect(() => {
@@ -261,10 +278,13 @@ export default function RequirementsPage() {
     if (stateFilter) filtered = filtered.filter((m) => m.state === stateFilter);
     if (cityFilter) filtered = filtered.filter((m) => m.city === cityFilter);
     if (organizationFilter) filtered = filtered.filter((m) => m.category === organizationFilter);
+    if (serviceFilter) filtered = filtered.filter((m) => m.service === serviceFilter);
+    if (rankFilter) filtered = filtered.filter((m) => m.rank === rankFilter);
+    if (levelFilter) filtered = filtered.filter((m) => m.level === levelFilter);
 
     setFilteredMembers(filtered);
     setCurrentPage(1);
-  }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, organizationFilter, members]);
+  }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, organizationFilter, serviceFilter, rankFilter, levelFilter, members]);
 
   /* FILTERED REQUIREMENTS */
   const filteredRequirements = useMemo(() => {
@@ -512,6 +532,9 @@ export default function RequirementsPage() {
                     setStateFilter("");
                     setCityFilter("");
                     setOrganizationFilter("");
+                    setServiceFilter("");
+                    setRankFilter("");
+                    setLevelFilter("");
                     setSelectedMemberIds([]);
                     setCurrentPage(1);
                   }}
@@ -540,161 +563,268 @@ export default function RequirementsPage() {
         </div>
       )}
 
+
       {/* ALLOCATE MODAL */}
-      {showAllocateModal && selectedReq && (
-        <div className="modal-overlay" onClick={() => setShowAllocateModal(false)}>
-          <div className="modal-contents allocate-modal" style={{ maxWidth: "900px" }} onClick={(e) => e.stopPropagation()}>
-            <h2>Allocate Members to: <strong>{selectedReq.title}</strong></h2>
-            <p>
-              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
-            </p>
+{showAllocateModal && selectedReq && (
+  <div className="modal-overlay" onClick={() => setShowAllocateModal(false)}>
+    <div className="modal-contents allocate-modal" style={{ maxWidth: "1200px" }} onClick={(e) => e.stopPropagation()}>
+      <h2>Allocate Members to: <strong>{selectedReq.title}</strong></h2>
+      <p>
+        <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
+      </p>
 
-            {selectedReq.status !== "active" && (
-              <div
-                style={{
-                  background: "#fef2f2",
-                  color: "#991b1b",
-                  padding: "12px 16px",
-                  borderRadius: "8px",
-                  margin: "16px 0",
-                  border: "1px solid #fecaca",
-                  fontWeight: "500",
-                }}
-              >
-                <strong>Warning:</strong> This {selectedReq.type} is <strong>closed</strong>. 
-                You cannot allocate new members.
-              </div>
-            )}
+      {selectedReq.status !== "active" && (
+        <div
+          style={{
+            background: "#fef2f2",
+            color: "#991b1b",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            margin: "16px 0",
+            border: "1px solid #fecaca",
+            fontWeight: "500",
+          }}
+        >
+          <strong>Warning:</strong> This {selectedReq.type} is <strong>closed</strong>. 
+          You cannot allocate new members.
+        </div>
+      )}
 
-            {/* Filters */}
-            <div style={{ margin: "24px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div style={{ position: "relative", maxWidth: "500px" }}>
-                <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#999", fontSize: "18px" }} />
-                <input
-                  type="text"
-                  placeholder="Search by name, email, phone, role..."
-                  value={memberSearchTerm}
-                  onChange={(e) => setMemberSearchTerm(e.target.value)}
-                  style={{ width: "100%", padding: "14px 16px 14px 50px", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "16px", backgroundColor: "white",color:"black" }}
-                />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-                <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
-                  <option value="">All Genders</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-                <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
-                  <option value="">All States</option>
-                  {uniqueStates.map((state) => <option key={state} value={state}>{state}</option>)}
-                </select>
-                <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
-                  <option value="">All Cities</option>
-                  {uniqueCities.map((city) => <option key={city} value={city}>{city}</option>)}
-                </select>
-                <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)} style={{ padding: "14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white",color:"black" }}>
-                  <option value="">All Categories</option>
-                  {uniqueOrganizations.map((org) => <option key={org} value={org}>{org}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Members List */}
-            <div className="members-list" style={{ maxHeight: "420px", overflowY: "auto" }}>
-              {paginatedMembers.length === 0 ? (
-                <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
-                  {members.length === 0 ? "Loading members..." : "No members found matching filters."}
-                </p>
-              ) : (
-                paginatedMembers.map((member) => (
-                  <label
-                    key={member.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "16px",
-                      borderBottom: "1px solid #eee",
-                      cursor: "pointer",
-                      borderRadius: "8px",
-                      margin: "4px 0",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedMemberIds.includes(member.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedMemberIds((prev) => [...prev, member.id]);
-                          } else {
-                            setSelectedMemberIds((prev) => prev.filter((id) => id !== member.id));
-                          }
-                        }}
-                        disabled={selectedReq.status !== "active"}
-                        style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1e40af" }}
-                      />
-                      <div>
-                        <strong style={{ fontSize: "16px" }}>{member.name}</strong><br />
-                        <small style={{ color: "#666" }}>
-                          Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
-                        </small>
-                      </div>
+      {/* Main Content Layout */}
+      <div style={{ display: "flex", gap: "20px", margin: "24px 0" }}>
+        {/* Members List and Pagination - Left Side */}
+        <div style={{ flex: 1 }}>
+          {/* Members List */}
+          <div className="members-list" style={{ maxHeight: "500px", overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: "12px", backgroundColor: "white" }}>
+            {paginatedMembers.length === 0 ? (
+              <p style={{ textAlign: "center", padding: "60px", color: "#888" }}>
+                {members.length === 0 ? "Loading members..." : "No members found matching filters."}
+              </p>
+            ) : (
+              paginatedMembers.map((member) => (
+                <label
+                  key={member.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "16px",
+                    borderBottom: "1px solid #eee",
+                    cursor: "pointer",
+                    borderRadius: "8px",
+                    margin: "4px 0",
+                    backgroundColor: selectedMemberIds.includes(member.id) ? "#eff6ff" : "transparent",
+                    transition: "background-color 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (!selectedMemberIds.includes(member.id)) e.currentTarget.style.backgroundColor = "#f9fafb"; }}
+                  onMouseLeave={(e) => { if (!selectedMemberIds.includes(member.id)) e.currentTarget.style.backgroundColor = "transparent"; }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedMemberIds.includes(member.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedMemberIds((prev) => [...prev, member.id]);
+                        } else {
+                          setSelectedMemberIds((prev) => prev.filter((id) => id !== member.id));
+                        }
+                      }}
+                      disabled={selectedReq.status !== "active"}
+                      style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1e40af" }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: "16px" }}>{member.name}</strong><br />
+                      <small style={{ color: "#666" }}>
+                        Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
+                      </small>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedMember(member);
-                        setShowMemberDetailModal(true);
-                      }}
-                      style={{
-                        background: "#1e40af",
-                        color: "white",
-                        border: "none",
-                        padding: "10px 18px",
-                        borderRadius: "8px",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                      }}
-                    >
-                      <FaEye /> View Details
-                    </button>
-                  </label>
-                ))
-              )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedMember(member);
+                      setShowMemberDetailModal(true);
+                    }}
+                    style={{
+                      background: "#1e40af",
+                      color: "white",
+                      border: "none",
+                      padding: "10px 18px",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                    }}
+                  >
+                    <FaEye /> View Details
+                  </button>
+                </label>
+              ))
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "20px 0", flexWrap: "wrap", gap: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <span style={{ fontSize: "14px", color: "#666" }}>Rows per page:</span>
+                <select
+                  value={pageSizeAllocate}
+                  onChange={(e) => {
+                    setPageSizeAllocate(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "2px solid #e2e8f0" }}
+                >
+                  {[100, 500, 1000, 5000, "All"].map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === 1 ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
+                  Previous
+                </button>
+                <span style={{ padding: "8px", fontSize: "14px" }}>Page {currentPage} of {totalPages}</span>
+                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === totalPages ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filters Sidebar - Right Side */}
+        <div style={{ width: "280px", background: "#f8fafc", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <h3 style={{ margin: 0, fontSize: "18px", color: "#1f2937" }}>Filters</h3>
+            <button
+              onClick={() => {
+                setMemberSearchTerm("");
+                setGenderFilter("");
+                setStateFilter("");
+                setCityFilter("");
+                setOrganizationFilter("");
+                setServiceFilter("");
+                setRankFilter("");
+                setLevelFilter("");
+                setCurrentPage(1);
+              }}
+              style={{
+                background: "#ef4444",
+                color: "white",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: "500",
+                cursor: "pointer",
+              }}
+            >
+              Clear All
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            {/* Member Search */}
+            <div style={{ position: "relative" }}>
+              <FaSearch style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
+              <input
+                type="text"
+                placeholder="Search by name, email, phone, role..."
+                value={memberSearchTerm}
+                onChange={(e) => setMemberSearchTerm(e.target.value)}
+                style={{ width: "100%", padding: "12px 12px 12px 40px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+              />
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "20px 0", flexWrap: "wrap", gap: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <span style={{ fontSize: "14px", color: "#666" }}>Rows per page:</span>
-                  <select
-                    value={pageSizeAllocate}
-                    onChange={(e) => {
-                      setPageSizeAllocate(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                    style={{ padding: "8px 12px", borderRadius: "8px", border: "2px solid #e2e8f0" }}
-                  >
-                    {[100, 500, 1000, 5000, "All"].map((size) => (
-                      <option key={size} value={size}>{size}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === 1 ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
-                    Previous
-                  </button>
-                  <span style={{ padding: "8px", fontSize: "14px" }}>Page {currentPage} of {totalPages}</span>
-                  <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === totalPages ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Gender */}
+            <select
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value)}
+              style={{ padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", color: "black", fontSize: "14px" }}
+            >
+              <option value="">All Genders</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+
+            {/* State */}
+            <input
+              list="states-list"
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+              placeholder="Select State"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+            />
+            <datalist id="states-list">
+              {uniqueStates.map((state) => <option key={state} value={state} />)}
+            </datalist>
+
+            {/* City */}
+            <input
+              list="cities-list"
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              placeholder="Select City"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+            />
+            <datalist id="cities-list">
+              {uniqueCities.map((city) => <option key={city} value={city} />)}
+            </datalist>
+
+            {/* Category/Organization */}
+            <input
+              list="organizations-list"
+              value={organizationFilter}
+              onChange={(e) => setOrganizationFilter(e.target.value)}
+              placeholder="Select Category"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+            />
+            <datalist id="organizations-list">
+              {uniqueOrganizations.map((org) => <option key={org} value={org} />)}
+            </datalist>
+
+            {/* Service */}
+            <input
+              list="services-list"
+              value={serviceFilter}
+              onChange={(e) => setServiceFilter(e.target.value)}
+              placeholder="Select Service"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+            />
+            <datalist id="services-list">
+              {uniqueServices.map((service) => <option key={service} value={service} />)}
+            </datalist>
+
+            {/* Rank */}
+            <input
+              list="ranks-list"
+              value={rankFilter}
+              onChange={(e) => setRankFilter(e.target.value)}
+              placeholder="Select Rank"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+            />
+            <datalist id="ranks-list">
+              {uniqueRanks.map((rank) => <option key={rank} value={rank} />)}
+            </datalist>
+
+            {/* Level */}
+            <input
+              list="levels-list"
+              value={levelFilter}
+              onChange={(e) => setLevelFilter(e.target.value)}
+              placeholder="Select Level"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", backgroundColor: "white", color: "black" }}
+            />
+            <datalist id="levels-list">
+              {uniqueLevels.map((level) => <option key={level} value={level} />)}
+            </datalist>
+          </div>
+        </div>
+      </div>
 
             <div className="modal-actions" style={{ marginTop: "32px" }}>
               <button
@@ -1069,6 +1199,9 @@ export default function RequirementsPage() {
               <div><strong>City:</strong> {selectedMember.city || "—"}</div>
               <div><strong>State:</strong> {selectedMember.state || "—"}</div>
               <div><strong>Category:</strong> {selectedMember.category || "—"}</div>
+              <div><strong>Service:</strong> {selectedMember.service || "—"}</div>
+              <div><strong>Rank:</strong> {selectedMember.rank || "—"}</div>
+              <div><strong>Level:</strong> {selectedMember.level || "—"}</div>
               {selectedMember.resume_fileurl && (
                 <div>
                   <strong>Resume:</strong>{" "}

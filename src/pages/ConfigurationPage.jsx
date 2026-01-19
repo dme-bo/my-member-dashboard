@@ -6,352 +6,352 @@
 ////
 ////
 
-// import React, { useState } from 'react';
-// import Papa from 'papaparse';
-// import { getFirestore, collection, doc, setDoc } from 'firebase/firestore';
-// import { getApp } from 'firebase/app';
-// import { Timestamp } from 'firebase/firestore';
+import React, { useState } from 'react';
+import Papa from 'papaparse';
+import { getFirestore, collection, doc, setDoc } from 'firebase/firestore';
+import { getApp } from 'firebase/app';
+import { Timestamp } from 'firebase/firestore';
 
-// const CSVUploadComponent = () => {
-//   const [file, setFile] = useState(null);
-//   const [uploading, setUploading] = useState(false);
-//   const [message, setMessage] = useState('');
-//   const [progress, setProgress] = useState({ current: 0, total: 0 });
+const CSVUploadComponent = () => {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-//   // Password modal state
-//   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
-//   const [passwordInput, setPasswordInput] = useState('');
-//   const [passwordError, setPasswordError] = useState('');
+  // Password modal state
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
-//   const CORRECT_PASSWORD = 'DAA@987';
+  const CORRECT_PASSWORD = 'DAA@987';
 
-//   const db = getFirestore(getApp());
-//   const usersMasterCollection = collection(db, 'usersmaster');
+  const db = getFirestore(getApp());
+  const usersMasterCollection = collection(db, 'usersmaster');
 
-//   const handleFileChange = (e) => {
-//     if (e.target.files && e.target.files[0]) {
-//       setFile(e.target.files[0]);
-//       setMessage('');
-//       setProgress({ current: 0, total: 0 });
-//     }
-//   };
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setMessage('');
+      setProgress({ current: 0, total: 0 });
+    }
+  };
 
-//   const formatDateToDDMMMYYYY = (dateInput) => {
-//     if (!dateInput && dateInput !== 0) return '';
+  const formatDateToDDMMMYYYY = (dateInput) => {
+    if (!dateInput && dateInput !== 0) return '';
 
-//     const dateStr = String(dateInput).trim();
-//     if (!dateStr || dateStr === 'null' || dateStr === 'undefined') return '';
+    const dateStr = String(dateInput).trim();
+    if (!dateStr || dateStr === 'null' || dateStr === 'undefined') return '';
 
-//     const date = new Date(dateStr);
-//     if (isNaN(date.getTime())) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
 
-//     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-//                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-//     const day = String(date.getDate()).padStart(2, '0');
-//     const month = months[date.getMonth()];
-//     const year = date.getFullYear();
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
 
-//     return `${day} ${month} ${year}`;
-//   };
+    return `${day} ${month} ${year}`;
+  };
 
-//   // Trigger password prompt instead of direct upload
-//   const handleUploadClick = () => {
-//     if (!file) {
-//       setMessage('Please select a CSV file first.');
-//       return;
-//     }
-//     setShowPasswordPrompt(true);
-//     setPasswordInput('');
-//     setPasswordError('');
-//   };
+  // Trigger password prompt instead of direct upload
+  const handleUploadClick = () => {
+    if (!file) {
+      setMessage('Please select a CSV file first.');
+      return;
+    }
+    setShowPasswordPrompt(true);
+    setPasswordInput('');
+    setPasswordError('');
+  };
 
-//   // Confirm password and proceed with upload
-//   const confirmUpload = () => {
-//     if (passwordInput === CORRECT_PASSWORD) {
-//       setShowPasswordPrompt(false);
-//       startUpload();
-//     } else {
-//       setPasswordError('Incorrect password. Please try again.');
-//     }
-//   };
+  // Confirm password and proceed with upload
+  const confirmUpload = () => {
+    if (passwordInput === CORRECT_PASSWORD) {
+      setShowPasswordPrompt(false);
+      startUpload();
+    } else {
+      setPasswordError('Incorrect password. Please try again.');
+    }
+  };
 
-//   // Actual upload logic (same as before)
-//   const startUpload = async () => {
-//     setUploading(true);
-//     setMessage('Parsing CSV and uploading one by one...');
-//     setProgress({ current: 0, total: 0 });
+  // Actual upload logic (same as before)
+  const startUpload = async () => {
+    setUploading(true);
+    setMessage('Parsing CSV and uploading one by one...');
+    setProgress({ current: 0, total: 0 });
 
-//     Papa.parse(file, {
-//       header: true,
-//       skipEmptyLines: true,
-//       complete: async (results) => {
-//         const rows = results.data;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data;
 
-//         if (rows.length === 0) {
-//           setMessage('No data found in CSV.');
-//           setUploading(false);
-//           return;
-//         }
+        if (rows.length === 0) {
+          setMessage('No data found in CSV.');
+          setUploading(false);
+          return;
+        }
 
-//         setProgress({ current: 0, total: rows.length });
+        setProgress({ current: 0, total: rows.length });
 
-//         try {
-//           for (let i = 0; i < rows.length; i++) {
-//             const row = rows[i];
+        try {
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
 
-//             const userData = {
-//               full_name: row['Full Name'] || '',
-//               email: row['Email'] || '',
-//               phone_number: row['Mobile Number'] || '',
-//               gender: row['Gender'] || '',
-//               dateofbirth: formatDateToDDMMMYYYY(row['Dob']),
-//               photo_url: row['Profile Photo'] || '',
+            const userData = {
+              full_name: row['Full Name'] || '',
+              email: row['Email'] || '',
+              phone_number: row['Mobile Number'] || '',
+              gender: row['Gender'] || '',
+              dateofbirth: formatDateToDDMMMYYYY(row['Dob']),
+              photo_url: row['Profile Photo'] || '',
 
-//               BOCategory: row['Tags'] || '',
-//               category: row['Category'] || '',
-//               service: row['Service'] || '',
-//               rank: row['Rank'] || '',
-//               level: row['Level'] || '',
-//               branch: row['Branch'] || '',
-//               trade: row['Trade'] || '',
+              BOCategory: row['Tags'] || '',
+              category: row['Category'] || '',
+              service: row['Service'] || '',
+              rank: row['Rank'] || '',
+              level: row['Level'] || '',
+              branch: row['Branch'] || '',
+              trade: row['Trade'] || '',
 
-//               country: row['Country'] || '',
-//               state: row['State'] || '',
-//               city: row['City'] || '',
-//               district: row['District'] || '',
-//               permanent_address: row['Permanent Address'] || '',
+              country: row['Country'] || '',
+              state: row['State'] || '',
+              city: row['City'] || '',
+              district: row['District'] || '',
+              permanent_address: row['Permanent Address'] || '',
 
-//               graduation_course: row['Education'] || '',
-//               graduation_percentage: row['Education']?.match(/\d+/) ? Number(row['Education'].match(/\d+/)[0]) : 0,
-//               percentage11th: row['11th Percentage'] || 0,
-//               percentage12th: row['12th Percentage'] || 0,
+              graduation_course: row['Education'] || '',
+              graduation_percentage: row['Education']?.match(/\d+/) ? Number(row['Education'].match(/\d+/)[0]) : 0,
+              percentage11th: row['11th Percentage'] || 0,
+              percentage12th: row['12th Percentage'] || 0,
 
-//               year_of_commission: row['Year Of Commission'] || '',
-//               course_serial: row['Course Serial'] || '',
-//               date_of_enrollment: formatDateToDDMMMYYYY(row['Date Of Enrollment']),
-//               planned_retirement_date: formatDateToDDMMMYYYY(row['Actual Plan Date Of Retirement']),
-//               actual_retirement_date: formatDateToDDMMMYYYY(row['Actual Retirement']),
+              year_of_commission: row['Year Of Commission'] || '',
+              course_serial: row['Course Serial'] || '',
+              date_of_enrollment: formatDateToDDMMMYYYY(row['Date Of Enrollment']),
+              planned_retirement_date: formatDateToDDMMMYYYY(row['Actual Plan Date Of Retirement']),
+              actual_retirement_date: formatDateToDDMMMYYYY(row['Actual Retirement']),
 
-//               current_ctc: row['Current Ctc'] ? Number(row['Current Ctc']) : 0,
-//               expected_ctc: row['Expected Ctc'] ? Number(row['Expected Ctc']) : 0,
-//               notice_period: row['Notice Period'] || '',
-//               preferred_job_location: row['Preferred Job Location'] || '',
-//               current_location: row['Current Location'] || '',
+              current_ctc: row['Current Ctc'] ? Number(row['Current Ctc']) : 0,
+              expected_ctc: row['Expected Ctc'] ? Number(row['Expected Ctc']) : 0,
+              notice_period: row['Notice Period'] || '',
+              preferred_job_location: row['Preferred Job Location'] || '',
+              current_location: row['Current Location'] || '',
 
-//               it_skills: row['It Skills'] || '',
-//               mba: row['Mba'] || '',
-//               english_proficiency: row['English'] || '',
-//               skills: row['Skills'] || row['Find Skills'] || '',
+              it_skills: row['It Skills'] || '',
+              mba: row['Mba'] || '',
+              english_proficiency: row['English'] || '',
+              skills: row['Skills'] || row['Find Skills'] || '',
 
-//               resume_fileurl: row['CV Attachment'] || '',
-//               aadhaar_number: row['Aadhaar Number'] || '',
-//               pan_number: row['Pan Number'] || '',
-//               govt_id_type: row['Govt Id Type'] || '',
-//               govt_id_number: row['Govt Id Number'] || '',
+              resume_fileurl: row['CV Attachment'] || '',
+              aadhaar_number: row['Aadhaar Number'] || '',
+              pan_number: row['Pan Number'] || '',
+              govt_id_type: row['Govt Id Type'] || '',
+              govt_id_number: row['Govt Id Number'] || '',
 
-//               bank_name: row['Bank Name'] || '',
-//               account_holder: row['Account Holder'] || '',
-//               account_number: row['Account Number'] || '',
-//               ifsc_code: row['IFSC Code'] || '',
+              bank_name: row['Bank Name'] || '',
+              account_holder: row['Account Holder'] || '',
+              account_number: row['Account Number'] || '',
+              ifsc_code: row['IFSC Code'] || '',
 
-//               father_name: row['Father Name'] || '',
-//               mother_name: row['Mother Name'] || '',
+              father_name: row['Father Name'] || '',
+              mother_name: row['Mother Name'] || '',
 
-//               created_time: Timestamp.now(),
-//               registration_date: formatDateToDDMMMYYYY(row['Entry Date'] || new Date()),
+              created_time: Timestamp.now(),
+              registration_date: formatDateToDDMMMYYYY(row['Entry Date']),
 
-//               member_id: row['Member Id']?.trim() || '',
+              member_id: row['Member Id']?.trim() || '',
 
-//               country_code: row['Country Code'] || '',
-//               pincode: row['Pincode'] || '',
-//               open_jobs: row['Open Jobs'] || '',
-//               govt_experience: row['Govt Experience'] || '',
-//               corporate_experience: row['Corporate Experience'] || '',
-//               total_experience: row['Total Experience'] || '',
-//               work_experience: row['Work Experience'] || '',
-//               volunteer_areas: row['VolunteerAreas'] || '',
-//               security_deposit_agreement: row['Security Deposit Agreement'] || '',
-//               tcs_terms_agreement: row['Terms Agreement'] || '',
-//               tcs_agreement: row['Agreement'] || '',
-//             };
+              country_code: row['Country Code'] || '',
+              pincode: row['Pincode'] || '',
+              open_jobs: row['Open Jobs'] || '',
+              govt_experience: row['Govt Experience'] || '',
+              corporate_experience: row['Corporate Experience'] || '',
+              total_experience: row['Total Experience'] || '',
+              work_experience: row['Work Experience'] || '',
+              volunteer_areas: row['VolunteerAreas'] || '',
+              security_deposit_agreement: row['Security Deposit Agreement'] || '',
+              tcs_terms_agreement: row['Terms Agreement'] || '',
+              tcs_agreement: row['Agreement'] || '',
+            };
 
-//             const userRef = doc(usersMasterCollection);
-//             await setDoc(userRef, userData, { merge: true });
+            const userRef = doc(usersMasterCollection);
+            await setDoc(userRef, userData, { merge: true });
 
-//             setProgress(prev => ({ ...prev, current: i + 1 }));
-//           }
+            setProgress(prev => ({ ...prev, current: i + 1 }));
+          }
 
-//           setMessage(`Successfully imported all ${rows.length} users into 'usersmaster'!`);
-//         } catch (error) {
-//           console.error('Upload error:', error);
-//           setMessage(`Error at row ${progress.current + 1}: ${error.message}`);
-//         } finally {
-//           setUploading(false);
-//         }
-//       },
-//       error: (err) => {
-//         setMessage(`CSV Parse Error: ${err.message}`);
-//         setUploading(false);
-//       },
-//     });
-//   };
+          setMessage(`Successfully imported all ${rows.length} users into 'usersmaster'!`);
+        } catch (error) {
+          console.error('Upload error:', error);
+          setMessage(`Error at row ${progress.current + 1}: ${error.message}`);
+        } finally {
+          setUploading(false);
+        }
+      },
+      error: (err) => {
+        setMessage(`CSV Parse Error: ${err.message}`);
+        setUploading(false);
+      },
+    });
+  };
 
-//   return (
-//     <div style={{ padding: '30px', maxWidth: '700px', margin: 'auto', fontFamily: 'Arial' }}>
-//       <h2>Import Members to usersmaster Collection</h2>
-//       {/* <p>
-//         Upload your CSV file (supports large files like 12,000+ rows). 
-//         Each record will be uploaded <strong>individually</strong> with a new auto-generated Firestore ID.
-//       </p> */}
-//       <p style={{ color: 'red', fontWeight: 'bold' }}>
-//         ⚠️ This action is password-protected for security.
-//       </p>
+  return (
+    <div style={{ padding: '30px', maxWidth: '700px', margin: 'auto', fontFamily: 'Arial' }}>
+      <h2>Import Members to usersmaster Collection</h2>
+      {/* <p>
+        Upload your CSV file (supports large files like 12,000+ rows). 
+        Each record will be uploaded <strong>individually</strong> with a new auto-generated Firestore ID.
+      </p> */}
+      <p style={{ color: 'red', fontWeight: 'bold' }}>
+        ⚠️ This action is password-protected for security.
+      </p>
 
-//       <input
-//         type="file"
-//         accept=".csv,text/csv"
-//         onChange={handleFileChange}
-//         disabled={uploading}
-//         style={{ display: 'block', marginBottom: '15px' }}
-//       />
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleFileChange}
+        disabled={uploading}
+        style={{ display: 'block', marginBottom: '15px' }}
+      />
 
-//       <button
-//         onClick={handleUploadClick}
-//         disabled={!file || uploading}
-//         style={{
-//           padding: '10px 20px',
-//           background: uploading ? '#ccc' : '#0066ff',
-//           color: 'white',
-//           border: 'none',
-//           borderRadius: '5px',
-//           cursor: uploading || !file ? 'not-allowed' : 'pointer',
-//         }}
-//       >
-//         {uploading ? 'Uploading & Processing...' : 'Upload CSV (Password Required)'}
-//       </button>
+      <button
+        onClick={handleUploadClick}
+        disabled={!file || uploading}
+        style={{
+          padding: '10px 20px',
+          background: uploading ? '#ccc' : '#0066ff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '5px',
+          cursor: uploading || !file ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {uploading ? 'Uploading & Processing...' : 'Upload CSV (Password Required)'}
+      </button>
 
-//       {progress.total > 0 && (
-//         <div style={{ marginTop: '20px' }}>
-//           <p>Progress: {progress.current} / {progress.total} records processed</p>
-//           <div style={{
-//             width: '100%',
-//             backgroundColor: '#f0f0f0',
-//             borderRadius: '5px',
-//             overflow: 'hidden'
-//           }}>
-//             <div style={{
-//               width: `${(progress.current / progress.total) * 100}%`,
-//               backgroundColor: '#0066ff',
-//               height: '20px',
-//               transition: 'width 0.3s'
-//             }} />
-//           </div>
-//         </div>
-//       )}
+      {progress.total > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <p>Progress: {progress.current} / {progress.total} records processed</p>
+          <div style={{
+            width: '100%',
+            backgroundColor: '#f0f0f0',
+            borderRadius: '5px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              width: `${(progress.current / progress.total) * 100}%`,
+              backgroundColor: '#0066ff',
+              height: '20px',
+              transition: 'width 0.3s'
+            }} />
+          </div>
+        </div>
+      )}
 
-//       {message && (
-//         <p
-//           style={{
-//             marginTop: '20px',
-//             padding: '10px',
-//             background: message.includes('Error') || message.includes('Parse') ? '#ffeeee' : '#eeffee',
-//             borderRadius: '5px',
-//             color: message.includes('Error') || message.includes('Parse') ? 'red' : 'green',
-//           }}
-//         >
-//           {message}
-//         </p>
-//       )}
+      {message && (
+        <p
+          style={{
+            marginTop: '20px',
+            padding: '10px',
+            background: message.includes('Error') || message.includes('Parse') ? '#ffeeee' : '#eeffee',
+            borderRadius: '5px',
+            color: message.includes('Error') || message.includes('Parse') ? 'red' : 'green',
+          }}
+        >
+          {message}
+        </p>
+      )}
 
-//       {/* Password Prompt Modal */}
-//       {showPasswordPrompt && (
-//         <div
-//           style={{
-//             position: 'fixed',
-//             top: 0,
-//             left: 0,
-//             width: '100%',
-//             height: '100%',
-//             backgroundColor: 'rgba(0,0,0,0.6)',
-//             display: 'flex',
-//             alignItems: 'center',
-//             justifyContent: 'center',
-//             zIndex: 1000,
-//           }}
-//         >
-//           <div
-//             style={{
-//               background: 'white',
-//               padding: '30px',
-//               borderRadius: '10px',
-//               width: '90%',
-//               maxWidth: '400px',
-//               boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-//             }}
-//           >
-//             <h3 style={{ marginTop: 0 }}>Enter Password to Proceed</h3>
-//             <p>This action requires authorization.</p>
+      {/* Password Prompt Modal */}
+      {showPasswordPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '30px',
+              borderRadius: '10px',
+              width: '90%',
+              maxWidth: '400px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Enter Password to Proceed</h3>
+            <p>This action requires authorization.</p>
 
-//             <input
-//               type="password"
-//               value={passwordInput}
-//               onChange={(e) => setPasswordInput(e.target.value)}
-//               onKeyDown={(e) => e.key === 'Enter' && confirmUpload()}
-//               placeholder="Enter password"
-//               autoFocus
-//               style={{
-//                 width: '100%',
-//                 padding: '10px',
-//                 fontSize: '16px',
-//                 marginBottom: '10px',
-//                 border: '1px solid #ccc',
-//                 borderRadius: '5px',
-//               }}
-//             />
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && confirmUpload()}
+              placeholder="Enter password"
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontSize: '16px',
+                marginBottom: '10px',
+                border: '1px solid #ccc',
+                borderRadius: '5px',
+              }}
+            />
 
-//             {passwordError && (
-//               <p style={{ color: 'red', margin: '10px 0' }}>{passwordError}</p>
-//             )}
+            {passwordError && (
+              <p style={{ color: 'red', margin: '10px 0' }}>{passwordError}</p>
+            )}
 
-//             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-//               <button
-//                 onClick={() => {
-//                   setShowPasswordPrompt(false);
-//                   setPasswordError('');
-//                 }}
-//                 style={{
-//                   padding: '8px 16px',
-//                   background: '#ccc',
-//                   border: 'none',
-//                   borderRadius: '5px',
-//                   cursor: 'pointer',
-//                 }}
-//               >
-//                 Cancel
-//               </button>
-//               <button
-//                 onClick={confirmUpload}
-//                 style={{
-//                   padding: '8px 16px',
-//                   background: '#0066ff',
-//                   color: 'white',
-//                   border: 'none',
-//                   borderRadius: '5px',
-//                   cursor: 'pointer',
-//                 }}
-//               >
-//                 Confirm Upload
-//               </button>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   );
-// };
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowPasswordPrompt(false);
+                  setPasswordError('');
+                }}
+                style={{
+                  padding: '8px 16px',
+                  background: '#ccc',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmUpload}
+                style={{
+                  padding: '8px 16px',
+                  background: '#0066ff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                }}
+              >
+                Confirm Upload
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
-// export default CSVUploadComponent;
+export default CSVUploadComponent;
 
 
 //
@@ -1901,141 +1901,141 @@
 //NEWS lETTER
 
 
-import React, { useState } from 'react';
-import { db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+// import React, { useState } from 'react';
+// import { db } from '../firebase';
+// import { doc, setDoc } from 'firebase/firestore';
 
-const NewsletterDataMigrator = () => {
-  const [status, setStatus] = useState('');
+// const NewsletterDataMigrator = () => {
+//   const [status, setStatus] = useState('');
 
-  const uploadNewsletterConfig = async () => {
-    setStatus('Uploading...');
+//   const uploadNewsletterConfig = async () => {
+//     setStatus('Uploading...');
     
-   const weeklyTemplate = {
-  // ── Header & Greeting ───────────────────────────────────────
-  mainTitle:        "Jobs & Earning Opportunities for Members",
-  companyName:      "Brisk Olive Business Solutions Pvt Ltd",
-  weeklySubtitle:   "Weekly Update",
-  greeting:         `Dear All,\n\nThere are many exciting earning opportunities for you. Our industry partners are offering us job vacancies, temporary staffing assignments, part-time surveys/audits/consultancies, as well as projects, all to be undertaken by our ex-soldiers and other members. There are also internship and apprenticeship opportunities for your children abroad!\n\nIf you have any questions or need support or advice, please do not hesitate to contact us at members.manager@briskolive.com. Our team is ready to serve, and we look forward to working with you.\n\nWe wish you and your families all the best in the year ahead.\n\nSincerely,\nCol Sunil Prem\nMD & CEO, Brisk Olive Business Solutions Pvt. Ltd.`,
+//    const weeklyTemplate = {
+//   // ── Header & Greeting ───────────────────────────────────────
+//   mainTitle:        "Jobs & Earning Opportunities for Members",
+//   companyName:      "Brisk Olive Business Solutions Pvt Ltd",
+//   weeklySubtitle:   "Weekly Update",
+//   greeting:         `Dear All,\n\nThere are many exciting earning opportunities for you. Our industry partners are offering us job vacancies, temporary staffing assignments, part-time surveys/audits/consultancies, as well as projects, all to be undertaken by our ex-soldiers and other members. There are also internship and apprenticeship opportunities for your children abroad!\n\nIf you have any questions or need support or advice, please do not hesitate to contact us at members.manager@briskolive.com. Our team is ready to serve, and we look forward to working with you.\n\nWe wish you and your families all the best in the year ahead.\n\nSincerely,\nCol Sunil Prem\nMD & CEO, Brisk Olive Business Solutions Pvt. Ltd.`,
 
-  // ── Introduction Section ────────────────────────────────────
-  intro: {
-    title: "A BRIEF INTRODUCTION TO BRISK OLIVE",
-    text:  "Brisk Olive is a company founded by an ex-soldier that offers a wide array of services to its clients, ranging from Job Placements, Temporary Staffing, Surveys, Audits, Data Logging, Market Research, operations and maintenance, project execution, social impact assignments, Sourcing, and Training. We are well-equipped to handle scale assignments through our ex-soldiers field force. Here is a summary of our services:",
-    clientsIntro: "Our Clients: Numerous companies, who are business leaders in their domains, avail our services. Here are a few sample customers."
-  },
+//   // ── Introduction Section ────────────────────────────────────
+//   intro: {
+//     title: "A BRIEF INTRODUCTION TO BRISK OLIVE",
+//     text:  "Brisk Olive is a company founded by an ex-soldier that offers a wide array of services to its clients, ranging from Job Placements, Temporary Staffing, Surveys, Audits, Data Logging, Market Research, operations and maintenance, project execution, social impact assignments, Sourcing, and Training. We are well-equipped to handle scale assignments through our ex-soldiers field force. Here is a summary of our services:",
+//     clientsIntro: "Our Clients: Numerous companies, who are business leaders in their domains, avail our services. Here are a few sample customers."
+//   },
 
-  // ── Images / Assets (use real public URLs or Firebase Storage) ──
-  images: {
-    mainLogo:           "https://briskolive.com/wp-content/uploads/.../logo1.png",
-    servicesSummary:    "https://briskolive.com/wp-content/uploads/.../logo2.png",
-    clientLogos:        "https://briskolive.com/wp-content/uploads/.../logo3.png",
-    successStory1:      "https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=749036470601358",
-    tempStaffingHeader: "https://briskolive.com/wp-content/uploads/.../logo6.png",
-    examInvigilator:    "https://connex-education.com/wp-content/uploads/2025/04/New-Project-18-1.jpg",
-    jewarAirport:       "https://briskolive.com/wp-content/uploads/.../logo9.jpg",
-    solarOandM:         "https://briskolive.com/wp-content/uploads/.../logo7.jpg",
-    defenceProject:     "https://briskolive.com/wp-content/uploads/2023/09/floods-1.jpg",
-    // add more as needed...
-  },
+//   // ── Images / Assets (use real public URLs or Firebase Storage) ──
+//   images: {
+//     mainLogo:           "https://briskolive.com/wp-content/uploads/.../logo1.png",
+//     servicesSummary:    "https://briskolive.com/wp-content/uploads/.../logo2.png",
+//     clientLogos:        "https://briskolive.com/wp-content/uploads/.../logo3.png",
+//     successStory1:      "https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=749036470601358",
+//     tempStaffingHeader: "https://briskolive.com/wp-content/uploads/.../logo6.png",
+//     examInvigilator:    "https://connex-education.com/wp-content/uploads/2025/04/New-Project-18-1.jpg",
+//     jewarAirport:       "https://briskolive.com/wp-content/uploads/.../logo9.jpg",
+//     solarOandM:         "https://briskolive.com/wp-content/uploads/.../logo7.jpg",
+//     defenceProject:     "https://briskolive.com/wp-content/uploads/2023/09/floods-1.jpg",
+//     // add more as needed...
+//   },
 
-  // ── Jobs Section (static parts only) ─────────────────────────
-  jobsSection: {
-    title:              "1. Get jobs across India",
-    description:        "You can get a job through us with companies like Accenture, Amazon, Bharti, Bajaj Electricals, Flipkart, Pharmeasy, etc. A list of open vacancies is given below. To get a job through us, please\nfill in your details in this form: https://forms.gle/UrAKH1y98j3q7QmT6. If your profile fits any of the\nexisting vacancies, we will get back to you. We will also contact you for future opportunities.",
-    registrationLink:   "https://forms.gle/UrAKH1y98j3q7QmT6",
-    registrationText:   "(a) Open Jobs from Brisk Olive",
-    extraNote:          "Please fill out the form",
-    alternativeRegLink: "https://script.google.com/a/briskolive.com/macros/s/AKfycbyrNSun6HSF2nXnET46zTt1g1VNBjBflykFk59hjUHhlnC_R6RbqhyPf_8gTpIJimZF/exec?v=newMember",
-    successStoryText:   "Here's a recent success story - of a veteran placed through Brisk Olive:"
-  },
+//   // ── Jobs Section (static parts only) ─────────────────────────
+//   jobsSection: {
+//     title:              "1. Get jobs across India",
+//     description:        "You can get a job through us with companies like Accenture, Amazon, Bharti, Bajaj Electricals, Flipkart, Pharmeasy, etc. A list of open vacancies is given below. To get a job through us, please\nfill in your details in this form: https://forms.gle/UrAKH1y98j3q7QmT6. If your profile fits any of the\nexisting vacancies, we will get back to you. We will also contact you for future opportunities.",
+//     registrationLink:   "https://forms.gle/UrAKH1y98j3q7QmT6",
+//     registrationText:   "(a) Open Jobs from Brisk Olive",
+//     extraNote:          "Please fill out the form",
+//     alternativeRegLink: "https://script.google.com/a/briskolive.com/macros/s/AKfycbyrNSun6HSF2nXnET46zTt1g1VNBjBflykFk59hjUHhlnC_R6RbqhyPf_8gTpIJimZF/exec?v=newMember",
+//     successStoryText:   "Here's a recent success story - of a veteran placed through Brisk Olive:"
+//   },
 
-  // ── Temp Staffing Section ───────────────────────────────────
-  tempStaffing: {
-    title: "2. Temporary Staffing Assignments for You",
-    introText: `You can work as Exam Invigilators (Temporary Staff) through us, for companies like TCS and Aptech\n\nHundreds of our ex-soldiers are working for 1 to 20 days each month - through Brisk Olive - as part-time invigilators for government exams. Our city-coordinators - who are also ex-soldiers - help them in delivering these duties. For such a duty, you get paid a daily rate - you receive your payment by the end of the following month, for duties delivered by you during this month. If you too want to take on such duties, then please click the link in the last column below for your state. Our staff will get back to you:`,
-    // The table with state-wise links should preferably be moved to its own collection
-    // but for quick migration you can keep important links here:
-    importantLinks: {
-      "Uttar Pradesh": "https://forms.gle/px8C8wGVYiJi5wsH6",
-      "Haryana":       "https://forms.gle/2JeKRCGQ2Hdrrydu9",
-      // ... add more states when needed
-    }
-  },
+//   // ── Temp Staffing Section ───────────────────────────────────
+//   tempStaffing: {
+//     title: "2. Temporary Staffing Assignments for You",
+//     introText: `You can work as Exam Invigilators (Temporary Staff) through us, for companies like TCS and Aptech\n\nHundreds of our ex-soldiers are working for 1 to 20 days each month - through Brisk Olive - as part-time invigilators for government exams. Our city-coordinators - who are also ex-soldiers - help them in delivering these duties. For such a duty, you get paid a daily rate - you receive your payment by the end of the following month, for duties delivered by you during this month. If you too want to take on such duties, then please click the link in the last column below for your state. Our staff will get back to you:`,
+//     // The table with state-wise links should preferably be moved to its own collection
+//     // but for quick migration you can keep important links here:
+//     importantLinks: {
+//       "Uttar Pradesh": "https://forms.gle/px8C8wGVYiJi5wsH6",
+//       "Haryana":       "https://forms.gle/2JeKRCGQ2Hdrrydu9",
+//       // ... add more states when needed
+//     }
+//   },
 
-  // ── Projects Section (static parts) ─────────────────────────
-  projectsSection: {
-    title:              "3. Work in our Projects / Surveys / Audits & Consultancies",
-    intro:              "Apart from jobs and Temporary Staffing opportunities (as mentioned above) you could also earn by doing various projects with us...",
-    otherProjectsTitle: "(b) Some Other Ongoing Projects, being executed by Brisk Olive.",
-    jewarText:          "CSR at Jewar Airport, NIAL Our turn-key project execution teams (of mostly ex-soldiers) are executing diverse projects ranging from CSR (at the upcoming Jewar Airport next to Delhi NCR) to Operations & Maintenance assignments (at Rudrapur in Uttarakhand).",
-    solarText:          "Solar: Our Solar O&M Managers (Operations and Maintenance Manager) are deployed in Rudrapur (Uttarakhand). We will let you know once more new opportunities are available in this field."
-  },
+//   // ── Projects Section (static parts) ─────────────────────────
+//   projectsSection: {
+//     title:              "3. Work in our Projects / Surveys / Audits & Consultancies",
+//     intro:              "Apart from jobs and Temporary Staffing opportunities (as mentioned above) you could also earn by doing various projects with us...",
+//     otherProjectsTitle: "(b) Some Other Ongoing Projects, being executed by Brisk Olive.",
+//     jewarText:          "CSR at Jewar Airport, NIAL Our turn-key project execution teams (of mostly ex-soldiers) are executing diverse projects ranging from CSR (at the upcoming Jewar Airport next to Delhi NCR) to Operations & Maintenance assignments (at Rudrapur in Uttarakhand).",
+//     solarText:          "Solar: Our Solar O&M Managers (Operations and Maintenance Manager) are deployed in Rudrapur (Uttarakhand). We will let you know once more new opportunities are available in this field."
+//   },
 
-  // ── Regional Partners & Defence ─────────────────────────────
-  regionalPartners: {
-    title: "4. Regional Partners",
-    intro: "Brisk Olive has Regional Partners (ex-soldiers) in the following states.",
-    becomePartnerText: "If you too are an enterprising ex-soldier, and want to become our Regional Partner, please fill this form:",
-    partnerFormLink:   "https://script.google.com/a/briskolive.com/macros/s/AKfycbygIXSql_dd18Rv4lxclcmN9N8F_VrAwPrXCML8X5DiO5z4zuNxmascocMxnHPKjAYc/exec?v=newMember"
-  },
+//   // ── Regional Partners & Defence ─────────────────────────────
+//   regionalPartners: {
+//     title: "4. Regional Partners",
+//     intro: "Brisk Olive has Regional Partners (ex-soldiers) in the following states.",
+//     becomePartnerText: "If you too are an enterprising ex-soldier, and want to become our Regional Partner, please fill this form:",
+//     partnerFormLink:   "https://script.google.com/a/briskolive.com/macros/s/AKfycbygIXSql_dd18Rv4lxclcmN9N8F_VrAwPrXCML8X5DiO5z4zuNxmascocMxnHPKjAYc/exec?v=newMember"
+//   },
 
-  defence: {
-    title: "6. Defence Projects",
-    text:  "Brisk Olive is also doing Defence Projects for the Indian Army.\nHere are some interesting products built by us.\nThe Rapid Folding Floating Foot Assault Bridge for the Indian Army.\nIn partnership with the Ministry of Defence Production, we have developed a unique foot assault bridge, for our dismounted soldiers to attack an enemy across a water obstacle. This patented bridge is man portable and can be launched extremely fast across obstacles up to 50 to 100 meters wide.\nApart from the Indian Army, the bridge provides a versatile solution to our Paramilitary Forces, and Disaster Relief forces at the Center and State levels, to instantly restore communications and provide relief to affected communities."
-  },
+//   defence: {
+//     title: "6. Defence Projects",
+//     text:  "Brisk Olive is also doing Defence Projects for the Indian Army.\nHere are some interesting products built by us.\nThe Rapid Folding Floating Foot Assault Bridge for the Indian Army.\nIn partnership with the Ministry of Defence Production, we have developed a unique foot assault bridge, for our dismounted soldiers to attack an enemy across a water obstacle. This patented bridge is man portable and can be launched extremely fast across obstacles up to 50 to 100 meters wide.\nApart from the Indian Army, the bridge provides a versatile solution to our Paramilitary Forces, and Disaster Relief forces at the Center and State levels, to instantly restore communications and provide relief to affected communities."
+//   },
 
-  aboutus:{
-    tittle:"About Brisk Olive - Your Partner in Growth ",
-    text: "Brisk Olive stands as a pioneer in the field of consultancy and operational support,providing an unmatched advantage through our 30,000+ strong community of skilledex-soldiers. Our unique strength lies in our highly reliable operational field force, eachmember possessing 15 to 20 years of experience across various domains. This expertise translates into exceptional reach, scale, and quality, ensuring that we consistently deliver on-time, on-cost, and on-quality results."
-  },
+//   aboutus:{
+//     tittle:"About Brisk Olive - Your Partner in Growth ",
+//     text: "Brisk Olive stands as a pioneer in the field of consultancy and operational support,providing an unmatched advantage through our 30,000+ strong community of skilledex-soldiers. Our unique strength lies in our highly reliable operational field force, eachmember possessing 15 to 20 years of experience across various domains. This expertise translates into exceptional reach, scale, and quality, ensuring that we consistently deliver on-time, on-cost, and on-quality results."
+//   },
 
-  // ── Footer & General Links ──────────────────────────────────
-  footer: {
-    address:    "G-203 Sector 63 Noida Uttar Pradesh India",
-    website:    "https://briskolive.com",
-    email:      "info@briskolive.com",
-    copyright:  "© 2026 Brisk Olive Business Solutions Pvt. Ltd.",
-    quickLinks: [
-      { text: "About Us",              url: "https://briskolive.com/about/" },
-      { text: "Expert Field Services", url: "https://briskolive.com/expert-field-services/" },
-      { text: "Recruitment Services",  url: "https://briskolive.com/recruitment/" },
-      { text: "Members Page",          url: "https://briskolive.com/members-area/" },
-      { text: "Contact Us",            url: "https://briskolive.com/contact/" },
-    ]
-  }
-};
+//   // ── Footer & General Links ──────────────────────────────────
+//   footer: {
+//     address:    "G-203 Sector 63 Noida Uttar Pradesh India",
+//     website:    "https://briskolive.com",
+//     email:      "info@briskolive.com",
+//     copyright:  "© 2026 Brisk Olive Business Solutions Pvt. Ltd.",
+//     quickLinks: [
+//       { text: "About Us",              url: "https://briskolive.com/about/" },
+//       { text: "Expert Field Services", url: "https://briskolive.com/expert-field-services/" },
+//       { text: "Recruitment Services",  url: "https://briskolive.com/recruitment/" },
+//       { text: "Members Page",          url: "https://briskolive.com/members-area/" },
+//       { text: "Contact Us",            url: "https://briskolive.com/contact/" },
+//     ]
+//   }
+// };
 
-    try {
-      // 2. Push to Firestore (using 'weekly_config' as the document ID)
-      await setDoc(doc(db, 'newsletter_config', 'weekly_config'), weeklyTemplate);
-      setStatus('Successfully uploaded all data to Firebase!');
-    } catch (error) {
-      console.error("Error uploading data: ", error);
-      setStatus('Error: ' + error.message);
-    }
-  };
+//     try {
+//       // 2. Push to Firestore (using 'weekly_config' as the document ID)
+//       await setDoc(doc(db, 'newsletter_config', 'weekly_config'), weeklyTemplate);
+//       setStatus('Successfully uploaded all data to Firebase!');
+//     } catch (error) {
+//       console.error("Error uploading data: ", error);
+//       setStatus('Error: ' + error.message);
+//     }
+//   };
 
-  return (
-    <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px', margin: '20px' }}>
-      <h3>Database Migration Tool</h3>
-      <p>Click the button below to push all hardcoded text and image URLs to Firestore.</p>
-      <button 
-        onClick={uploadNewsletterConfig}
-        style={{
-          padding: '10px 20px',
-          backgroundColor: '#4a7c2c',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer'
-        }}
-      >
-        Push All Data to DB
-      </button>
-      <p><strong>Status:</strong> {status}</p>
-    </div>
-  );
-};
+//   return (
+//     <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px', margin: '20px' }}>
+//       <h3>Database Migration Tool</h3>
+//       <p>Click the button below to push all hardcoded text and image URLs to Firestore.</p>
+//       <button 
+//         onClick={uploadNewsletterConfig}
+//         style={{
+//           padding: '10px 20px',
+//           backgroundColor: '#4a7c2c',
+//           color: 'white',
+//           border: 'none',
+//           borderRadius: '4px',
+//           cursor: 'pointer'
+//         }}
+//       >
+//         Push All Data to DB
+//       </button>
+//       <p><strong>Status:</strong> {status}</p>
+//     </div>
+//   );
+// };
 
-export default NewsletterDataMigrator;
+// export default NewsletterDataMigrator;
