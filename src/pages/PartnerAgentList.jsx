@@ -283,14 +283,14 @@ export default function PartnerAgentListPage() {
           <h1 style={{ margin: 0 }}>Partner Agent List</h1>
           <div style={{
             backgroundColor: "#dbeafe",
-            color: "#1e40af",
+            color: "#1976d2",
             padding: "12px 24px",
             borderRadius: "12px",
             fontSize: "20px",
             fontWeight: "700",
             minWidth: "220px",
             textAlign: "center",
-            border: "3px solid #1e40af",
+            border: "3px solid #1976d2",
           }}>
             Total Agents: <strong>{loading ? "—" : totalItems}</strong>
           </div>
@@ -411,7 +411,7 @@ export default function PartnerAgentListPage() {
                     onClick={() => setCurrentPage(p => p - 1)}
                     style={{
                       padding: "8px 14px",
-                      background: "#1e40af",
+                      background: "#1976d2",
                       color: "#fff",
                       border: "none",
                       borderRadius: "4px",
@@ -426,7 +426,7 @@ export default function PartnerAgentListPage() {
                     onClick={() => setCurrentPage(p => p + 1)}
                     style={{
                       padding: "8px 14px",
-                      background: "#1e40af",
+                      background: "#1976d2",
                       color: "#fff",
                       border: "none",
                       borderRadius: "4px",
@@ -507,7 +507,7 @@ export default function PartnerAgentListPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1e40af",
+                  backgroundColor: "#1976d2",
                   color: "#fff",
                   display: "flex",
                   alignItems: "center",
@@ -541,8 +541,8 @@ export default function PartnerAgentListPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1e40af" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1e40af" : "none",
+                      color: activeTab === tab ? "#1976d2" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #1976d2" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -618,7 +618,7 @@ export default function PartnerAgentListPage() {
                                   <input type="text" value={note.contactPerson} readOnly style={{
                                     width: "100%", padding: "10px", borderRadius: "6px",
                                     border: "1px solid #3b82f6", backgroundColor: "#eff6ff",
-                                    fontWeight: "500", color: "#1e40af",
+                                    fontWeight: "500", color: "#1976d2",
                                   }} />
                                 </div>
                                 <div style={{ flex: 2 }}>
@@ -724,7 +724,7 @@ export default function PartnerAgentListPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1e40af",
+                    background: "#1976d2",
                     color: "#fff",
                     border: "none",
                     borderRadius: "6px",

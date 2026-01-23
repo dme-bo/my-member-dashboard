@@ -18,7 +18,7 @@ body {
 /* ====================== SIDEBAR ====================== */
 .sidebar {
   width: 260px;
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 20px;
   position: fixed;
@@ -39,7 +39,7 @@ body {
   width: 50px;
   height: 50px;
   background: white;
-  color: #1e40af;
+  color: #1976d2;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -72,7 +72,7 @@ body {
 
 /* ====================== DASHBOARD PAGE ====================== */
 .top-header {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 20px 119px;
   border-radius: 12px;
@@ -129,7 +129,7 @@ body {
 
 .btn.active {
   background: white;
-  color: #1e40af;
+  color: #1976d2;
   font-weight: bold;
 }
 
@@ -181,7 +181,7 @@ body {
 }
 
 .blue {
-  color: #1e40af;
+  color: #1976d2;
 }
 
 .green {
@@ -220,10 +220,10 @@ body {
 }
 
 .table-container h3 {
-  color: #1e40af;
+  color: #1976d2;
   margin-bottom: 15px;
   padding-bottom: 10px;
-  border-bottom: 3px solid #1e40af;
+  border-bottom: 3px solid #1976d2;
   font-size: 18px;
 }
 
@@ -233,7 +233,7 @@ table {
 }
 
 th {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 12px;
   text-align: left;
@@ -262,7 +262,7 @@ tr:hover {
 
 .page-header h1 {
   font-size: 28px;
-  color: #1e40af;
+  color: #1976d2;
 }
 
 .page-headers {
@@ -273,7 +273,7 @@ tr:hover {
 
 .page-headers h1 {
   font-size: 28px;
-  color: #1e40af;
+  color: #1976d2;
 }
 
 .header-actions {
@@ -282,7 +282,7 @@ tr:hover {
 }
 
 .total-count-badge {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 12px 28px;
   border-radius: 30px;
@@ -332,7 +332,7 @@ tr:hover {
 }
 
 .table-wrapper th {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 16px;
   text-align: left;
@@ -400,7 +400,7 @@ footer {
 
 .modal-header {
   padding: 20px 25px;
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   border-radius: 16px 16px 0 0;
   display: flex;
@@ -455,7 +455,7 @@ footer {
 }
 
 .view-btn {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   border: none;
   padding: 6px 14px;
@@ -472,7 +472,7 @@ footer {
 .modal-tabs {
   display: flex;
   border-bottom: 2px solid #eee;
-  background: #1e40af;
+  background: #1976d2;
 }
 
 .tab {
@@ -578,7 +578,7 @@ footer {
 
 .filter-header h3 {
   font-size: 18px;
-  color: #1e40af;
+  color: #1976d2;
 }
 
 .clear-all {
@@ -700,7 +700,7 @@ footer {
 
 .filter-header h3 {
   font-size: 18px;
-  color: #1e40af;
+  color: #1976d2;
 }
 
 .clear-all {
@@ -732,8 +732,8 @@ footer {
   
   /* --- STYLES FOR THE FIX --- */
   background-color: #f9fafb; /* Light gray background to distinguish it */
-  color: #1e40af; /* Blue text color to match the theme */
-  border: 1px solid #1e40af; /* Blue border for emphasis */
+  color: #1976d2; /* Blue text color to match the theme */
+  border: 1px solid #1976d2; /* Blue border for emphasis */
   font-weight: 500;
   appearance: none; /* Remove default browser styling */
   background-repeat: no-repeat;
@@ -776,7 +776,7 @@ footer {
 .filter-header h3 {
   font-size: 20px;
   font-weight: 700;
-  color: #1e40af;
+  color: #1976d2;
   display: flex;
   align-items: center;
   
@@ -1154,7 +1154,7 @@ footer {
 
 /* TempStaffPage.css */
 .temp-staff-table.clean th {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 14px 12px;
   font-weight: 600;
@@ -1302,7 +1302,7 @@ footer {
   padding: 16px;
   background: #f8fafc;
   border-radius: 12px;
-  border-left: 4px solid #1e40af;
+  border-left: 4px solid #1976d2;
 }
 
 .modal-actions {
@@ -1322,7 +1322,7 @@ footer {
 }
 
 .btn.primary {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
 }
 
@@ -1348,7 +1348,7 @@ footer {
     display: flex;
     gap: 12px;                  /* Creates consistent spacing between buttons */
     padding: 16px;
-    background-color: #1e40af;  /* Blue background (Tailwind's blue-500) */
+    background-color: #1976d2;  /* Blue background (Tailwind's blue-500) */
     border-radius: 12px;
     flex-wrap: wrap;            /* Allows wrapping on small screens */
     justify-content: center;
@@ -1359,7 +1359,7 @@ footer {
     border: none;
     border-radius: 8px;
     background-color: white;
-    color: #1e40af;
+    color: #1976d2;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -1372,7 +1372,7 @@ footer {
   }
 
   .filter-btn.active {
-    background-color: #1e40af;
+    background-color: #1976d2;
     color: white;
     font-weight: 600;
   }
@@ -1405,7 +1405,7 @@ footer {
   font-size: 28px;
   color: #1e293b;
   margin: 0;
-  background-color: #1e40af;
+  background-color: #1976d2;
   width: 853px;
   border-radius: 7px;
   color: white;
@@ -1491,7 +1491,7 @@ body {
 
 .filter-btn.active,
 .filter-btn:hover {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
 }
 
@@ -1695,12 +1695,12 @@ body {
 }
 
 .btn.primary {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
 }
 
 .btn.primary:hover {
-  background: #1e40af;
+  background: #1976d2;
 }
 
 .btn.secondary {
@@ -1865,8 +1865,8 @@ body {
 
 /* Optional: Active state for current page (if you ever add page numbers) */
 .nav-btn.active {
-  background-color: #1e40af;
-  border-color: #1e40af;
+  background-color: #1976d2;
+  border-color: #1976d2;
   color: white;
 }
 
@@ -2090,11 +2090,11 @@ body {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #1e40af; /* Your blue header color */
+  background: #1976d2; /* Your blue header color */
 }
 
 .members-table thead th {
-  background: #1e40af;
+  background: #1976d2;
   color: white;
   padding: 16px;
   text-align: left;
@@ -2112,7 +2112,7 @@ body {
 }
 
 .members-table thead th.sticky-name {
-  background: #1e40af; /* Header stays blue */
+  background: #1976d2; /* Header stays blue */
   z-index: 3;
 }
 
@@ -2217,7 +2217,7 @@ body {
   padding: 10px 18px;
   border-radius: 8px;
   border: none;
-  background-color: #1e40af;
+  background-color: #1976d2;
   color: white;
   cursor: pointer;
   font-weight: 600;

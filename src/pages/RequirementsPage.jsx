@@ -364,7 +364,7 @@ export default function RequirementsPage() {
         <div className="header-content">
           <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
-            {["All", "Open", "Closed","TCS", "Projects", "Recruitment"].map((filter) => (
+            {["All", "Open", "Closed", "TCS", "Projects", "Recruitment"].map((filter) => (
               <button
                 key={filter}
                 className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -466,7 +466,7 @@ export default function RequirementsPage() {
                           fontWeight: "600",
                         }}
                       >
-                        {req.type === "project" ? <><FaProjectDiagram style={{ marginRight: 4 }} /> Project</> : "Job"}
+                        {req.type === "project" ? <><FaProjectDiagram style={{ marginRight: 4 }} /> Project</> : "Recruitment"}
                       </span>
                     </div>
                   </div>
@@ -547,7 +547,7 @@ export default function RequirementsPage() {
                 className="btn outline"
                 style={{
                   marginLeft: selectedReq.status === "active" ? "12px" : "0",
-                  backgroundColor: "#1e40af",
+                  backgroundColor: "#1976d2",
                 }}
                 onClick={() => setShowAllocatedMembersModal(true)}
               >
@@ -631,7 +631,7 @@ export default function RequirementsPage() {
                         }
                       }}
                       disabled={selectedReq.status !== "active"}
-                      style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1e40af" }}
+                      style={{ marginRight: "20px", transform: "scale(1.4)", accentColor: "#1976d2" }}
                     />
                     <div>
                       <strong style={{ fontSize: "16px" }}>{member.name}</strong><br />
@@ -648,7 +648,7 @@ export default function RequirementsPage() {
                       setShowMemberDetailModal(true);
                     }}
                     style={{
-                      background: "#1e40af",
+                      background: "#1976d2",
                       color: "white",
                       border: "none",
                       padding: "10px 18px",
@@ -684,11 +684,11 @@ export default function RequirementsPage() {
                 </select>
               </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === 1 ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
+                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === 1 ? "#e5e7eb" : "#1976d2", color: "white", border: "none" }}>
                   Previous
                 </button>
                 <span style={{ padding: "8px", fontSize: "14px" }}>Page {currentPage} of {totalPages}</span>
-                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === totalPages ? "#e5e7eb" : "#1e40af", color: "white", border: "none" }}>
+                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "8px 16px", borderRadius: "8px", background: currentPage === totalPages ? "#e5e7eb" : "#1976d2", color: "white", border: "none" }}>
                   Next
                 </button>
               </div>
@@ -928,7 +928,7 @@ export default function RequirementsPage() {
                             setShowMemberDetailModal(true);
                           }}
                           style={{
-                            background: "#1e40af",
+                            background: "#1976d2",
                             color: "white",
                             border: "none",
                             padding: "10px 18px",
@@ -1134,7 +1134,7 @@ export default function RequirementsPage() {
                                       setShowMemberDetailModal(true);
                                     }}
                                     style={{
-                                      background: "#1e40af",
+                                      background: "#1976d2",
                                       color: "white",
                                       border: "none",
                                       padding: "6px 12px",
@@ -1205,7 +1205,7 @@ export default function RequirementsPage() {
               {selectedMember.resume_fileurl && (
                 <div>
                   <strong>Resume:</strong>{" "}
-                  <a href={selectedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#1e40af" }}>
+                  <a href={selectedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>
                     View Resume
                   </a>
                 </div>

@@ -565,7 +565,7 @@ export default function MemberDetailModal({ member, onClose }) {
                                   border: "1px solid #3b82f6",
                                   backgroundColor: "#eff6ff",
                                   fontWeight: "500",
-                                  color: "#1e40af",
+                                  color: "#1976d2",
                                 }}
                               />
                             </div>

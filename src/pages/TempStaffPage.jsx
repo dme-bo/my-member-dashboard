@@ -362,7 +362,7 @@ export default function TempStaffPage() {
             }}
             style={{
               backgroundColor: viewMode === "applications" ? "#dbeafe" : "#eee",
-              color: viewMode === "applications" ? "#1e40af" : "black",
+              color: viewMode === "applications" ? "#1976d2" : "black",
               padding: "12px 24px",
               borderRadius: "12px",
               fontSize: "20px",
@@ -370,7 +370,7 @@ export default function TempStaffPage() {
               minWidth: "220px",
               textAlign: "center",
               cursor: "pointer",
-              border: viewMode === "applications" ? "3px solid #1e40af" : "none",
+              border: viewMode === "applications" ? "3px solid #1976d2" : "none",
               transition: "all 0.3s",
             }}
           >
@@ -508,7 +508,7 @@ export default function TempStaffPage() {
                 onClick={() => setCurrentPage((p) => p - 1)}
                 style={{
                   padding: "8px 14px",
-                  background: "#1e40af",
+                  background: "#1976d2",
                   color: "#fff",
                   border: "none",
                   borderRadius: "4px",
@@ -523,7 +523,7 @@ export default function TempStaffPage() {
                 onClick={() => setCurrentPage((p) => p + 1)}
                 style={{
                   padding: "8px 14px",
-                  background: "#1e40af",
+                  background: "#1976d2",
                   color: "#fff",
                   border: "none",
                   borderRadius: "4px",
@@ -604,7 +604,7 @@ export default function TempStaffPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1e40af",
+                  backgroundColor: "#1976d2",
                   color: "#fff",
                   display: "flex",
                   alignItems: "center",
@@ -643,8 +643,8 @@ export default function TempStaffPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1e40af" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1e40af" : "none",
+                      color: activeTab === tab ? "#1976d2" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #1976d2" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -824,7 +824,7 @@ export default function TempStaffPage() {
                                       border: "1px solid #3b82f6",
                                       backgroundColor: "#eff6ff",
                                       fontWeight: "500",
-                                      color: "#1e40af",
+                                      color: "#1976d2",
                                     }}
                                   />
                                 </div>
@@ -977,7 +977,7 @@ export default function TempStaffPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1e40af",
+                    background: "#1976d2",
                     color: "#fff",
                     border: "none",
                     borderRadius: "6px",

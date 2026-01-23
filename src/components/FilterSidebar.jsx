@@ -7,7 +7,7 @@ export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
   return (
     <div className="filter-sidebar" style={{ width: "320px", padding: "20px", background: "#f8fafc", borderLeft: "1px solid #eee", height: "fit-content" }}>
       <div style={{ marginBottom: "24px" }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: "18px", color: "#1e40af" }}>Filters</h3>
+        <h3 style={{ margin: "0 0 16px", fontSize: "18px", color: "#1976d2" }}>Filters</h3>
         <button
           onClick={clearFilters}
           style={{

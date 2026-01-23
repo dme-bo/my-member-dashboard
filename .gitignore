@@ -25,3 +25,8 @@ dist-ssr
 
 .vercel
 .env*.local
+
+# Firebase credentials (CRITICAL - YOUR LEAKED FILE)
+firebase.js
+firebase.config.js
+firebase.json

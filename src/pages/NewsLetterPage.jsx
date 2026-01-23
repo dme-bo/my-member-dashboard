@@ -888,7 +888,7 @@ export default function BriskOliveNewsletterApp() {
               textAlign: 'center'
             }}
           >
-            <h3 style={{ marginTop: 0, color: '#1e40af' }}>Save Changes?</h3>
+            <h3 style={{ marginTop: 0, color: '#1976d2' }}>Save Changes?</h3>
             <p style={{ color: '#4b5563', margin: '1rem 0 1.8rem' }}>
               This will update the newsletter configuration with the modified fields.
             </p>
@@ -959,7 +959,7 @@ export default function BriskOliveNewsletterApp() {
 
         .app-header h1 {
               color: white;
-    background-color: #1e40af;
+    background-color: #1976d2;
     font-size: 2.9rem;
     margin: 0;
     padding: 1.2rem 8rem;
@@ -968,7 +968,7 @@ export default function BriskOliveNewsletterApp() {
         }
 
         .edit-content-btn {
-          background: #1e40af;
+          background: #1976d2;
           color: white;
           border: none;
           padding: 0.8rem 1.8rem;
@@ -988,7 +988,7 @@ export default function BriskOliveNewsletterApp() {
           display: block;
           font-weight: 600;
           margin-bottom: 0.6rem;
-          color: #1e40af;
+          color: #1976d2;
         }
 
         .pdf-preview-container {
@@ -1011,7 +1011,7 @@ export default function BriskOliveNewsletterApp() {
         }
 
         .download-btn {
-          background: #1e40af;
+          background: #1976d2;
           color: white;
           padding: 1rem 3rem;
           border: none;
@@ -1129,7 +1129,7 @@ export default function BriskOliveNewsletterApp() {
         }
 
         .modal-save-btn {
-          background: #1e40af;
+          background: #1976d2;
           color: white;
         }
 

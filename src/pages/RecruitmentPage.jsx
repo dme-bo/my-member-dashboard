@@ -320,14 +320,14 @@ export default function RecruitmentPage() {
           <div
             style={{
               backgroundColor: "#dbeafe",
-              color: "#1e40af",
+              color: "#1976d2",
               padding: "12px 24px",
               borderRadius: "12px",
               fontSize: "20px",
               fontWeight: "700",
               minWidth: "220px",
               textAlign: "center",
-              border: "3px solid #1e40af",
+              border: "3px solid #1976d2",
             }}
           >
             Total Applications: <strong>{loading ? "—" : totalItems}</strong>
@@ -460,7 +460,7 @@ export default function RecruitmentPage() {
                     onClick={() => setCurrentPage((p) => p - 1)}
                     style={{
                       padding: "8px 14px",
-                      background: "#1e40af",
+                      background: "#1976d2",
                       color: "#fff",
                       border: "none",
                       borderRadius: "4px",
@@ -477,7 +477,7 @@ export default function RecruitmentPage() {
                     onClick={() => setCurrentPage((p) => p + 1)}
                     style={{
                       padding: "8px 14px",
-                      background: "#1e40af",
+                      background: "#1976d2",
                       color: "#fff",
                       border: "none",
                       borderRadius: "4px",
@@ -560,7 +560,7 @@ export default function RecruitmentPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1e40af",
+                  backgroundColor: "#1976d2",
                   color: "#fff",
                   display: "flex",
                   alignItems: "center",
@@ -594,8 +594,8 @@ export default function RecruitmentPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1e40af" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1e40af" : "none",
+                      color: activeTab === tab ? "#1976d2" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #1976d2" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -654,8 +654,8 @@ export default function RecruitmentPage() {
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Client</td><td>{selectedCandidate.client || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Job Location</td><td>{selectedCandidate.job_location || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Details / Remarks</td><td>{selectedCandidate.details || selectedCandidate.remarks || "-"}</td></tr>
-                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>CV Link</td><td>{selectedCandidate.cv_link ? <a href={selectedCandidate.cv_link} target="_blank" rel="noopener noreferrer" style={{ color: "#1e40af" }}>Open CV</a> : "-"}</td></tr>
-                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>ERP Link</td><td>{selectedCandidate.erp_link ? <a href={selectedCandidate.erp_link} target="_blank" rel="noopener noreferrer" style={{ color: "#1e40af" }}>Open ERP</a> : "-"}</td></tr>
+                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>CV Link</td><td>{selectedCandidate.cv_link ? <a href={selectedCandidate.cv_link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>Open CV</a> : "-"}</td></tr>
+                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>ERP Link</td><td>{selectedCandidate.erp_link ? <a href={selectedCandidate.erp_link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>Open ERP</a> : "-"}</td></tr>
                     </tbody>
                   </table>
                 )}
@@ -729,7 +729,7 @@ export default function RecruitmentPage() {
                                   <label style={{ fontSize: "13px", color: "#6b7280" }}>Candidate Name</label>
                                   <input type="text" value={note.contactPerson} readOnly style={{
                                     width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #3b82f6",
-                                    backgroundColor: "#eff6ff", fontWeight: "500", color: "#1e40af",
+                                    backgroundColor: "#eff6ff", fontWeight: "500", color: "#1976d2",
                                   }} />
                                 </div>
                                 <div style={{ flex: 2 }}>
@@ -836,7 +836,7 @@ export default function RecruitmentPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1e40af",
+                    background: "#1976d2",
                     color: "#fff",
                     border: "none",
                     borderRadius: "6px",
