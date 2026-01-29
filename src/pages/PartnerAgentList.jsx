@@ -280,7 +280,6 @@ export default function PartnerAgentListPage() {
           gap: "15px",
           marginBottom: "20px"
         }}>
-          <h1 style={{ margin: 0 }}>Partner Agent List</h1>
           <div style={{
             backgroundColor: "#dbeafe",
             color: "#1976d2",

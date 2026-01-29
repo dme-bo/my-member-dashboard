@@ -41,7 +41,7 @@ export default function Sidebar() {
         <div className="logo-circle">BO</div>
         <div>
           <h3>Brisk Olive</h3>
-          <p>Member Dashboard</p>
+          <p>Members Dashboard</p>
         </div>
       </div>
 
@@ -50,6 +50,7 @@ export default function Sidebar() {
           to="/"
           className={({ isActive }) => (isActive ? "active" : "")}
           end
+          onClick={() => setExpandedMenu(null)}
         >
           Dashboard
         </NavLink>
@@ -61,7 +62,7 @@ export default function Sidebar() {
           onClick={handleMemberListClick}
           style={{ cursor: "pointer" }}
         >
-          Member Master List
+          Members Master List
           <span className="arrow">
             {isMemberListExpanded ? "" : ""}
           </span>
@@ -74,14 +75,14 @@ export default function Sidebar() {
               to="/memberlist"
               className={({ isActive }) => (isActive ? "active" : "")}
             >
-              Member List
+              Members List
             </NavLink>
-            <NavLink
+            {/* <NavLink
               to="/partneragent"
               className={({ isActive }) => (isActive ? "active" : "")}
             >
               Partner Agent List
-            </NavLink>
+            </NavLink> */}
           </div>
         )}
 
@@ -92,7 +93,7 @@ export default function Sidebar() {
           onClick={handleApplicationsClick}
           style={{ cursor: "pointer" }}
         >
-          Member Applications
+          Members Applications
           <span className="arrow">
             {isApplicationsExpanded ? "" : ""}
           </span>
@@ -124,6 +125,7 @@ export default function Sidebar() {
         <NavLink
           to="/requirements"
           className={({ isActive }) => (isActive ? "active" : "")}
+          onClick={() => setExpandedMenu(null)}
         >
           Requirements
         </NavLink>
@@ -131,6 +133,7 @@ export default function Sidebar() {
         <NavLink
           to="/newsletter"
           className={({ isActive }) => (isActive ? "active" : "")}
+          onClick={() => setExpandedMenu(null)}
         >
           News Letter
         </NavLink>
@@ -138,6 +141,7 @@ export default function Sidebar() {
         <NavLink
           to="/configuration"
           className={({ isActive }) => (isActive ? "active" : "")}
+          onClick={() => setExpandedMenu(null)}
         >
           Configuration
         </NavLink>

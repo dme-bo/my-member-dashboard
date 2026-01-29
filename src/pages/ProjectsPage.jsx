@@ -1,5 +1,5 @@
 // src/pages/ProjectsPage.jsx
-import { useState, useEffect,useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   collection,
   getDocs,
@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import FilterSidebar from "../components/FilterSidebar";
+import * as XLSX from "xlsx";
 
 export default function ProjectsPage() {
   const [applications, setApplications] = useState([]);
@@ -19,6 +20,10 @@ export default function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const [filterSearchTerms, setFilterSearchTerms] = useState({});
+  const filtersRef = useRef(null);
 
   // Modal states
   const [selectedApp, setSelectedApp] = useState(null);
@@ -115,18 +120,25 @@ export default function ProjectsPage() {
     setCurrentPage(1);
   };
 
-  // Filtering Logic
+  // Filtering Logic - Handle both single values and arrays
   const matchesProjectFilter = (appProjects, filterValue) => {
     if (!filterValue) return true;
     if (!appProjects) return false;
-    return appProjects
-      .split(",")
-      .map(p => p.trim())
-      .includes(filterValue);
+    
+    const appProjectsList = appProjects.split(",").map(p => p.trim());
+    const filterValues = Array.isArray(filterValue) ? filterValue : [filterValue];
+    
+    return filterValues.some(fv => appProjectsList.includes(fv));
   };
 
   let filteredApplications = applications.filter(app => {
-    if (filters.city && app.city !== filters.city) return false;
+    // Handle city filter (can be single value or array)
+    if (filters.city) {
+      const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
+      if (!cityValues.includes(app.city)) return false;
+    }
+    
+    // Handle projects filter (can be single value or array)
     if (filters.projects && !matchesProjectFilter(app.projects, filters.projects)) return false;
 
     if (searchTerm.trim()) {
@@ -271,57 +283,164 @@ export default function ProjectsPage() {
     }
   };
 
+  // Close dropdown on click-outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filtersRef.current && !filtersRef.current.contains(event.target) && openDropdown) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
+  // Export function
+  const handleExportXLSX = () => {
+    try {
+      const dataToExport = filteredApplications.map((app) => ({
+        Name: app.name || "-",
+        Phone: app.phone || "-",
+        City: app.city || "-",
+        Project: app.projects || "-",
+        Status: app.status || "-",
+        "Date Applied": formatDateDDMMMYYYY(app.created_time) || "-",
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Projects");
+      XLSX.writeFile(wb, "projects.xlsx");
+      showToast("Export successful!", "success");
+    } catch (err) {
+      console.error("Export error:", err);
+      showToast("Failed to export data.", "error");
+    }
+  };
+
   const filterData = { filters, handleFilterChange, clearFilters, options };
 
   return (
-    <div className="member-list-page with-filters">
-      {/* Header */}
-      <div className="page-headers" style={{ marginBottom: "20px" }}>
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "15px",
-          marginBottom: "20px"
-        }}>
-          <h1 style={{ margin: 0 }}>Project Applications</h1>
-          <div style={{
-            backgroundColor: "#dbeafe",
-            color: "#1e40af",
-            padding: "12px 24px",
-            borderRadius: "12px",
-            fontSize: "20px",
-            fontWeight: "700",
-            minWidth: "220px",
-            textAlign: "center",
-            border: "3px solid #1e40af",
-          }}>
-            Total Applications: <strong>{loading ? "—" : totalItems}</strong>
+    <div className="member-list-page">
+      {/* Header Card with Search, Total Badge, Filters, Export */}
+      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: isFiltersOpen ? "16px" : "0" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
+            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+            <input
+              type="text"
+              placeholder="Search by name, phone, city, project..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: "12px 14px 12px 40px",
+                width: "159%",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+                backgroundColor: "white",
+                color: "black",
+              }}
+              autoFocus
+            />
           </div>
+
+          {/* Total Applications Badge */}
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "400px"}}>
+            Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
+          </span>
+
+          {/* Filters Button */}
+          <button
+            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #10b981",
+              color: "#10b981",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+            }}
+          >
+            🔽 Filters
+          </button>
+
+          {/* Export Button */}
+          <button
+            onClick={handleExportXLSX}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #1f2937",
+              color: "#1f2937",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+            }}
+          >
+            ⬇️ Export
+          </button>
         </div>
 
-        <div className="search-box-container" style={{ maxWidth: "600px", width: "100%" }}>
-          <input
-            type="text"
-            placeholder="Search by name, phone, city, project..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{
-              padding: "15px 19px",
-              width: "100%",
-              borderRadius: "8px",
-              border: "1px solid #ccc",
-              fontSize: "17px",
-              backgroundColor: "white",
-              color: "black"
-            }}
-            autoFocus
-          />
-        </div>
+        {/* Inline Filters */}
+        {isFiltersOpen && (
+          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
+              <button onClick={() => { setFilters({}); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+              {["city", "projects"].map(filterKey => {
+                const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
+                const filterOptions = filterKey === "city" ? cityOptions : projectOptions;
+                const searchTerm = filterSearchTerms[filterKey] || "";
+                const filteredOptions = filterOptions.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
+                const isDropdownOpen = openDropdown === filterKey;
+
+                return (
+                  <div key={filterKey} style={{ marginBottom: "8px" }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey}</label>
+                    <div style={{ position: "relative" }}>
+                      <div
+                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
+                        style={{
+                          padding: "10px 12px",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "6px",
+                          background: "#fff",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <span>{selectedValues.length > 0 ? selectedValues.join(", ") : "All"}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
+                      </div>
+                      {isDropdownOpen && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
+                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                            {filteredOptions.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOptions.map(o => (
+                              <div key={o} onClick={() => { if (selectedValues.includes(o)) { setFilters(prev => ({ ...prev, [filterKey]: selectedValues.filter(v => v !== o).length === 0 ? undefined : selectedValues.filter(v => v !== o) })); } else { setFilters(prev => ({ ...prev, [filterKey]: [...selectedValues, o] })); } setCurrentPage(1); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValues.includes(o) ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValues.includes(o) && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="content-with-sidebar">
@@ -445,8 +564,6 @@ export default function ProjectsPage() {
             </>
           )}
         </div>
-
-        <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
       </div>
 
       {/* MODAL - Fixed Size & Stable */}

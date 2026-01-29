@@ -1,5 +1,5 @@
 // src/pages/RecruitmentPage.jsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   collection,
   getDocs,
@@ -10,13 +10,29 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import FilterSidebar from "../components/FilterSidebar";
+import * as XLSX from "xlsx";
+import { FaSearch } from "react-icons/fa";
 
 export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({
+    city: "All",
+    client: "All",
+    profile: "All",
+    source: "All",
+    status: "All",
+  });
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterSearchTerms, setFilterSearchTerms] = useState({
+    city: "",
+    client: "",
+    profile: "",
+    source: "",
+    status: "",
+  });
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null); // Track which dropdown is open
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
 
@@ -29,6 +45,23 @@ export default function RecruitmentPage() {
   const [savedNotes, setSavedNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+  // Refs for click-outside detection
+  const filtersRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filtersRef.current && !filtersRef.current.contains(event.target)) {
+        setOpenDropdown(null);
+      }
+    };
+
+    if (openDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [openDropdown]);
 
   // Format Date Helper
   const formatDateDDMMMYYYY = (dateInput) => {
@@ -154,23 +187,50 @@ export default function RecruitmentPage() {
   };
   const filterKeys = ["city", "client", "profile", "source", "status"];
 
-  const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [key]: value === "All" ? undefined : value,
-    }));
-    setCurrentPage(1);
-  };
+  // Export to Excel function
+  const handleExportXLSX = () => {
+    if (filteredCandidates.length === 0) {
+      showToast("No data to export", "error");
+      return;
+    }
 
-  const clearFilters = () => {
-    setFilters({});
-    setSearchTerm("");
-    setCurrentPage(1);
+    const dataToExport = filteredCandidates.map((candidate) => ({
+      "Full Name": candidate.full_name || "-",
+      "Phone": candidate.phone || "-",
+      "Email": candidate.email || "-",
+      "Profile": candidate.profile || "-",
+      "City": candidate.city || "-",
+      "Source": candidate.source || "-",
+      "Client": candidate.client || "-",
+      "Status": candidate.status || "-",
+      "Applied Date": formatDateDDMMMYYYY(candidate.created_time),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    
+    // Auto-size columns
+    const colWidths = [
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 13 },
+    ];
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Recruitment");
+    XLSX.writeFile(workbook, "recruitment-applications.xlsx");
+    showToast("Exported successfully", "success");
   };
 
   // Filtering logic with comma-separated support
   const matchesFilter = (fieldValue, filterValue) => {
-    if (!filterValue) return true;
+    if (!filterValue || filterValue === "All") return true;
     if (!fieldValue) return false;
     const values = String(fieldValue)
       .split(",")
@@ -179,11 +239,31 @@ export default function RecruitmentPage() {
   };
 
   let filteredCandidates = candidates.filter((c) => {
-    if (filters.city && !matchesFilter(c.city, filters.city)) return false;
-    if (filters.client && !matchesFilter(c.client, filters.client)) return false;
-    if (filters.profile && !matchesFilter(c.profile, filters.profile)) return false;
-    if (filters.source && !matchesFilter(c.source, filters.source)) return false;
-    if (filters.status && c.status !== filters.status) return false;
+    // Handle multi-select arrays
+    if (filters.city && filters.city !== "All") {
+      const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
+      if (!cityValues.some(val => matchesFilter(c.city, val))) return false;
+    }
+    
+    if (filters.client && filters.client !== "All") {
+      const clientValues = Array.isArray(filters.client) ? filters.client : [filters.client];
+      if (!clientValues.some(val => matchesFilter(c.client, val))) return false;
+    }
+    
+    if (filters.profile && filters.profile !== "All") {
+      const profileValues = Array.isArray(filters.profile) ? filters.profile : [filters.profile];
+      if (!profileValues.some(val => matchesFilter(c.profile, val))) return false;
+    }
+    
+    if (filters.source && filters.source !== "All") {
+      const sourceValues = Array.isArray(filters.source) ? filters.source : [filters.source];
+      if (!sourceValues.some(val => matchesFilter(c.source, val))) return false;
+    }
+    
+    if (filters.status && filters.status !== "All") {
+      const statusValues = Array.isArray(filters.status) ? filters.status : [filters.status];
+      if (!statusValues.includes(c.status)) return false;
+    }
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
@@ -300,62 +380,194 @@ export default function RecruitmentPage() {
     }
   };
 
-  const filterData = { filters, handleFilterChange, clearFilters, options };
-
   return (
-    <div className="member-list-page with-filters">
-      {/* Header */}
-      <div className="page-headers" style={{ marginBottom: "20px" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "15px",
-            marginBottom: "20px",
-          }}
-        >
-          <h1 style={{ margin: 0 }}>Recruitment Applications</h1>
-          <div
+    <div className="member-list-page">
+      {/* Header with Title, Search, and Right Actions */}
+      <div className="recruitment-header">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+          <div style={{ position: "relative", width: "300px" }}>
+            <FaSearch
+              style={{
+                position: "absolute",
+                left: "14px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#9ca3af",
+                fontSize: "16px",
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Search by name, phone, email..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: "12px 14px 12px 40px",
+                width: "203%",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+                backgroundColor: "white",
+                color: "black",
+              }}
+            />
+          </div>
+          <span
             style={{
-              backgroundColor: "#dbeafe",
-              color: "#1976d2",
-              padding: "12px 24px",
-              borderRadius: "12px",
-              fontSize: "20px",
-              fontWeight: "700",
-              minWidth: "220px",
-              textAlign: "center",
-              border: "3px solid #1976d2",
+              backgroundColor: "#dcfce7",
+              color: "#166534",
+              padding: "4px 12px",
+              borderRadius: "20px",
+              fontSize: "13px",
+              fontWeight: "600",
+              marginLeft: "auto",
             }}
           >
-            Total Applications: <strong>{loading ? "—" : totalItems}</strong>
-          </div>
+           Total Applications:- {loading ? "—" : totalItems} 
+          </span>
         </div>
 
-        <div className="search-box-container" style={{ maxWidth: "600px", width: "100%" }}>
-          <input
-            type="text"
-            placeholder="Search by name, phone, email, profile..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
+        {/* Right side: Search, Filters, Export */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          
+
+          <button
+            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
             style={{
-              padding: "15px 19px",
-              width: "100%",
-              borderRadius: "8px",
-              border: "1px solid #ccc",
-              fontSize: "17px",
+              padding: "10px 20px",
               backgroundColor: "white",
-              color: "black",
+              border: "1px solid #10b981",
+              color: "#10b981",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
             }}
-            autoFocus
-          />
+          >
+            🔽 Filters 
+          </button>
+
+          <button
+            onClick={handleExportXLSX}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #1f2937",
+              color: "#1f2937",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            ⬇️ Export
+          </button>
         </div>
       </div>
+
+      {/* Expandable Filters Section */}
+      {isFiltersOpen && (
+        <div className="recruitment-filters" ref={filtersRef}>
+          <div className="filters-grid-recruitment">
+            {["City", "Client", "Profile", "Source", "Status"].map((filterType) => {
+              const filterKey = filterType.toLowerCase();
+              const filterOptions = options[filterKey] || [];
+              const searchTerm = filterSearchTerms[filterKey] || "";
+              const filteredOptions = filterOptions.filter((opt) =>
+                opt.toLowerCase().includes(searchTerm.toLowerCase())
+              );
+              const isDropdownOpen = openDropdown === filterKey;
+              // Handle multi-select: filters[filterKey] can be an array
+              const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
+
+              return (
+                <div key={filterKey} className="filter-dropdown-recruitment">
+                  <label className="filter-label-recruitment">{filterType}</label>
+                  <div className="dropdown-wrapper-recruitment">
+                    <input
+                      type="text"
+                      placeholder={`Select ${filterType.toLowerCase()}...`}
+                      value={isDropdownOpen ? searchTerm : selectedValues.join(", ")}
+                      onChange={(e) => {
+                        if (isDropdownOpen) {
+                          setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value });
+                        }
+                      }}
+                      onFocus={() => {
+                        setOpenDropdown(filterKey);
+                        setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: "" });
+                      }}
+                      readOnly={!isDropdownOpen}
+                      className="searchable-dropdown-input"
+                    />
+                    {isDropdownOpen && (
+                      <div className="dropdown-options-recruitment">
+                        {filteredOptions.length > 0 ? (
+                          filteredOptions.map((option) => (
+                            <div
+                              key={option}
+                              className={`dropdown-option-recruitment ${
+                                selectedValues.includes(option) ? "selected" : ""
+                              }`}
+                              onClick={() => {
+                                // Multi-select: toggle the option
+                                if (selectedValues.includes(option)) {
+                                  const newValues = selectedValues.filter(v => v !== option);
+                                  setFilters({ 
+                                    ...filters, 
+                                    [filterKey]: newValues.length === 0 ? "All" : newValues 
+                                  });
+                                } else {
+                                  setFilters({ 
+                                    ...filters, 
+                                    [filterKey]: [...selectedValues, option] 
+                                  });
+                                }
+                              }}
+                            >
+                              <span>{option}</span>
+                              {selectedValues.includes(option) && <span className="check-mark">✓</span>}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="dropdown-option-recruitment no-results">
+                            No results found
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setFilters({ city: "All", client: "All", profile: "All", source: "All", status: "All" })}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "#ef4444",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "13px",
+              marginTop: "12px",
+            }}
+          >
+            Clear All Filters
+          </button>
+        </div>
+      )}
 
       <div className="content-with-sidebar">
         <div className="table-container">
@@ -491,8 +703,6 @@ export default function RecruitmentPage() {
             </>
           )}
         </div>
-
-        <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
       </div>
 
       {/* MODAL - Fixed Size */}

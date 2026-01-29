@@ -1,5 +1,5 @@
 // src/pages/TempStaffPage.jsx
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   collection,
   query,
@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import FilterSidebar from "../components/FilterSidebar";
+import * as XLSX from "xlsx";
 
 export default function TempStaffPage() {
   const [selectedMember, setSelectedMember] = useState(null);
@@ -21,6 +22,10 @@ export default function TempStaffPage() {
   const [coordinatorsData, setCoordinatorsData] = useState([]); // Coordinators
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("applications"); // "applications" or "coordinators"
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const [filterSearchTerms, setFilterSearchTerms] = useState({});
+  const filtersRef = useRef(null);
 
   // Modal states
   const [activeTab, setActiveTab] = useState("personal");
@@ -197,30 +202,40 @@ export default function TempStaffPage() {
       );
     }
 
+    // Handle city filter (can be array or single value)
     if (filters.city && filters.city !== "All") {
+      const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
       if (viewMode === "applications") {
-        list = list.filter((m) => String(m.city || "").trim() === filters.city);
+        list = list.filter((m) => cityValues.includes(String(m.city || "").trim()));
       } else {
         list = list.filter((m) =>
-          Array.isArray(m.locations) && m.locations.some((loc) => String(loc.city || "").trim() === filters.city)
+          Array.isArray(m.locations) && m.locations.some((loc) => cityValues.includes(String(loc.city || "").trim()))
         );
       }
     }
 
+    // Handle coordinator_type filter (can be array or single value)
     if (filters.coordinator_type && filters.coordinator_type !== "All") {
-      list = list.filter((m) => String(m.coordinator_type || "").trim() === filters.coordinator_type);
+      const values = Array.isArray(filters.coordinator_type) ? filters.coordinator_type : [filters.coordinator_type];
+      list = list.filter((m) => values.includes(String(m.coordinator_type || "").trim()));
     }
 
+    // Handle status filter (can be array or single value)
     if (filters.status && filters.status !== "All") {
-      list = list.filter((m) => String(m.status || "").trim() === filters.status);
+      const values = Array.isArray(filters.status) ? filters.status : [filters.status];
+      list = list.filter((m) => values.includes(String(m.status || "").trim()));
     }
 
+    // Handle role filter (can be array or single value)
     if (filters.role && filters.role !== "All") {
-      list = list.filter((m) => String(m.role || "").trim() === filters.role);
+      const values = Array.isArray(filters.role) ? filters.role : [filters.role];
+      list = list.filter((m) => values.includes(String(m.role || "").trim()));
     }
 
+    // Handle coordinator_name filter (can be array or single value)
     if (filters.coordinator_name && filters.coordinator_name !== "All") {
-      list = list.filter((m) => String(m.coordinator_name || "").trim() === filters.coordinator_name);
+      const values = Array.isArray(filters.coordinator_name) ? filters.coordinator_name : [filters.coordinator_name];
+      list = list.filter((m) => values.includes(String(m.coordinator_name || "").trim()));
     }
 
     list.sort((a, b) =>
@@ -333,6 +348,53 @@ export default function TempStaffPage() {
     }
   };
 
+  // Close dropdown on click-outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filtersRef.current && !filtersRef.current.contains(event.target) && openDropdown) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
+  // Export function
+  const handleExportXLSX = () => {
+    try {
+      const dataToExport = (viewMode === "applications" ? membersData : coordinatorsData).map((item) => {
+        if (viewMode === "applications") {
+          return {
+            Name: item.name || "-",
+            Phone: item.phone || "-",
+            City: item.city || "-",
+            Role: item.role || "-",
+            Status: item.status || "-",
+            "Coordinator Name": item.coordinator_name || "-",
+          };
+        } else {
+          const locations = Array.isArray(item.locations) ? item.locations.map(l => l.city || "-").join(", ") : "-";
+          return {
+            "Coordinator Name": item.coordinatorName || "-",
+            "Coordinator Type": item.coordinator_type || "-",
+            Locations: locations,
+            Email: item.email || "-",
+            Phone: item.phone || "-",
+          };
+        }
+      });
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data");
+      XLSX.writeFile(wb, viewMode === "applications" ? "temp-staff-applications.xlsx" : "coordinators.xlsx");
+      showToast("Export successful!", "success");
+    } catch (err) {
+      console.error("Export error:", err);
+      showToast("Failed to export data.", "error");
+    }
+  };
+
   const filterData = { filters, handleFilterChange, clearFilters, options: dynamicFilterOptions };
   const filterKeys = viewMode === "applications"
     ? ["coordinator_name", "city", "status", "role"]
@@ -347,84 +409,128 @@ export default function TempStaffPage() {
   }
 
   return (
-    <div className="member-list-page with-filters">
-      {/* Header */}
-      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-        <h1 style={{ margin: 0 }}>TCS {viewMode === "applications" ? "Applications" : "Coordinators"}</h1>
+    <div className="member-list-page">
 
-        <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-          <div
-            onClick={() => {
-              setViewMode("applications");
-              setCurrentPage(1);
-              setSearchTerm("");
-              setFilters({});
-            }}
-            style={{
-              backgroundColor: viewMode === "applications" ? "#dbeafe" : "#eee",
-              color: viewMode === "applications" ? "#1976d2" : "black",
-              padding: "12px 24px",
-              borderRadius: "12px",
-              fontSize: "20px",
-              fontWeight: "700",
-              minWidth: "220px",
-              textAlign: "center",
-              cursor: "pointer",
-              border: viewMode === "applications" ? "3px solid #1976d2" : "none",
-              transition: "all 0.3s",
-            }}
-          >
-            Total Applications: <strong>{membersData.length}</strong>
+      {/* Header Card */}
+      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: isFiltersOpen ? "16px" : "0" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
+            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+            <input
+              type="text"
+              placeholder={`Search by Name, Mobile${viewMode === "applications" ? ", Aadhaar, PAN" : ", Email"}...`}
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: "12px 14px 12px 40px",
+                width: "220%",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+                backgroundColor: "white",
+                color: "black",
+              }}
+              autoFocus
+            />
           </div>
 
-          <div
-            onClick={() => {
-              setViewMode("coordinators");
-              setCurrentPage(1);
-              setSearchTerm("");
-              setFilters({});
-            }}
+          {/* Total Badge */}
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft:"500px" }}>
+            Total Applications:- <strong>{viewMode === "applications" ? membersData.length : coordinatorsData.length}</strong>
+          </span>
+
+          {/* Filters Button */}
+          <button
+            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
             style={{
-              backgroundColor: viewMode === "coordinators" ? "#d4edda" : "#e0f2fe",
-              color: viewMode === "coordinators" ? "#166534" : "#0369a1",
-              padding: "12px 24px",
-              borderRadius: "12px",
-              fontSize: "20px",
-              fontWeight: "700",
-              minWidth: "220px",
-              textAlign: "center",
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #10b981",
+              color: "#10b981",
+              borderRadius: "8px",
               cursor: "pointer",
-              border: viewMode === "coordinators" ? "3px solid #16a34a" : "2px solid #0ea5e9",
-              transition: "all 0.3s",
+              fontWeight: "600",
+              fontSize: "14px",
             }}
           >
-            Total Coordinators: <strong>{coordinatorsData.length}</strong>
-          </div>
+            🔽 Filters
+          </button>
+
+          {/* Export Button */}
+          <button
+            onClick={handleExportXLSX}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #1f2937",
+              color: "#1f2937",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+            }}
+          >
+            ⬇️ Export
+          </button>
         </div>
-      </div>
 
-      {/* Search */}
-      <div className="search-section" style={{ margin: "20px 0" }}>
-        <input
-          type="text"
-          placeholder={`Search by Name, Mobile, Email${viewMode === "applications" ? ", Aadhaar, PAN" : ""}...`}
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setCurrentPage(1);
-          }}
-          style={{
-            width: "100%",
-            maxWidth: "700px",
-            padding: "14px 20px",
-            fontSize: "16px",
-            borderRadius: "8px",
-            border: "1px solid #ccc",
-            backgroundColor: "white",
-            color: "black",
-          }}
-          autoFocus
-        />
+        {/* Inline Filters */}
+        {isFiltersOpen && (
+          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
+              <button onClick={() => { setFilters({}); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+              {filterKeys.map(filterKey => {
+                const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
+                const filterOptions = dynamicFilterOptions[filterKey] || [];
+                const searchTerm = filterSearchTerms[filterKey] || "";
+                const filteredOptions = filterOptions.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
+                const isDropdownOpen = openDropdown === filterKey;
+
+                return (
+                  <div key={filterKey} style={{ marginBottom: "8px" }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey.replace(/_/g, " ")}</label>
+                    <div style={{ position: "relative" }}>
+                      <div
+                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
+                        style={{
+                          padding: "10px 12px",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "6px",
+                          background: "#fff",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <span>{selectedValues.length > 0 ? selectedValues.join(", ") : "All"}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
+                      </div>
+                      {isDropdownOpen && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
+                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                            {filteredOptions.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOptions.map(o => (
+                              <div key={o} onClick={() => { if (selectedValues.includes(o)) { setFilters(prev => ({ ...prev, [filterKey]: selectedValues.filter(v => v !== o).length === 0 ? undefined : selectedValues.filter(v => v !== o) })); } else { setFilters(prev => ({ ...prev, [filterKey]: [...selectedValues, o] })); } setCurrentPage(1); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValues.includes(o) ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValues.includes(o) && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="content-with-sidebar">
@@ -535,8 +641,6 @@ export default function TempStaffPage() {
             </div>
           </div>
         </div>
-
-        <FilterSidebar filterData={filterData} filterKeys={filterKeys} pageKey="TempStaffPage" />
       </div>
 
       {/* MODAL - Fixed Size & Stable */}

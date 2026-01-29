@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import Sidebar from "./components/Sidebar";
+import Navbar from "./components/Navbar";
 import MemberDetailModal from "./components/MemberDetailModal";
 
 import DashboardPage from "./pages/DashboardPage";
@@ -57,6 +58,7 @@ function Layout() {
       />
 
       <div className="main-content">
+        <Navbar />
         <Routes>
           <Route path="/" element={<DashboardPage
                 onMemberClick={setSelectedMember}

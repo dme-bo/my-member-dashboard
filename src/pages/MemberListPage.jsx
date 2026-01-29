@@ -1,6 +1,6 @@
 // src/pages/MemberListPage.jsx
 import { useSearchParams } from "react-router-dom";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import FilterSidebar from "../components/FilterSidebar";
@@ -13,6 +13,9 @@ export default function MemberListPage({ onMemberClick }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const [filterSearchTerms, setFilterSearchTerms] = useState({});
+  const filtersRef = useRef(null);
 
   const [sidebarFilters, setSidebarFilters] = useState({
     Gender: "All",
@@ -282,6 +285,17 @@ export default function MemberListPage({ onMemberClick }) {
     "Experience",
   ];
 
+  // Close dropdown on click-outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filtersRef.current && !filtersRef.current.contains(event.target) && openDropdown) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
   // Export to Excel (XLSX)
   const handleExportXLSX = () => {
     const dataToExport = filteredMembers.map((member) => ({
@@ -327,52 +341,59 @@ export default function MemberListPage({ onMemberClick }) {
   // Loading state
   if (members.length === 0) {
     return (
-      <div className="member-list-page with-filters">
-        <div className="page-header">
-          <div className="header-title">
-            <h1>Total Members:- 0</h1>
-          </div>
-          <div className="header-actions">
-            <button className="btn-purple" disabled>Export XLSX</button>
-          </div>
-          <button className="filter-toggle-btn" onClick={toggleFilter}>
-            Filters {isFilterOpen ? "▲" : "▼"}
-          </button>
-        </div>
-
-        <div className="search-section">
-          <input
-            type="text"
-            placeholder="Search by Name, Mobile, Email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="big-search-input"
-          />
-        </div>
-
-        <div className="content-with-sidebar responsive">
-          <div className="table-container">
-            <div className="table-wrapper responsive-table">
-              <table className="members-table">
-                <thead>
-                  <tr>
-                    <th className="sticky-name">Name</th>
-                    <th>Mobile</th>
-                    <th>Category</th>
-                    <th>Service</th>
-                    <th>Rank</th>
-                    <th>State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td colSpan={6} className="empty-message">
-                      Loading members...
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+      <div className="member-list-page" style={{ padding: "20px", maxWidth: "100%", margin: "0 auto" }}>
+        <style>{`
+          @media (min-width: 768px) {
+            .member-list-page {
+              padding: 36px;
+            }
+          }
+        `}</style>
+        {/* Header Card */}
+        <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
+            <div style={{ position: "relative", flex: 1, maxWidth: "350px", minWidth: "200px" }}>
+              <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+              <input
+                type="text"
+                placeholder="Search by Name, Mobile, Email..."
+                disabled
+                style={{
+                  padding: "12px 14px 12px 40px",
+                  width: "100%",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  backgroundColor: "#f3f4f6",
+                  color: "#999",
+                }}
+              />
             </div>
+            <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "300px" }}>
+              Total Members: <strong>0</strong>
+            </span>
+            <button disabled style={{ padding: "10px 20px", backgroundColor: "white", border: "1px solid #10b981", color: "#10b981", borderRadius: "8px", cursor: "not-allowed", fontWeight: "600", fontSize: "14px", opacity: 0.5 }}>
+              🔽 Filters
+            </button>
+            <button disabled style={{ padding: "10px 20px", backgroundColor: "white", border: "1px solid #1f2937", color: "#1f2937", borderRadius: "8px", cursor: "not-allowed", fontWeight: "600", fontSize: "14px", opacity: 0.5 }}>
+              ⬇️ Export
+            </button>
+          </div>
+        </div>
+
+        {/* Loading Indicator */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "400px", backgroundColor: "#fff", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}>
+              ⏳
+            </div>
+            <p style={{ fontSize: "16px", color: "#666", margin: "0" }}>Loading members...</p>
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
         </div>
       </div>
@@ -380,39 +401,139 @@ export default function MemberListPage({ onMemberClick }) {
   }
 
   return (
-    <div className="member-list-page with-filters">
-      <div className="page-header">
-        <div className="header-title">
-          <h1>Total Members:- {totalItems}</h1>
-        </div>
-        <div className="header-actions">
-          <button className="btn-purple" onClick={handleExportXLSX}>
-            Export XLSX
+    <div className="member-list-page" style={{ padding: "20px", maxWidth: "100%", margin: "0 auto" }}><style>{`
+      @media (min-width: 768px) {
+        .member-list-page {
+          padding: 36px;
+        }
+      }
+    `}</style>
+      {/* Header Card with Search, Total Badge, Filters, Export */}
+      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", marginBottom: isFilterOpen ? "16px" : "0" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", flex: 1, maxWidth: "350px", minWidth: "200px" }}>
+            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+            <input
+              type="text"
+              placeholder="Search by Name, Mobile, Email..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: "12px 14px 12px 40px",
+                width: "160%",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+                backgroundColor: "white",
+                color: "black",
+              }}
+              autoFocus
+            />
+          </div>
+
+          {/* Total Members Badge */}
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "500px" }}>
+            Total Members: <strong>{totalItems}</strong>
+          </span>
+
+          {/* Filters Button */}
+          <button
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #10b981",
+              color: "#10b981",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+            }}
+          >
+            🔽 Filters
+          </button>
+
+          {/* Export Button */}
+          <button
+            onClick={handleExportXLSX}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "white",
+              border: "1px solid #1f2937",
+              color: "#1f2937",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+            }}
+          >
+            ⬇️ Export
           </button>
         </div>
 
-        <button className="filter-toggle-btn" onClick={toggleFilter}>
-          Filters {isFilterOpen ? "▲" : "▼"}
-        </button>
+        {/* Inline Filters */}
+        {isFilterOpen && (
+          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
+              <button onClick={() => { clearFilters(); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+              {filterKeys.map(filterKey => {
+                const selectedValue = sidebarFilters[filterKey];
+                const filterOpts = filterOptions[filterKey] || [];
+                const searchTerm = filterSearchTerms[filterKey] || "";
+                const filteredOpts = filterOpts.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
+                const isDropdownOpen = openDropdown === filterKey;
+
+                return (
+                  <div key={filterKey} style={{ marginBottom: "8px" }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey}</label>
+                    <div style={{ position: "relative" }}>
+                      <div
+                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
+                        style={{
+                          padding: "10px 12px",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "6px",
+                          background: "#fff",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <span>{selectedValue || "All"}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
+                      </div>
+                      {isDropdownOpen && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
+                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                            {filteredOpts.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOpts.map(o => (
+                              <div key={o} onClick={() => { handleFilterChange(filterKey, o); setOpenDropdown(null); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValue === o ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValue === o && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="search-section">
-        <input
-          type="text"
-          placeholder="Search by Name, Mobile, Email..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="big-search-input"
-        />
-      </div>
-
-      <div className="content-with-sidebar responsive">
-        <div className="table-container">
-          <div className="table-wrapper responsive-table">
-            <table className="members-table">
+      <div style={{ width: "100%", margin: "0", padding: "0" }}>
+        <div className="table-container" style={{ margin: "0", padding: "0", height: "70vh", minHeight: "460px", overflowY: "auto", border: "1px solid rgb(238, 238, 238)", borderRadius: "8px", background: "rgb(255, 255, 255)" }}>
+          <div className="table-wrapper responsive-table" style={{ margin: "0", padding: "0" }}>
+            <table className="members-table" style={{ width: "100%",tableLayout: "fixed" }}>
               <thead>
                 <tr>
                   <th className="sticky-name">Name</th>
@@ -421,6 +542,7 @@ export default function MemberListPage({ onMemberClick }) {
                   <th>Service</th>
                   <th>Rank</th>
                   <th>State</th>
+                  <th>City</th>
                 </tr>
               </thead>
               <tbody>
@@ -443,6 +565,7 @@ export default function MemberListPage({ onMemberClick }) {
                       <td>{member.service || "-"}</td>
                       <td>{member.rank || "-"}</td>
                       <td>{member.state || "-"}</td>
+                      <td>{member.city || "-"}</td>
                     </tr>
                   ))
                 ) : (
@@ -487,23 +610,7 @@ export default function MemberListPage({ onMemberClick }) {
             </div>
           </div>
         </div>
-
-        {/* Desktop Sidebar */}
-        <div className="filter-sidebar-desktop">
-          <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
-        </div>
-
-        {/* Mobile Sidebar */}
-        <div className={`filter-sidebar-mobile ${isFilterOpen ? "open" : ""}`}>
-          <div className="mobile-filter-header">
-            <h3>Filters</h3>
-            <button onClick={toggleFilter} className="close-filter-btn">✕</button>
-          </div>
-          <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
-        </div>
       </div>
-
-      {isFilterOpen && <div className="mobile-filter-overlay" onClick={toggleFilter}></div>}
     </div>
   );
 }

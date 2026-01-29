@@ -1,0 +1,93 @@
+/* ====================== NAVBAR ====================== */
+.navbar {
+  background: #1976d2;
+  color: white;
+  border-bottom: 1px solid #0d47a1;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 99;
+}
+
+.navbar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.navbar-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+  margin-left: 30px;
+}
+
+.navbar-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.navbar-button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.navbar-button.btn-primary {
+  background: #e91e63;
+  color: white;
+}
+
+.navbar-button.btn-primary:hover {
+  background: #c2185b;
+  box-shadow: 0 2px 8px rgba(233, 30, 99, 0.3);
+}
+
+.navbar-button.btn-success {
+  background: #4caf50;
+  color: white;
+}
+
+.navbar-button.btn-success:hover {
+  background: #388e3c;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.navbar-button.btn-info {
+  background: #2196f3;
+  color: white;
+}
+
+.navbar-button.btn-info:hover {
+  background: #1565c0;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+@media (max-width: 768px) {
+  .navbar-title {
+    font-size: 20px;
+  }
+
+  .navbar-button {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .navbar-right {
+    gap: 8px;
+  }
+}

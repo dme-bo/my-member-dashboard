@@ -326,7 +326,6 @@ export default function DashboardPage() {
   return (
     <>
       <header className="top-header">
-        <h1>Member Analytics Dashboard</h1>
 
         <div className="top-filters" style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
           <div>

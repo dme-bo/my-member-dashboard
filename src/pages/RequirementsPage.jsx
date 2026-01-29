@@ -362,7 +362,6 @@ export default function RequirementsPage() {
       {/* HEADER */}
       <header className="dashboard-header">
         <div className="header-content">
-          <h1 className="dashboard-title">Requirements Allocation Dashboard</h1>
           <div className="filter-buttons">
             {["All", "Open", "Closed", "TCS", "Projects", "Recruitment"].map((filter) => (
               <button
@@ -418,70 +417,128 @@ export default function RequirementsPage() {
       </div>
 
       {/* REQUIREMENTS LIST */}
-      <div className="requirements-section">
-        <h2 className="section-title">
-          {activeFilter === "All" && "All Requirements"}
-          {activeFilter === "Open" && "Open Requirements"}
-          {activeFilter === "Closed" && "Closed Requirements"}
-          {activeFilter === "Projects" && "Projects"}
-          {activeFilter === "Recruitment" && "Recruitment"}
-        </h2>
+      <div className="requirements-section" style={{ marginTop: "30px", padding: "0 20px" }}>
+        <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+          <h2 className="section-title" style={{ marginTop: 0, marginBottom: "20px", fontSize: "20px", fontWeight: "600", color: "#1f2937" }}>
+            {activeFilter === "All" && "All Requirements"}
+            {activeFilter === "Open" && "Open Requirements"}
+            {activeFilter === "Closed" && "Closed Requirements"}
+            {activeFilter === "Projects" && "Projects"}
+            {activeFilter === "Recruitment" && "Recruitment"}
+            <span style={{ marginLeft: "10px", color: "#10b981", fontSize: "18px" }}>({filteredRequirements.length})</span>
+          </h2>
 
-        {filteredRequirements.length === 0 ? (
-          <p>No Requirements found.</p>
-        ) : (
-          <div className="requirements-grid">
-            {filteredRequirements.map((req) => {
-              const liveCount = allocatedCounts[req.id] || 0;
-              return (
-                <div
-                  key={req.id}
-                  className={`requirement-card ${req.status}`}
-                  onClick={() => {
-                    setSelectedReq(req);
-                    setShowJobModal(true);
-                  }}
-                  style={req.status === "completed" ? { opacity: 0.82, cursor: "default" } : {}}
-                >
-                  {req.logo && (
-                    <img
-                      src={req.logo}
-                      alt="Logo"
-                      style={{ width: 50, height: 50, borderRadius: 8, marginBottom: 10, objectFit: "contain" }}
-                    />
-                  )}
-                  <div className="req-header">
-                    <h3>{req.title}</h3>
-                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <span className={`status-badge ${req.status}`}>
-                        {req.status === "active" ? "Open" : "Closed"}
-                      </span>
-                      <span
-                        style={{
-                          background: req.type === "project" ? "#9333ea" : "#2563eb",
-                          color: "white",
-                          padding: "4px 8px",
-                          borderRadius: "6px",
-                          fontSize: "12px",
-                          fontWeight: "600",
+          {filteredRequirements.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "#666" }}>
+              <p style={{ fontSize: "16px" }}>No Requirements found.</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "14px"
+              }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#1976d2", color: "white" }}>
+                    <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Type</th>
+                    <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Title</th>
+                    <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Company</th>
+                    <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Location</th>
+                    <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Compensation</th>
+                    <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Allocated</th>
+                    <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Status</th>
+                    <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: "600", borderBottom: "2px solid #1565c0" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRequirements.map((req, idx) => {
+                    const liveCount = allocatedCounts[req.id] || 0;
+                    const isEven = idx % 2 === 0;
+                    return (
+                      <tr 
+                        key={req.id}
+                        style={{ 
+                          backgroundColor: isEven ? "#f9fafb" : "white",
+                          borderBottom: "1px solid #e5e7eb",
+                          transition: "background-color 0.2s",
+                          opacity: req.status === "completed" ? 0.7 : 1
                         }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isEven ? "#f3f4f6" : "#f9fafb"}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isEven ? "#f9fafb" : "white"}
                       >
-                        {req.type === "project" ? <><FaProjectDiagram style={{ marginRight: 4 }} /> Project</> : "Recruitment"}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="company"><strong>{req.company}</strong></p>
-                  <p className="location">Location: {req.location}</p>
-                  <p className="salary">Compensation: {req.salary}</p>
-                  <p className="deadline">Posted: {req.postedOn}</p>
-                  <div className="allocated">
-                    <FaUsers size={14} /> Allocated: <strong>{liveCount}</strong>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                        <td style={{ padding: "14px 16px", fontWeight: "500" }}>
+                          <span style={{ 
+                            backgroundColor: req.type === "project" ? "#e9d5ff" : "#dbeafe",
+                            color: req.type === "project" ? "#6b21a8" : "#0c4a6e",
+                            padding: "4px 12px",
+                            borderRadius: "20px",
+                            fontSize: "12px",
+                            fontWeight: "600"
+                          }}>
+                            {req.type === "project" ? "Project" : "Job"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px 16px" }}>
+                          <div style={{ maxWidth: "250px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: "500", color: "#1f2937" }} title={req.title}>
+                            {req.title}
+                          </div>
+                        </td>
+                        <td style={{ padding: "14px 16px", color: "#4b5563" }}>
+                          {req.company}
+                        </td>
+                        <td style={{ padding: "14px 16px", color: "#4b5563" }}>
+                          {req.location}
+                        </td>
+                        <td style={{ padding: "14px 16px", color: "#4b5563", fontSize: "13px" }}>
+                          {req.salary}
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
+                          {liveCount}
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                          <span style={{ 
+                            backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
+                            color: req.status === "active" ? "#166534" : "#991b1b",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: "600"
+                          }}>
+                            {req.status === "active" ? "Open" : "Closed"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                          <button
+                            onClick={() => {
+                              setSelectedReq(req);
+                              setShowJobModal(true);
+                            }}
+                            style={{
+                              padding: "6px 14px",
+                              backgroundColor: "#1976d2",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              transition: "background-color 0.2s"
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
+                          >
+                            View Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* JOB/PROJECT DETAILS MODAL */}

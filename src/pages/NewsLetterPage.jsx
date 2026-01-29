@@ -691,7 +691,6 @@ export default function BriskOliveNewsletterApp() {
     <div className="newsletter-app">
 
       <header className="app-header">
-        <h1>Weekly Newsletter</h1>
         <button
           type="button"
           className="edit-content-btn"
@@ -975,6 +974,7 @@ export default function BriskOliveNewsletterApp() {
           border-radius: 8px;
           cursor: pointer;
           font-size: 1.1rem;
+          margin-left: 1050px;
         }
 
         .selectors-container {
