@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [stateFilter, setStateFilter] = useState('All');
   const [cityFilter, setCityFilter] = useState('All');
 
-  // Parse registration date - placed early to avoid hoisting issues
+  // Parse registration date
   const parseRegDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return null;
     const trimmed = dateStr.trim();
@@ -99,13 +99,8 @@ export default function DashboardPage() {
   // Dynamic: Ranks based on selected Service (and Category)
   const availableRanks = useMemo(() => {
     let filtered = members;
-
-    if (categoryFilter !== 'All') {
-      filtered = filtered.filter(m => m.category?.trim() === categoryFilter);
-    }
-    if (serviceFilter !== 'All') {
-      filtered = filtered.filter(m => m.service?.trim() === serviceFilter);
-    }
+    if (categoryFilter !== 'All') filtered = filtered.filter(m => m.category?.trim() === categoryFilter);
+    if (serviceFilter !== 'All') filtered = filtered.filter(m => m.service?.trim() === serviceFilter);
 
     const rankCounts = filtered.reduce((acc, m) => {
       const r = m.rank?.trim();
@@ -141,17 +136,9 @@ export default function DashboardPage() {
   }, [members, stateFilter]);
 
   // Reset dependent filters when parent changes
-  useEffect(() => {
-    setServiceFilter('All');
-  }, [categoryFilter]);
-
-  useEffect(() => {
-    setRankFilter('All');
-  }, [serviceFilter, categoryFilter]);
-
-  useEffect(() => {
-    setCityFilter('All');
-  }, [stateFilter]);
+  useEffect(() => { setServiceFilter('All'); }, [categoryFilter]);
+  useEffect(() => { setRankFilter('All'); }, [serviceFilter, categoryFilter]);
+  useEffect(() => { setCityFilter('All'); }, [stateFilter]);
 
   // Apply all filters
   const filteredMembers = useMemo(() => {
@@ -326,11 +313,16 @@ export default function DashboardPage() {
   return (
     <>
       <header className="top-header">
-
-        <div className="top-filters" style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
+        <div className="top-filters" style={{
+          marginTop: '20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '15px',
+          alignItems: 'center'
+        }}>
           <div>
             <label><strong>Category:</strong></label>
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
               {filterOptions.categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
@@ -339,7 +331,7 @@ export default function DashboardPage() {
 
           <div>
             <label><strong>Service:</strong></label>
-            <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+            <select value={serviceFilter} onChange={e => setServiceFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
               {availableServices.map(srv => (
                 <option key={srv} value={srv}>{srv}</option>
               ))}
@@ -348,7 +340,7 @@ export default function DashboardPage() {
 
           <div>
             <label><strong>Rank:</strong></label>
-            <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+            <select value={rankFilter} onChange={e => setRankFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
               {availableRanks.map(rank => (
                 <option key={rank} value={rank}>{rank}</option>
               ))}
@@ -357,7 +349,7 @@ export default function DashboardPage() {
 
           <div>
             <label><strong>State:</strong></label>
-            <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+            <select value={stateFilter} onChange={e => setStateFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
               {filterOptions.states.map(state => (
                 <option key={state} value={state}>{state}</option>
               ))}
@@ -366,7 +358,7 @@ export default function DashboardPage() {
 
           <div>
             <label><strong>City:</strong></label>
-            <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px', backgroundColor: 'white', color: 'black' }}>
+            <select value={cityFilter} onChange={e => setCityFilter(e.target.value)} style={{ marginLeft: '8px', padding: '8px' }}>
               {availableCities.map(city => (
                 <option key={city} value={city}>{city}</option>
               ))}
@@ -391,46 +383,73 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Summary Cards & Charts remain the same */}
-      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginTop: '30px' }}>
+      <div className="stats-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '20px',
+        marginTop: '30px'
+      }}>
         <div className="card"><div className="card-icon blue"><FaUsers size={28}/></div><div className="card-label">Total Members</div><div className="card-value">{analytics.total.toLocaleString()}</div></div>
         <div className="card"><div className="card-icon red"><FaClock size={28}/></div><div className="card-label">Avg Experience</div><div className="card-value">{analytics.avgExp}</div></div>
         <div className="card"><div className="card-icon new"><FaUserPlus size={28}/></div><div className="card-label">Registered Today</div><div className="card-value">{analytics.registeredToday}</div></div>
         <div className="card"><div className="card-icon quarter"><FaCalendarAlt size={28}/></div><div className="card-label">Last 3 Months</div><div className="card-value">{analytics.registered3Months}</div></div>
       </div>
 
-      <div className="charts-grid" style={{ marginTop: '40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '30px', padding: '20px' }}>
+      <div className="charts-grid" style={{
+        marginTop: '40px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))',
+        gap: '28px',
+        padding: '0 8px 40px'
+      }}>
+
         <div className="chart-card">
           <h3>Gender Wise Distribution</h3>
-          <div style={{ height: '300px' }}>
-            <Pie data={createChartData(analytics.genderCounts)} options={pieOptions} plugins={[ChartDataLabels]} />
+          <div className="chart-container" style={{ height: '340px' }}>
+            <Pie
+              data={createChartData(analytics.genderCounts)}
+              options={pieOptions}
+              plugins={[ChartDataLabels]}
+            />
           </div>
         </div>
 
         <div className="chart-card">
           <h3>Category Wise Distribution</h3>
-          <div style={{ height: '300px' }}>
-            <Bar data={createChartData(analytics.categoryCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+          <div className="chart-container" style={{ height: '340px' }}>
+            <Bar
+              data={createChartData(analytics.categoryCounts)}
+              options={barOptions}
+              plugins={[ChartDataLabels]}
+            />
           </div>
         </div>
 
         <div className="chart-card">
           <h3>Service Wise Distribution</h3>
-          <div style={{ height: '350px' }}>
-            <Bar data={createChartData(analytics.serviceCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+          <div className="chart-container" style={{ height: '380px' }}>
+            <Bar
+              data={createChartData(analytics.serviceCounts)}
+              options={barOptions}
+              plugins={[ChartDataLabels]}
+            />
           </div>
         </div>
 
         <div className="chart-card">
           <h3>Ranks Wise Distribution</h3>
-          <div style={{ height: '350px' }}>
-            <Bar data={createChartData(analytics.rankCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+          <div className="chart-container" style={{ height: '380px' }}>
+            <Bar
+              data={createChartData(analytics.rankCounts)}
+              options={barOptions}
+              plugins={[ChartDataLabels]}
+            />
           </div>
         </div>
 
         <div className="chart-card">
           <h3>Registration Trends</h3>
-          <div style={{ height: '350px' }}>
+          <div className="chart-container" style={{ height: '380px' }}>
             <Bar
               data={createChartData({
                 'Today': analytics.registeredToday,
@@ -444,9 +463,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="chart-card">
-          <h3>State Wise Distribution</h3>
-          <div style={{ height: '450px' }}>
+        <div className="chart-card geo-chart">
+          <h3>State Wise Distribution (India)</h3>
+          <div className="chart-container" style={{ height: '480px' }}>
             <Chart
               chartType="GeoChart"
               data={[
@@ -457,14 +476,15 @@ export default function DashboardPage() {
                 region: 'IN',
                 resolution: 'provinces',
                 colorAxis: { colors: ['#e3f2fd', '#1976d2'] },
-                backgroundColor: '#ffffff',
-                datalessRegionColor: '#f5f5f5',
+                backgroundColor: 'transparent',
+                datalessRegionColor: '#f0f4f8',
               }}
               width="100%"
               height="100%"
             />
           </div>
         </div>
+
       </div>
     </>
   );

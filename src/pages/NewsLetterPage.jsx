@@ -1139,6 +1139,7 @@ export default function BriskOliveNewsletterApp() {
           font-size: 1.4rem;
           color: #4b5563;
         }
+          
       `}</style>
     </div>
   );
