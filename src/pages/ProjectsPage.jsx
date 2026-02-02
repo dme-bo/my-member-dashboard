@@ -349,7 +349,7 @@ export default function ProjectsPage() {
           </div>
 
           {/* Total Applications Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "400px"}}>
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto"}}>
             Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
           </span>
 
@@ -446,7 +446,7 @@ export default function ProjectsPage() {
       <div className="content-with-sidebar">
         <div className="table-container">
           {loading ? (
-            <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px" }}>
+            <div style={{ height: "100vh", width: "86vw",padding: "60px", textAlign: "center", fontSize: "18px" }}>
               Loading applications...
             </div>
           ) : (

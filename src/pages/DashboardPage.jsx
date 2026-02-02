@@ -309,7 +309,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+      <div style={{ height: "100vh", width: "86vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
         Loading Dashboard ...
       </div>
     );
@@ -320,6 +320,15 @@ export default function DashboardPage() {
   return (
     <>
       <style jsx>{`
+
+      html, body, #root, .app-wrapper, main {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
         .dashboard-container {
           width: 100%;
           min-height: 100vh;

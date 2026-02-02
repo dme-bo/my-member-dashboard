@@ -369,7 +369,7 @@ export default function MemberListPage({ onMemberClick }) {
                 }}
               />
             </div>
-            <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "300px" }}>
+            <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto",}}>
               Total Members: <strong>0</strong>
             </span>
             <button disabled style={{ padding: "10px 20px", backgroundColor: "white", border: "1px solid #10b981", color: "#10b981", borderRadius: "8px", cursor: "not-allowed", fontWeight: "600", fontSize: "14px", opacity: 0.5 }}>
@@ -436,7 +436,7 @@ export default function MemberListPage({ onMemberClick }) {
           </div>
 
           {/* Total Members Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "500px" }}>
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "auto" }}>
             Total Members: <strong>{totalItems}</strong>
           </span>
 

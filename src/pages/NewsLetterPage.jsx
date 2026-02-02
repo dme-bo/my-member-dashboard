@@ -687,7 +687,7 @@ export default function BriskOliveNewsletterApp() {
 
     if (loading) {
     return (
-      <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+      <div style={{ height: "100vh", width: "87vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
         Loading Newsletter...
       </div>
     );
@@ -947,6 +947,15 @@ export default function BriskOliveNewsletterApp() {
 
       {/* ── STYLES ───────────────────────────────────────────────────────────── */}
       <style jsx global>{`
+
+      html, body, #root, .app-wrapper, main {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
         .newsletter-app {
           font-family: 'Segoe UI', system-ui, sans-serif;
           max-width: 1400px;
@@ -980,7 +989,7 @@ export default function BriskOliveNewsletterApp() {
           border-radius: 8px;
           cursor: pointer;
           font-size: 1.1rem;
-          margin-left: 1050px;
+          margin-left: auto;
         }
 
         .selectors-container {

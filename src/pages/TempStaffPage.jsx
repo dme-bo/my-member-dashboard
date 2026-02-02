@@ -402,7 +402,7 @@ export default function TempStaffPage() {
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+      <div style={{ height: "100vh", width: "86vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
         Loading {viewMode === "applications" ? "TCS Applications" : "Coordinators"}...
       </div>
     );
@@ -439,7 +439,7 @@ export default function TempStaffPage() {
           </div>
 
           {/* Total Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft:"500px" }}>
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto" }}>
             Total Applications:- <strong>{viewMode === "applications" ? membersData.length : coordinatorsData.length}</strong>
           </span>
 

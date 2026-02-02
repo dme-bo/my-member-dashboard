@@ -453,7 +453,7 @@ if (error) return <div className="dashboard-container"><div className="error">{e
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+      <div style={{ height: "100vh", width: "87vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
         Loading Requirements...
       </div>
     );
