@@ -387,7 +387,7 @@ export default function MemberListPage({ onMemberClick }) {
             <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}>
               ⏳
             </div>
-            <p style={{ fontSize: "16px", color: "#666", margin: "0" }}>Loading members...</p>
+            <p style={{ height: "100vh", width: "82vw", fontSize: "16px", color: "#666", margin: "0" }}>Loading members...</p>
             <style>{`
               @keyframes spin {
                 0% { transform: rotate(0deg); }

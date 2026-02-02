@@ -7,7 +7,6 @@ import {
   FaUsers,
   FaSearch,
   FaEye,
-  FaProjectDiagram,
   FaTrashAlt,
   FaSortUp,
   FaSortDown,
@@ -26,7 +25,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import Papa from "papaparse"; // For CSV export
+import Papa from "papaparse";
 
 export default function RequirementsPage() {
   const [requirementsData, setRequirementsData] = useState([]);
@@ -38,10 +37,10 @@ export default function RequirementsPage() {
   const [allAllocations, setAllAllocations] = useState([]);
   const [allocatedCounts, setAllocatedCounts] = useState({});
   const [activeFilter, setActiveFilter] = useState("All");
-  const [requirementsSearchTerm, setRequirementsSearchTerm] = useState(""); // New: Search for requirements
-  const [sortConfig, setSortConfig] = useState({ key: "postedOn", direction: "desc" }); // New: Sorting
+  const [requirementsSearchTerm, setRequirementsSearchTerm] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: "postedOn", direction: "desc" });
 
-  // Modals
+  // Modals state
   const [showJobModal, setShowJobModal] = useState(false);
   const [showAllocateModal, setShowAllocateModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -51,7 +50,6 @@ export default function RequirementsPage() {
   const [showAllAllocationsModal, setShowAllAllocationsModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [allocationToDelete, setAllocationToDelete] = useState(null);
-
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
   const [allocatedMembers, setAllocatedMembers] = useState([]);
@@ -66,20 +64,51 @@ export default function RequirementsPage() {
   const [rankFilter, setRankFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
 
-  // Pagination for members
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSizeAllocate, setPageSizeAllocate] = useState(100);
-
-  // Pagination for requirements (New feature)
   const [requirementsCurrentPage, setRequirementsCurrentPage] = useState(1);
   const [requirementsPageSize, setRequirementsPageSize] = useState(50);
 
-  // Toast
+  // Toast & loading
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  /* FETCH REQUIREMENTS (Jobs + Projects) */
+  // Prevent body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen =
+      showJobModal ||
+      showAllocateModal ||
+      showStatsModal ||
+      showMemberDetailModal ||
+      showAllocatedMembersModal ||
+      showAllAllocationsModal ||
+      showDeleteConfirmModal;
+
+    if (isAnyModalOpen) {
+      document.body.style.overflow = "hidden";
+      document.body.style.paddingRight = "17px"; // Prevent layout shift (scrollbar width)
+    } else {
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
+    };
+  }, [
+    showJobModal,
+    showAllocateModal,
+    showStatsModal,
+    showMemberDetailModal,
+    showAllocatedMembersModal,
+    showAllAllocationsModal,
+    showDeleteConfirmModal,
+  ]);
+
+  /* FETCH REQUIREMENTS */
   useEffect(() => {
     const fetchRequirements = async () => {
       try {
@@ -194,10 +223,7 @@ export default function RequirementsPage() {
       setAllocatedMembers([]);
       return;
     }
-    const allocQuery = query(
-      collection(db, "allocations"),
-      where("jobId", "==", selectedReq.id)
-    );
+    const allocQuery = query(collection(db, "allocations"), where("jobId", "==", selectedReq.id));
     const unsubscribe = onSnapshot(allocQuery, (snapshot) => {
       const alloc = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -216,17 +242,9 @@ export default function RequirementsPage() {
         const snapshot = await getDocs(q);
         const membersList = snapshot.docs.map((doc) => ({
           id: doc.id,
-          name:
-            doc.data().name ||
-            doc.data().displayName ||
-            `${doc.data().full_name || ""}`.trim() ||
-            "Unnamed",
+          name: doc.data().name || doc.data().displayName || `${doc.data().full_name || ""}`.trim() || "Unnamed",
           email: doc.data().email || "—",
-          phone:
-            doc.data().phone ||
-            doc.data().mobile ||
-            doc.data().phone_number ||
-            "—",
+          phone: doc.data().phone || doc.data().mobile || doc.data().phone_number || "—",
           designation: doc.data().designation || doc.data().role || "—",
           gender: doc.data().gender || "",
           state: doc.data().state || "",
@@ -247,30 +265,12 @@ export default function RequirementsPage() {
   }, []);
 
   /* UNIQUE FILTER VALUES */
-  const uniqueStates = useMemo(
-    () => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(),
-    [members]
-  );
-  const uniqueCities = useMemo(
-    () => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(),
-    [members]
-  );
-  const uniqueOrganizations = useMemo(
-    () => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(),
-    [members]
-  );
-  const uniqueServices = useMemo(
-    () => [...new Set(members.map((m) => m.service).filter(Boolean))].sort(),
-    [members]
-  );
-  const uniqueRanks = useMemo(
-    () => [...new Set(members.map((m) => m.rank).filter(Boolean))].sort(),
-    [members]
-  );
-  const uniqueLevels = useMemo(
-    () => [...new Set(members.map((m) => m.level).filter(Boolean))].sort(),
-    [members]
-  );
+  const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
+  const uniqueCities = useMemo(() => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(), [members]);
+  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(), [members]);
+  const uniqueServices = useMemo(() => [...new Set(members.map((m) => m.service).filter(Boolean))].sort(), [members]);
+  const uniqueRanks = useMemo(() => [...new Set(members.map((m) => m.rank).filter(Boolean))].sort(), [members]);
+  const uniqueLevels = useMemo(() => [...new Set(members.map((m) => m.level).filter(Boolean))].sort(), [members]);
 
   /* MEMBER FILTERING */
   useEffect(() => {
@@ -305,12 +305,10 @@ export default function RequirementsPage() {
     else if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
     else if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
     else if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
-    // Assuming "TCS" is for company filter, add if needed
-    // else if (activeFilter === "TCS") list = list.filter((r) => r.company.toLowerCase().includes("tcs"));
     return list;
   }, [requirementsData, activeFilter]);
 
-  /* SEARCH AND SORT REQUIREMENTS */
+  /* SEARCH + SORT + PAGINATED REQUIREMENTS */
   const displayedRequirements = useMemo(() => {
     let list = filteredRequirements.filter((r) => {
       const term = requirementsSearchTerm.toLowerCase();
@@ -323,7 +321,6 @@ export default function RequirementsPage() {
       );
     });
 
-    // Sorting
     list.sort((a, b) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
@@ -341,7 +338,6 @@ export default function RequirementsPage() {
       return 0;
     });
 
-    // Pagination
     const start = (requirementsCurrentPage - 1) * requirementsPageSize;
     return list.slice(start, start + requirementsPageSize);
   }, [filteredRequirements, requirementsSearchTerm, sortConfig, requirementsCurrentPage, requirementsPageSize]);
@@ -385,7 +381,6 @@ export default function RequirementsPage() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  // New: Export to CSV
   const exportToCSV = () => {
     const csvData = filteredRequirements.map((req) => ({
       Type: req.type === "project" ? "Project" : "Job",
@@ -405,9 +400,109 @@ export default function RequirementsPage() {
     link.click();
   };
 
-  if (loading) return <div className="dashboard-container"><div className="loading">Loading Requirements…</div></div>;
-  if (error) return <div className="dashboard-container"><div className="error">{error}</div></div>;
+  // if (loading) return <div className="dashboard-container"><div className="loading">Loading Requirements…</div></div>;
+if (error) return <div className="dashboard-container"><div className="error">{error}</div></div>;
 
+ 
+// if (loading) {
+//   return (
+//     <div
+//       style={{
+//         minHeight: "100vh",
+//         height: "100vh",
+//         width: "100vw",
+//         display: "flex",
+//         alignItems: "center",
+//         justifyContent: "center",
+//         backgroundColor: "#f4f6f9",
+//         position: "fixed",
+//         inset: 0,
+//         zIndex: 9999,
+//       }}
+//     >
+//       <div
+//         style={{
+//           display: "flex",
+//           flexDirection: "column",
+//           alignItems: "center",
+//           gap: "24px",
+//         }}
+//       >
+//         <div className="spinner" />
+//         <div
+//           style={{
+//             fontSize: "1.3rem",
+//             fontWeight: "600",
+//             color: "#1f2937",
+//           }}
+//         >
+//           Loading Requirements...
+//         </div>
+//         <div
+//           style={{
+//             fontSize: "0.95rem",
+//             color: "#6b7280",
+//           }}
+//         >
+//           Fetching jobs & projects from database
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+  if (loading) {
+    return (
+      <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+        Loading Requirements...
+      </div>
+    );
+  }
+
+if (error) {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#f4f6f9",
+        padding: "20px",
+      }}
+    >
+      <div
+        style={{
+          background: "white",
+          padding: "40px 60px",
+          borderRadius: "16px",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+          textAlign: "center",
+          maxWidth: "500px",
+        }}
+      >
+        <div style={{ color: "#ef4444", fontSize: "3.5rem", marginBottom: "16px" }}>⚠️</div>
+        <h2 style={{ color: "#1f2937", marginBottom: "16px" }}>Something went wrong</h2>
+        <p style={{ color: "#4b5563", marginBottom: "24px" }}>{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            padding: "12px 32px",
+            backgroundColor: "#1976d2",
+            color: "white",
+            border: "none",
+            borderRadius: "12px",
+            fontWeight: "600",
+            cursor: "pointer",
+            fontSize: "1rem",
+          }}
+        >
+          Refresh Page
+        </button>
+      </div>
+    </div>
+  );
+}
   return (
     <div className="dashboard-container" style={{ backgroundColor: "#f4f6f9", minHeight: "100vh", padding: "20px" }}>
       {/* TOAST */}
@@ -439,85 +534,121 @@ export default function RequirementsPage() {
       `}</style>
 
       {/* HEADER */}
-      <header className="dashboard-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px",paddingBottom: "10px" }}>
-        <div className="header-content">
-          <div className="filter-buttons" style={{ display: "flex", gap: "10px" }}>
-            {["All", "Open", "Closed", "Projects", "Recruitment"].map((filter) => ( // Removed "TCS" as not implemented
-              <button
-                key={filter}
-                className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
-                onClick={() => setActiveFilter(filter)}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "30px",
-                  backgroundColor: activeFilter === filter ? "#1976d2" : "#e5e7eb",
-                  color: activeFilter === filter ? "white" : "#1f2937",
-                  fontWeight: "600",
-                  border: "none",
-                  cursor: "pointer",
-                  transition: "all 0.3s",
-                }}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", paddingBottom: "10px" }}>
+        <div style={{ display: "flex", gap: "10px",
+  borderRadius: '0.75rem', }}>
+          {["All", "Open", "Closed", "Projects", "Recruitment"].map((filter) => (
+            <button
+              key={filter}
+              className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
+              onClick={() => setActiveFilter(filter)}
+              style={{
+                padding: "10px 20px",
+                borderRadius: "30px",
+                backgroundColor: activeFilter === filter ? "#1976d2" : "#e5e7eb",
+                color: activeFilter === filter ? "white" : "#1f2937",
+                fontWeight: "600",
+                border: "none",
+                cursor: "pointer",
+                transition: "all 0.3s",
+                padding: '8px 16px',
+  cursor: 'pointer',
+  // backgroundColor: 'rgb(245, 245, 245)',
+  // color: 'rgba(0, 0, 0, 0.87)',
+  fontWeight: 700,
+  boxShadow: 
+    '0 2px 1px -1px rgba(0,0,0,0.2), ' +
+    '0 1px 1px 0 rgba(0,0,0,0.14), ' +
+    '0 1px 3px 0 rgba(0,0,0,0.12)',
+  transition: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+            >
+              {filter}
+            </button>
+          ))}
         </div>
-        <button onClick={exportToCSV} style={{ padding: "10px 20px", backgroundColor: "#10b981", color: "white", borderRadius: "30px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontWeight: "600" }}>
+        <button
+          onClick={exportToCSV}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: "#10b981",
+            color: "white",
+            borderRadius: "30px",
+            border: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            fontWeight: "600",
+                            padding: '8px 16px',
+  cursor: 'pointer',
+  // backgroundColor: 'rgb(245, 245, 245)',
+  // color: 'rgba(0, 0, 0, 0.87)',
+  fontWeight: 700,
+  boxShadow: 
+    '0 2px 1px -1px rgba(0,0,0,0.2), ' +
+    '0 1px 1px 0 rgba(0,0,0,0.14), ' +
+    '0 1px 3px 0 rgba(0,0,0,0.12)',
+  transition: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+        >
           <FaFileExport /> Export CSV
         </button>
       </header>
 
       {/* STATS GRID */}
-      <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px", marginBottom: "40px" }}>
-        <div className="card" onClick={() => handleStatClick("total")} style={{ cursor: "pointer", backgroundColor: "white", borderRadius: "16px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", padding: "20px", transition: "transform 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-          <div className="stat-card total-members" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div className="icon-wrapper" style={{ backgroundColor: "#3b82f6", color: "white", padding: "16px", borderRadius: "50%" }}><FaBriefcase size={32} /></div>
-            <div className="stat-info">
-              <p className="stat-label" style={{ fontSize: "16px", color: "#6b7280" }}>Total Requirements</p>
-              <p className="stat-value" style={{ fontSize: "32px", fontWeight: "bold", color: "#1f2937" }}>{stats.total}</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px", marginBottom: "40px" }}>
+        {[
+          { type: "total", label: "Total Requirements", icon: FaBriefcase, color: "#3b82f6", value: stats.total },
+          { type: "active", label: "Open Requirements", icon: FaHourglassHalf, color: "#22c55e", value: stats.active },
+          { type: "completed", label: "Closed Requirements", icon: FaCheckCircle, color: "#06b6d4", value: stats.completed },
+          { type: "allocated", label: "Total Allocated Members", icon: FaUsers, color: "#a855f7", value: stats.totalAllocated },
+        ].map((stat) => (
+          <div
+            key={stat.type}
+            onClick={() => handleStatClick(stat.type)}
+            style={{
+              cursor: "pointer",
+              backgroundColor: "white",
+              borderRadius: "16px",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+              padding: "20px",
+              transition: "transform 0.3s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ backgroundColor: stat.color, color: "white", padding: "16px", borderRadius: "50%" }}>
+                <stat.icon size={32} />
+              </div>
+              <div>
+                <p style={{ fontSize: "16px", color: "#6b7280" }}>{stat.label}</p>
+                <p style={{ fontSize: "32px", fontWeight: "bold", color: "#1f2937" }}>{stat.value}</p>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="card" onClick={() => handleStatClick("active")} style={{ cursor: "pointer", backgroundColor: "white", borderRadius: "16px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", padding: "20px", transition: "transform 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-          <div className="stat-card active" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div className="icon-wrapper" style={{ backgroundColor: "#22c55e", color: "white", padding: "16px", borderRadius: "50%" }}><FaHourglassHalf size={32} /></div>
-            <div className="stat-info">
-              <p className="stat-label" style={{ fontSize: "16px", color: "#6b7280" }}>Open Requirements</p>
-              <p className="stat-value" style={{ fontSize: "32px", fontWeight: "bold", color: "#1f2937" }}>{stats.active}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card" onClick={() => handleStatClick("completed")} style={{ cursor: "pointer", backgroundColor: "white", borderRadius: "16px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", padding: "20px", transition: "transform 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-          <div className="stat-card completed" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div className="icon-wrapper" style={{ backgroundColor: "#06b6d4", color: "white", padding: "16px", borderRadius: "50%" }}><FaCheckCircle size={32} /></div>
-            <div className="stat-info">
-              <p className="stat-label" style={{ fontSize: "16px", color: "#6b7280" }}>Closed Requirements</p>
-              <p className="stat-value" style={{ fontSize: "32px", fontWeight: "bold", color: "#1f2937" }}>{stats.completed}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card" onClick={() => handleStatClick("allocated")} style={{ cursor: "pointer", backgroundColor: "white", borderRadius: "16px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", padding: "20px", transition: "transform 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-          <div className="stat-card allocated" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div className="icon-wrapper" style={{ backgroundColor: "#a855f7", color: "white", padding: "16px", borderRadius: "50%" }}><FaUsers size={32} /></div>
-            <div className="stat-info">
-              <p className="stat-label" style={{ fontSize: "16px", color: "#6b7280" }}>Total Allocated Members</p>
-              <p className="stat-value" style={{ fontSize: "32px", fontWeight: "bold", color: "#1f2937" }}>{stats.totalAllocated}</p>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* REQUIREMENTS SECTION */}
-      <div className="requirements-section" style={{ backgroundColor: "white", 
-  borderRadius: "16px", 
-  padding: "30px", 
-  boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-  minHeight: "600px", // <--- ADD THIS: Keeps the card height stable
-  display: "flex",    // <--- ADD THIS
-  flexDirection: "column"  }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-          <h2 className="section-title" style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#1f2937" }}>
+      <div
+        style={{
+          backgroundColor: "white",
+          borderRadius: "16px",
+          padding: "30px",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+          minHeight: "600px",
+          width: "100%",
+          minWidth: "min(100%, 1100px)",
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "16px",overflowY: "auto" }}>
+          <h2 style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#1f2937" }}>
             {activeFilter === "All" && "All Requirements"}
             {activeFilter === "Open" && "Open Requirements"}
             {activeFilter === "Closed" && "Closed Requirements"}
@@ -525,14 +656,20 @@ export default function RequirementsPage() {
             {activeFilter === "Recruitment" && "Recruitment"}
             <span style={{ marginLeft: "10px", color: "#10b981", fontSize: "20px" }}>({filteredRequirements.length})</span>
           </h2>
-          <div style={{ position: "relative", width: "300px" }}>
+          <div style={{ position: "relative", minWidth: "320px", flex: "1", maxWidth: "420px" }}>
             <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
             <input
               type="text"
               placeholder="Search by title, company, location..."
               value={requirementsSearchTerm}
               onChange={(e) => setRequirementsSearchTerm(e.target.value)}
-              style={{ width: "100%", padding: "12px 16px 12px 40px", borderRadius: "30px", border: "2px solid #e2e8f0", fontSize: "14px" }}
+              style={{
+                width: "100%",
+                padding: "12px 16px 12px 40px",
+                borderRadius: "30px",
+                border: "2px solid #e2e8f0",
+                fontSize: "14px",
+              }}
             />
           </div>
         </div>
@@ -542,14 +679,17 @@ export default function RequirementsPage() {
             <p style={{ fontSize: "16px" }}>No Requirements found.</p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{
-              width: "100%",
-              tableLayout: "fixed",
-              borderCollapse: "separate",
-              borderSpacing: "0 10px",
-              fontSize: "14px"
-            }}>
+          <div style={{ overflowX: "auto", minWidth: "100%" }}>
+            <table
+              style={{
+                width: "100%",
+                minWidth: "1100px",
+                tableLayout: "fixed",
+                borderCollapse: "separate",
+                borderSpacing: "0 10px",
+                fontSize: "14px",
+              }}
+            >
               <thead>
                 <tr style={{ backgroundColor: "#1976d2", color: "white", borderRadius: "12px" }}>
                   <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>Type</th>
@@ -571,30 +711,32 @@ export default function RequirementsPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayedRequirements.map((req, idx) => {
+                {displayedRequirements.map((req) => {
                   const liveCount = allocatedCounts[req.id] || 0;
                   return (
-                    <tr 
+                    <tr
                       key={req.id}
-                      style={{ 
+                      style={{
                         backgroundColor: "white",
                         boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
                         borderRadius: "12px",
                         transition: "all 0.3s",
-                        opacity: req.status === "completed" ? 0.7 : 1
+                        opacity: req.status === "completed" ? 0.7 : 1,
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)"}
-                      onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,0.05)"}
+                      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,0.05)")}
                     >
                       <td style={{ padding: "16px", fontWeight: "600", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
-                        <span style={{ 
-                          backgroundColor: req.type === "project" ? "#e9d5ff" : "#dbeafe",
-                          color: req.type === "project" ? "#6b21a8" : "#0c4a6e",
-                          padding: "6px 14px",
-                          borderRadius: "20px",
-                          fontSize: "13px",
-                          fontWeight: "600"
-                        }}>
+                        <span
+                          style={{
+                            backgroundColor: req.type === "project" ? "#e9d5ff" : "#dbeafe",
+                            color: req.type === "project" ? "#6b21a8" : "#0c4a6e",
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                          }}
+                        >
                           {req.type === "project" ? "Project" : "Job"}
                         </span>
                       </td>
@@ -603,27 +745,21 @@ export default function RequirementsPage() {
                           {req.title}
                         </div>
                       </td>
-                      <td style={{ padding: "16px", color: "#4b5563" }}>
-                        {req.company}
-                      </td>
-                      <td style={{ padding: "16px", color: "#4b5563" }}>
-                        {req.location}
-                      </td>
-                      <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>
-                        {req.salary}
-                      </td>
-                      <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
-                        {liveCount}
-                      </td>
+                      <td style={{ padding: "16px", color: "#4b5563" }}>{req.company}</td>
+                      <td style={{ padding: "16px", color: "#4b5563" }}>{req.location}</td>
+                      <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
+                      <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>{liveCount}</td>
                       <td style={{ padding: "16px", textAlign: "center" }}>
-                        <span style={{ 
-                          backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
-                          color: req.status === "active" ? "#166534" : "#991b1b",
-                          padding: "8px 16px",
-                          borderRadius: "20px",
-                          fontSize: "13px",
-                          fontWeight: "600"
-                        }}>
+                        <span
+                          style={{
+                            backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
+                            color: req.status === "active" ? "#166534" : "#991b1b",
+                            padding: "8px 16px",
+                            borderRadius: "20px",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                          }}
+                        >
                           {req.status === "active" ? "Open" : "Closed"}
                         </span>
                       </td>
@@ -642,10 +778,10 @@ export default function RequirementsPage() {
                             cursor: "pointer",
                             fontSize: "13px",
                             fontWeight: "600",
-                            transition: "background-color 0.3s"
+                            transition: "background-color 0.3s",
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1565c0")}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1976d2")}
                         >
                           View Details
                         </button>
@@ -658,7 +794,7 @@ export default function RequirementsPage() {
           </div>
         )}
 
-        {/* Pagination for Requirements */}
+        {/* Requirements Pagination */}
         {requirementsTotalPages > 1 && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px", flexWrap: "wrap", gap: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -672,16 +808,42 @@ export default function RequirementsPage() {
                 style={{ padding: "10px 14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white" }}
               >
                 {[10, 25, 50, 100, "All"].map((size) => (
-                  <option key={size} value={size === "All" ? filteredRequirements.length : size}>{size}</option>
+                  <option key={size} value={size === "All" ? filteredRequirements.length : size}>
+                    {size}
+                  </option>
                 ))}
               </select>
             </div>
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-              <button disabled={requirementsCurrentPage === 1} onClick={() => setRequirementsCurrentPage(p => p - 1)} style={{ padding: "10px 20px", borderRadius: "12px", background: requirementsCurrentPage === 1 ? "#e5e7eb" : "#1976d2", color: "white", border: "none", fontWeight: "600" }}>
+              <button
+                disabled={requirementsCurrentPage === 1}
+                onClick={() => setRequirementsCurrentPage((p) => p - 1)}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: "12px",
+                  background: requirementsCurrentPage === 1 ? "#e5e7eb" : "#1976d2",
+                  color: "white",
+                  border: "none",
+                  fontWeight: "600",
+                }}
+              >
                 Previous
               </button>
-              <span style={{ padding: "10px", fontSize: "14px", color: "#1f2937" }}>Page {requirementsCurrentPage} of {requirementsTotalPages}</span>
-              <button disabled={requirementsCurrentPage === requirementsTotalPages} onClick={() => setRequirementsCurrentPage(p => p + 1)} style={{ padding: "10px 20px", borderRadius: "12px", background: requirementsCurrentPage === requirementsTotalPages ? "#e5e7eb" : "#1976d2", color: "white", border: "none", fontWeight: "600" }}>
+              <span style={{ padding: "10px", fontSize: "14px", color: "#1f2937" }}>
+                Page {requirementsCurrentPage} of {requirementsTotalPages}
+              </span>
+              <button
+                disabled={requirementsCurrentPage === requirementsTotalPages}
+                onClick={() => setRequirementsCurrentPage((p) => p + 1)}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: "12px",
+                  background: requirementsCurrentPage === requirementsTotalPages ? "#e5e7eb" : "#1976d2",
+                  color: "white",
+                  border: "none",
+                  fontWeight: "600",
+                }}
+              >
                 Next
               </button>
             </div>
@@ -691,8 +853,33 @@ export default function RequirementsPage() {
 
       {/* JOB/PROJECT DETAILS MODAL */}
       {showJobModal && selectedReq && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowJobModal(false)}>
-          <div className="modal-contents" style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "800px", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }} onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setShowJobModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "40px",
+              width: "90vw",
+              maxWidth: "900px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ... Job/Project details content ... */}
             {selectedReq.logo && (
               <img
                 src={selectedReq.logo}
@@ -700,27 +887,45 @@ export default function RequirementsPage() {
                 style={{ width: 120, borderRadius: 16, marginBottom: 24, objectFit: "contain", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}
               />
             )}
-            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>{selectedReq.type === "project" ? "Project" : "Job"}: {selectedReq.title}</h2>
-            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}><strong>Company:</strong> {selectedReq.company}</p>
-            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}><strong>Location:</strong> {selectedReq.location}</p>
-            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}><strong>Compensation:</strong> {selectedReq.salary}</p>
-            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}><strong>Posted On:</strong> {selectedReq.postedOn}</p>
-            {selectedReq.benefits && <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}><strong>Benefits:</strong> {selectedReq.benefits}</p>}
+            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>
+              {selectedReq.type === "project" ? "Project" : "Job"}: {selectedReq.title}
+            </h2>
+            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+              <strong>Company:</strong> {selectedReq.company}
+            </p>
+            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+              <strong>Location:</strong> {selectedReq.location}
+            </p>
+            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+              <strong>Compensation:</strong> {selectedReq.salary}
+            </p>
+            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+              <strong>Posted On:</strong> {selectedReq.postedOn}
+            </p>
+            {selectedReq.benefits && (
+              <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+                <strong>Benefits:</strong> {selectedReq.benefits}
+              </p>
+            )}
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}>
               <strong>Status:</strong>{" "}
-              <span style={{
-                backgroundColor: selectedReq.status === "active" ? "#dcfce7" : "#fee2e2",
-                color: selectedReq.status === "active" ? "#166534" : "#991b1b",
-                padding: "6px 12px",
-                borderRadius: "20px",
-                fontWeight: "600"
-              }}>
+              <span
+                style={{
+                  backgroundColor: selectedReq.status === "active" ? "#dcfce7" : "#fee2e2",
+                  color: selectedReq.status === "active" ? "#166534" : "#991b1b",
+                  padding: "6px 12px",
+                  borderRadius: "20px",
+                  fontWeight: "600",
+                }}
+              >
                 {selectedReq.status === "active" ? "Open" : "Closed"}
               </span>
             </p>
 
-            <div className="jd-section" style={{ backgroundColor: "#f9fafb", padding: "20px", borderRadius: "12px", marginBottom: "32px" }}>
-              <strong style={{ fontSize: "18px", display: "block", marginBottom: "12px" }}>{selectedReq.type === "project" ? "Project Description" : "Job Description"}:</strong>
+            <div style={{ backgroundColor: "#f9fafb", padding: "20px", borderRadius: "12px", marginBottom: "32px" }}>
+              <strong style={{ fontSize: "18px", display: "block", marginBottom: "12px" }}>
+                {selectedReq.type === "project" ? "Project Description" : "Job Description"}:
+              </strong>
               <div
                 style={{ lineHeight: "1.7", color: "#374151" }}
                 dangerouslySetInnerHTML={{
@@ -731,10 +936,9 @@ export default function RequirementsPage() {
               />
             </div>
 
-            <div className="modal-actions" style={{ display: "flex", gap: "16px", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: "16px", justifyContent: "flex-end" }}>
               {selectedReq.status === "active" && (
                 <button
-                  className="btn primary"
                   onClick={() => {
                     setShowAllocateModal(true);
                     setShowJobModal(false);
@@ -749,16 +953,21 @@ export default function RequirementsPage() {
                     setSelectedMemberIds([]);
                     setCurrentPage(1);
                   }}
-                  style={{ padding: "12px 24px", backgroundColor: "#1976d2", color: "white", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
+                  style={{
+                    padding: "12px 24px",
+                    backgroundColor: "#1976d2",
+                    color: "white",
+                    borderRadius: "30px",
+                    border: "none",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
                 >
                   Allocate Members
                 </button>
               )}
-
               <button
-                className="btn outline"
+                onClick={() => setShowAllocatedMembersModal(true)}
                 style={{
                   padding: "12px 24px",
                   backgroundColor: "#1976d2",
@@ -767,17 +976,22 @@ export default function RequirementsPage() {
                   border: "none",
                   fontWeight: "600",
                   cursor: "pointer",
-                  transition: "background-color 0.3s"
                 }}
-                onClick={() => setShowAllocatedMembersModal(true)}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
               >
                 Allocated Members ({allocatedMembers.length})
-                {selectedReq.status !== "active" && " (View Only)"}
               </button>
-
-              <button className="btn secondary" onClick={() => setShowJobModal(false)} style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}>
+              <button
+                onClick={() => setShowJobModal(false)}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
                 Close
               </button>
             </div>
@@ -785,11 +999,39 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* ALLOCATE MODAL */}
+      {/* ALLOCATE MEMBERS MODAL */}
       {showAllocateModal && selectedReq && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowAllocateModal(false)}>
-          <div className="modal-contents allocate-modal" style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "1200px", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>Allocate Members to: <strong>{selectedReq.title}</strong></h2>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1100,
+            padding: "20px",
+          }}
+          onClick={() => setShowAllocateModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "32px",
+              width: "90vw",
+              maxWidth: "1450px",
+              minWidth: "1150px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>
+              Allocate Members to: <strong>{selectedReq.title}</strong>
+            </h2>
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}>
               <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
             </p>
@@ -804,29 +1046,37 @@ export default function RequirementsPage() {
                   marginBottom: "24px",
                   border: "1px solid #fecaca",
                   fontWeight: "500",
-                  fontSize: "15px",
                 }}
               >
-                <strong>Warning:</strong> This {selectedReq.type} is <strong>closed</strong>. 
-                You cannot allocate new members.
+                <strong>Warning:</strong> This {selectedReq.type} is <strong>closed</strong>. You cannot allocate new members.
               </div>
             )}
 
-            {/* Main Content Layout */}
-            <div style={{ 
-  display: "grid", 
-  gridTemplateColumns: "3fr 1fr", 
-  gap: "30px", 
-  marginBottom: "40px", 
-  width: "100%",      // <--- ADD THIS
-  minWidth: "1000px"  // <--- CHANGE THIS: Force a minimum width so it doesn't collapse
-}}>
-              {/* Members List and Pagination - Left Side */}
-              <div style={{ flex: 1, minWidth: "min(100%, 580px)" }}>
-                {/* Members List */}
-                <div className="members-list" style={{ maxHeight: "500px", overflowY: "auto", border: "2px solid #e2e8f0", borderRadius: "16px", backgroundColor: "white", padding: "10px" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(620px, 3fr) 360px",
+                gap: "32px",
+                width: "100%",
+                minWidth: "980px",
+                boxSizing: "border-box",
+                marginBottom: "40px",
+              }}
+            >
+              {/* Left - Members List */}
+              <div>
+                <div
+                  style={{
+                    maxHeight: "520px",
+                    overflowY: "auto",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "16px",
+                    backgroundColor: "white",
+                    padding: "12px",
+                  }}
+                >
                   {paginatedMembers.length === 0 ? (
-                    <p style={{ textAlign: "center", padding: "60px", color: "#888", fontSize: "16px" }}>
+                    <p style={{ textAlign: "center", padding: "80px 20px", color: "#888", fontSize: "16px" }}>
                       {members.length === 0 ? "Loading members..." : "No members found matching filters."}
                     </p>
                   ) : (
@@ -837,16 +1087,20 @@ export default function RequirementsPage() {
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
-                          padding: "20px",
+                          padding: "18px",
                           borderBottom: "1px solid #eee",
                           cursor: "pointer",
                           borderRadius: "12px",
-                          margin: "8px 0",
+                          margin: "6px 0",
                           backgroundColor: selectedMemberIds.includes(member.id) ? "#eff6ff" : "transparent",
                           transition: "background-color 0.3s",
                         }}
-                        onMouseEnter={(e) => { if (!selectedMemberIds.includes(member.id)) e.currentTarget.style.backgroundColor = "#f9fafb"; }}
-                        onMouseLeave={(e) => { if (!selectedMemberIds.includes(member.id)) e.currentTarget.style.backgroundColor = "transparent"; }}
+                        onMouseEnter={(e) => {
+                          if (!selectedMemberIds.includes(member.id)) e.currentTarget.style.backgroundColor = "#f9fafb";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!selectedMemberIds.includes(member.id)) e.currentTarget.style.backgroundColor = "transparent";
+                        }}
                       >
                         <div style={{ display: "flex", alignItems: "center", flex: 1, gap: "16px" }}>
                           <input
@@ -863,9 +1117,10 @@ export default function RequirementsPage() {
                             style={{ transform: "scale(1.5)", accentColor: "#1976d2" }}
                           />
                           <div>
-                            <strong style={{ fontSize: "18px", color: "#1f2937" }}>{member.name}</strong><br />
+                            <strong style={{ fontSize: "18px", color: "#1f2937" }}>{member.name}</strong>
+                            <br />
                             <small style={{ color: "#6b7280", fontSize: "14px" }}>
-                              Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
+                              {member.email} | {member.phone} | {member.designation}
                             </small>
                           </div>
                         </div>
@@ -880,20 +1135,14 @@ export default function RequirementsPage() {
                             background: "#1976d2",
                             color: "white",
                             border: "none",
-                            padding: "12px 24px",
+                            padding: "10px 20px",
                             borderRadius: "20px",
                             cursor: "pointer",
                             fontSize: "14px",
                             fontWeight: "600",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            transition: "background-color 0.3s"
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
                         >
-                          <FaEye /> View Details
+                          <FaEye /> View
                         </button>
                       </label>
                     ))
@@ -902,7 +1151,7 @@ export default function RequirementsPage() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px", flexWrap: "wrap", gap: "16px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "24px", flexWrap: "wrap", gap: "16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       <span style={{ fontSize: "14px", color: "#6b7280" }}>Rows per page:</span>
                       <select
@@ -911,19 +1160,45 @@ export default function RequirementsPage() {
                           setPageSizeAllocate(Number(e.target.value));
                           setCurrentPage(1);
                         }}
-                        style={{ padding: "10px 14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white" }}
+                        style={{ padding: "10px 14px", borderRadius: "12px", border: "2px solid #e2e8f0" }}
                       >
                         {[100, 500, 1000, 5000, "All"].map((size) => (
-                          <option key={size} value={size === "All" ? filteredMembers.length : size}>{size}</option>
+                          <option key={size} value={size === "All" ? filteredMembers.length : size}>
+                            {size}
+                          </option>
                         ))}
                       </select>
                     </div>
                     <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                      <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "10px 20px", borderRadius: "12px", background: currentPage === 1 ? "#e5e7eb" : "#1976d2", color: "white", border: "none", fontWeight: "600" }}>
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((p) => p - 1)}
+                        style={{
+                          padding: "10px 20px",
+                          borderRadius: "12px",
+                          background: currentPage === 1 ? "#e5e7eb" : "#1976d2",
+                          color: "white",
+                          border: "none",
+                          fontWeight: "600",
+                        }}
+                      >
                         Previous
                       </button>
-                      <span style={{ padding: "10px", fontSize: "14px", color: "#1f2937" }}>Page {currentPage} of {totalPages}</span>
-                      <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "10px 20px", borderRadius: "12px", background: currentPage === totalPages ? "#e5e7eb" : "#1976d2", color: "white", border: "none", fontWeight: "600" }}>
+                      <span style={{ padding: "10px", fontSize: "14px" }}>
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage((p) => p + 1)}
+                        style={{
+                          padding: "10px 20px",
+                          borderRadius: "12px",
+                          background: currentPage === totalPages ? "#e5e7eb" : "#1976d2",
+                          color: "white",
+                          border: "none",
+                          fontWeight: "600",
+                        }}
+                      >
                         Next
                       </button>
                     </div>
@@ -931,10 +1206,19 @@ export default function RequirementsPage() {
                 )}
               </div>
 
-              {/* Filters Sidebar - Right Side */}
-              <div style={{ width: "320px", background: "#f8fafc", padding: "30px", borderRadius: "16px", border: "2px solid #e2e8f0", boxShadow: "0 4px 10px rgba(0,0,0,0.05)" }}>
+              {/* Right - Filters Sidebar */}
+              <div
+                style={{
+                  background: "#f8fafc",
+                  padding: "28px",
+                  borderRadius: "16px",
+                  border: "2px solid #e2e8f0",
+                  width: "360px",
+                  flexShrink: 0,
+                }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-                  <h3 style={{ margin: 0, fontSize: "20px", color: "#1f2937", fontWeight: "700" }}>Filters</h3>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>Filters</h3>
                   <button
                     onClick={() => {
                       setMemberSearchTerm("");
@@ -953,134 +1237,126 @@ export default function RequirementsPage() {
                       border: "none",
                       padding: "8px 16px",
                       borderRadius: "20px",
-                      fontSize: "14px",
                       fontWeight: "600",
                       cursor: "pointer",
-                      transition: "background-color 0.3s"
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#dc2626"}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#ef4444"}
                   >
                     Clear All
                   </button>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {/* Member Search */}
                   <div style={{ position: "relative" }}>
-                    <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", fontSize: "18px" }} />
+                    <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
                     <input
                       type="text"
-                      placeholder="Search by name, email, phone, role..."
+                      placeholder="Search name, email, phone, role..."
                       value={memberSearchTerm}
                       onChange={(e) => setMemberSearchTerm(e.target.value)}
-                      style={{ width: "100%", padding: "14px 16px 14px 48px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                      style={{
+                        width: "100%",
+                        padding: "14px 16px 14px 48px",
+                        borderRadius: "12px",
+                        border: "2px solid #d1d5db",
+                        fontSize: "15px",
+                      }}
                     />
                   </div>
 
-                  {/* Gender */}
                   <select
                     value={genderFilter}
                     onChange={(e) => setGenderFilter(e.target.value)}
-                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", backgroundColor: "white", color: "#1f2937", fontSize: "15px" }}
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   >
                     <option value="">All Genders</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                   </select>
 
-                  {/* State */}
                   <input
                     list="states-list"
                     value={stateFilter}
                     onChange={(e) => setStateFilter(e.target.value)}
-                    placeholder="Select State"
-                    style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                    placeholder="State"
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="states-list">
-                    {uniqueStates.map((state) => <option key={state} value={state} />)}
+                    {uniqueStates.map((s) => <option key={s} value={s} />)}
                   </datalist>
 
-                  {/* City */}
                   <input
                     list="cities-list"
                     value={cityFilter}
                     onChange={(e) => setCityFilter(e.target.value)}
-                    placeholder="Select City"
-                    style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                    placeholder="City"
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="cities-list">
-                    {uniqueCities.map((city) => <option key={city} value={city} />)}
+                    {uniqueCities.map((c) => <option key={c} value={c} />)}
                   </datalist>
 
-                  {/* Category/Organization */}
                   <input
                     list="organizations-list"
                     value={organizationFilter}
                     onChange={(e) => setOrganizationFilter(e.target.value)}
-                    placeholder="Select Category"
-                    style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                    placeholder="Category"
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="organizations-list">
-                    {uniqueOrganizations.map((org) => <option key={org} value={org} />)}
+                    {uniqueOrganizations.map((o) => <option key={o} value={o} />)}
                   </datalist>
 
-                  {/* Service */}
                   <input
                     list="services-list"
                     value={serviceFilter}
                     onChange={(e) => setServiceFilter(e.target.value)}
-                    placeholder="Select Service"
-                    style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                    placeholder="Service"
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="services-list">
-                    {uniqueServices.map((service) => <option key={service} value={service} />)}
+                    {uniqueServices.map((s) => <option key={s} value={s} />)}
                   </datalist>
 
-                  {/* Rank */}
                   <input
                     list="ranks-list"
                     value={rankFilter}
                     onChange={(e) => setRankFilter(e.target.value)}
-                    placeholder="Select Rank"
-                    style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                    placeholder="Rank"
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="ranks-list">
-                    {uniqueRanks.map((rank) => <option key={rank} value={rank} />)}
+                    {uniqueRanks.map((r) => <option key={r} value={r} />)}
                   </datalist>
 
-                  {/* Level */}
                   <input
                     list="levels-list"
                     value={levelFilter}
                     onChange={(e) => setLevelFilter(e.target.value)}
-                    placeholder="Select Level"
-                    style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px", backgroundColor: "white", color: "#1f2937" }}
+                    placeholder="Level"
+                    style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="levels-list">
-                    {uniqueLevels.map((level) => <option key={level} value={level} />)}
+                    {uniqueLevels.map((l) => <option key={l} value={l} />)}
                   </datalist>
                 </div>
               </div>
             </div>
 
-            <div className="modal-actions" style={{ display: "flex", gap: "16px", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: "16px", justifyContent: "flex-end" }}>
               <button
-                className="btn primary"
                 disabled={selectedReq.status !== "active" || selectedMemberIds.length === 0}
                 onClick={async () => {
                   if (selectedReq.status !== "active") {
                     showToast("Cannot allocate to a closed requirement", "error");
                     return;
                   }
-
                   try {
-                    const alreadyAllocatedUserIds = new Set(allocatedMembers.map(a => a.userId));
-                    const newMembers = selectedMemberIds.filter(id => !alreadyAllocatedUserIds.has(id));
-                    const already = selectedMemberIds.filter(id => alreadyAllocatedUserIds.has(id));
+                    const alreadyAllocatedUserIds = new Set(allocatedMembers.map((a) => a.userId));
+                    const newMembers = selectedMemberIds.filter((id) => !alreadyAllocatedUserIds.has(id));
+                    const already = selectedMemberIds.filter((id) => alreadyAllocatedUserIds.has(id));
 
                     if (already.length > 0) {
-                      const names = already.map(id => members.find(m => m.id === id)?.name || "Unknown").join(", ");
+                      const names = already.map((id) => members.find((m) => m.id === id)?.name || "Unknown").join(", ");
                       showToast(`${already.length} member(s) already allocated: ${names}`, "error");
                     }
 
@@ -1089,8 +1365,8 @@ export default function RequirementsPage() {
                       return;
                     }
 
-                    const promises = newMembers.map(userId => {
-                      const member = members.find(m => m.id === userId);
+                    const promises = newMembers.map((userId) => {
+                      const member = members.find((m) => m.id === userId);
                       return addDoc(collection(db, "allocations"), {
                         jobId: selectedReq.id,
                         userId,
@@ -1110,11 +1386,35 @@ export default function RequirementsPage() {
                     showToast("Failed to allocate members.", "error");
                   }
                 }}
-                style={{ padding: "12px 24px", backgroundColor: selectedReq.status !== "active" || selectedMemberIds.length === 0 ? "#d1d5db" : "#1976d2", color: "white", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }}
+                style={{
+                  padding: "12px 28px",
+                  backgroundColor: selectedReq.status !== "active" || selectedMemberIds.length === 0 ? "#d1d5db" : "#1976d2",
+                  color: "white",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: selectedReq.status === "active" && selectedMemberIds.length > 0 ? "pointer" : "not-allowed",
+                }}
               >
                 Save Allocation ({selectedMemberIds.length})
               </button>
-              <button className="btn secondary" onClick={() => { setShowAllocateModal(false); setShowJobModal(true); setSelectedMemberIds([]); }} style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}>
+
+              <button
+                onClick={() => {
+                  setShowAllocateModal(false);
+                  setShowJobModal(true);
+                  setSelectedMemberIds([]);
+                }}
+                style={{
+                  padding: "12px 28px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
                 Cancel
               </button>
             </div>
@@ -1124,17 +1424,54 @@ export default function RequirementsPage() {
 
       {/* ALLOCATED MEMBERS MODAL */}
       {showAllocatedMembersModal && selectedReq && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowAllocatedMembersModal(false)}>
-          <div className="modal-contents allocate-modal" style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "900px", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})</h2>
-            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}><strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}</p>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1100,
+          }}
+          onClick={() => setShowAllocatedMembersModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "40px",
+              width: "90vw",
+              maxWidth: "1000px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>
+              Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})
+            </h2>
+            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}>
+              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
+            </p>
 
-            <div className="members-list" style={{ maxHeight: "500px", overflowY: "auto", border: "2px solid #e2e8f0", borderRadius: "16px", padding: "10px", backgroundColor: "white" }}>
+            <div
+              style={{
+                maxHeight: "500px",
+                overflowY: "auto",
+                border: "2px solid #e2e8f0",
+                borderRadius: "16px",
+                padding: "10px",
+                backgroundColor: "white",
+              }}
+            >
               {allocatedMembers.length === 0 ? (
                 <p style={{ textAlign: "center", padding: "60px", color: "#888", fontSize: "16px" }}>No members allocated yet.</p>
               ) : (
                 allocatedMembers.map((alloc) => {
-                  const member = members.find(m => m.id === alloc.userId) || {
+                  const member = members.find((m) => m.id === alloc.userId) || {
                     name: alloc.name || "Unknown Member",
                     email: "—",
                     phone: alloc.phone,
@@ -1152,13 +1489,14 @@ export default function RequirementsPage() {
                         borderRadius: "12px",
                         margin: "8px 0",
                         backgroundColor: "#f8fafc",
-                        transition: "background-color 0.3s"
+                        transition: "background-color 0.3s",
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f3f4f6"}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f3f4f6")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
                     >
                       <div>
-                        <strong style={{ fontSize: "18px", color: "#1f2937" }}>{member.name}</strong><br />
+                        <strong style={{ fontSize: "18px", color: "#1f2937" }}>{member.name}</strong>
+                        <br />
                         <small style={{ color: "#6b7280", fontSize: "14px" }}>
                           Email: {member.email} | Phone: {member.phone} | Role: {member.designation}
                         </small>
@@ -1177,13 +1515,7 @@ export default function RequirementsPage() {
                             borderRadius: "20px",
                             fontSize: "14px",
                             fontWeight: "600",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            transition: "background-color 0.3s"
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
                         >
                           <FaEye /> View
                         </button>
@@ -1204,13 +1536,7 @@ export default function RequirementsPage() {
                             borderRadius: "20px",
                             fontSize: "14px",
                             fontWeight: "600",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            transition: "background-color 0.3s"
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#fecaca"}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#fee2e2"}
                         >
                           <FaTrashAlt /> Remove
                         </button>
@@ -1221,8 +1547,19 @@ export default function RequirementsPage() {
               )}
             </div>
 
-            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
-              <button className="btn secondary" onClick={() => setShowAllocatedMembersModal(false)} style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
+              <button
+                onClick={() => setShowAllocatedMembersModal(false)}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
                 Close
               </button>
             </div>
@@ -1230,32 +1567,58 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION MODAL - HIGHER Z-INDEX */}
       {showDeleteConfirmModal && allocationToDelete && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowDeleteConfirmModal(false)}>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1200, // ← HIGHER than other modals
+          }}
+          onClick={() => setShowDeleteConfirmModal(false)}
+        >
           <div
-            className="modal-contents"
-            style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "500px", textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }}
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "40px",
+              width: "90vw",
+              maxWidth: "500px",
+              textAlign: "center",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ color: "#dc2626", marginBottom: "20px", fontSize: "24px" }}>Remove Allocation?</h2>
             <p style={{ marginBottom: "32px", fontSize: "16px", color: "#374151" }}>
-              Are you sure you want to remove <strong>{allocationToDelete.memberName}</strong><br />
+              Are you sure you want to remove <strong>{allocationToDelete.memberName}</strong>
+              <br />
               from <strong>{allocationToDelete.requirementTitle}</strong>?
             </p>
-            <div className="modal-actions" style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
+            <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
               <button
-                className="btn secondary"
                 onClick={() => {
                   setShowDeleteConfirmModal(false);
                   setAllocationToDelete(null);
                 }}
-                style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
               >
                 Cancel
               </button>
               <button
-                className="btn danger"
                 onClick={async () => {
                   try {
                     await deleteDoc(doc(db, "allocations", allocationToDelete.allocationId));
@@ -1271,7 +1634,15 @@ export default function RequirementsPage() {
                     setAllocationToDelete(null);
                   }
                 }}
-                style={{ padding: "12px 24px", backgroundColor: "#dc2626", color: "white", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#b91c1c"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#dc2626"}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#dc2626",
+                  color: "white",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
               >
                 Yes, Remove
               </button>
@@ -1280,11 +1651,38 @@ export default function RequirementsPage() {
         </div>
       )}
 
-      {/* GLOBAL ALL ALLOCATIONS MODAL */}
+      {/* ALL ALLOCATIONS MODAL */}
       {showAllAllocationsModal && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowAllAllocationsModal(false)}>
-          <div className="modal-contents stats-modal" style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "1200px", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>All Allocated Members ({stats.totalAllocated})</h2>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1100,
+          }}
+          onClick={() => setShowAllAllocationsModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "32px",
+              width: "90vw",
+              maxWidth: "1400px",
+              minWidth: "1100px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>
+              All Allocated Members ({stats.totalAllocated})
+            </h2>
 
             {/* Filters */}
             <div style={{ marginBottom: "32px", display: "flex", gap: "20px", flexWrap: "wrap" }}>
@@ -1295,7 +1693,13 @@ export default function RequirementsPage() {
                   placeholder="Search by Job/Project Title..."
                   value={allocationTitleFilter}
                   onChange={(e) => setAllocationTitleFilter(e.target.value)}
-                  style={{ width: "100%", padding: "16px 20px 16px 60px", borderRadius: "16px", border: "2px solid #e2e8f0", fontSize: "15px" }}
+                  style={{
+                    width: "100%",
+                    padding: "16px 20px 16px 60px",
+                    borderRadius: "16px",
+                    border: "2px solid #e2e8f0",
+                    fontSize: "15px",
+                  }}
                 />
               </div>
               <div style={{ position: "relative", flex: "1", minWidth: "350px" }}>
@@ -1305,7 +1709,13 @@ export default function RequirementsPage() {
                   placeholder="Search by Company..."
                   value={allocationCompanyFilter}
                   onChange={(e) => setAllocationCompanyFilter(e.target.value)}
-                  style={{ width: "100%", padding: "16px 20px 16px 60px", borderRadius: "16px", border: "2px solid #e2e8f0", fontSize: "15px" }}
+                  style={{
+                    width: "100%",
+                    padding: "16px 20px 16px 60px",
+                    borderRadius: "16px",
+                    border: "2px solid #e2e8f0",
+                    fontSize: "15px",
+                  }}
                 />
               </div>
               {(allocationTitleFilter || allocationCompanyFilter) && (
@@ -1314,9 +1724,15 @@ export default function RequirementsPage() {
                     setAllocationTitleFilter("");
                     setAllocationCompanyFilter("");
                   }}
-                  style={{ padding: "16px 32px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "16px", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#dc2626"}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#ef4444"}
+                  style={{
+                    padding: "16px 32px",
+                    backgroundColor: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "16px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
                 >
                   Clear
                 </button>
@@ -1328,15 +1744,15 @@ export default function RequirementsPage() {
               let filtered = allAllocations;
               if (allocationTitleFilter) {
                 const term = allocationTitleFilter.toLowerCase();
-                filtered = filtered.filter(a => {
-                  const job = requirementsData.find(j => j.id === a.jobId);
+                filtered = filtered.filter((a) => {
+                  const job = requirementsData.find((j) => j.id === a.jobId);
                   return job?.title?.toLowerCase().includes(term);
                 });
               }
               if (allocationCompanyFilter) {
                 const term = allocationCompanyFilter.toLowerCase();
-                filtered = filtered.filter(a => {
-                  const job = requirementsData.find(j => j.id === a.jobId);
+                filtered = filtered.filter((a) => {
+                  const job = requirementsData.find((j) => j.id === a.jobId);
                   return job?.company?.toLowerCase().includes(term);
                 });
               }
@@ -1361,25 +1777,29 @@ export default function RequirementsPage() {
                       </thead>
                       <tbody>
                         {filtered.map((alloc) => {
-                          const job = requirementsData.find(j => j.id === alloc.jobId);
-                          const member = members.find(m => m.id === alloc.userId) || {
+                          const job = requirementsData.find((j) => j.id === alloc.jobId);
+                          const member = members.find((m) => m.id === alloc.userId) || {
                             name: alloc.name || "Unknown",
                             phone: alloc.phone || "—",
                           };
                           return (
                             <tr key={alloc.id} style={{ backgroundColor: "white", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", borderRadius: "12px" }}>
-                              <td style={{ padding: "16px", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}><strong style={{ color: "#1f2937" }}>{member.name}</strong></td>
+                              <td style={{ padding: "16px", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
+                                <strong style={{ color: "#1f2937" }}>{member.name}</strong>
+                              </td>
                               <td style={{ padding: "16px" }}>{job?.title || "—"}</td>
                               <td style={{ padding: "16px" }}>{job?.company || "—"}</td>
                               <td style={{ padding: "16px" }}>
-                                <span style={{
-                                  background: job?.type === "project" ? "#9333ea" : "#2563eb",
-                                  color: "white",
-                                  padding: "6px 12px",
-                                  borderRadius: "20px",
-                                  fontSize: "13px",
-                                  fontWeight: "600"
-                                }}>
+                                <span
+                                  style={{
+                                    background: job?.type === "project" ? "#9333ea" : "#2563eb",
+                                    color: "white",
+                                    padding: "6px 12px",
+                                    borderRadius: "20px",
+                                    fontSize: "13px",
+                                    fontWeight: "600",
+                                  }}
+                                >
                                   {job?.type === "project" ? "Project" : "Job"}
                                 </span>
                               </td>
@@ -1399,13 +1819,7 @@ export default function RequirementsPage() {
                                       borderRadius: "20px",
                                       fontSize: "13px",
                                       fontWeight: "600",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      transition: "background-color 0.3s"
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#1565c0"}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#1976d2"}
                                   >
                                     <FaEye /> View
                                   </button>
@@ -1426,13 +1840,7 @@ export default function RequirementsPage() {
                                       borderRadius: "20px",
                                       fontSize: "13px",
                                       fontWeight: "600",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      transition: "background-color 0.3s"
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#fecaca"}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#fee2e2"}
                                   >
                                     <FaTrashAlt /> Remove
                                   </button>
@@ -1448,8 +1856,19 @@ export default function RequirementsPage() {
               );
             })()}
 
-            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
-              <button className="btn secondary" onClick={() => setShowAllAllocationsModal(false)} style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
+              <button
+                onClick={() => setShowAllAllocationsModal(false)}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
                 Close
               </button>
             </div>
@@ -1459,32 +1878,97 @@ export default function RequirementsPage() {
 
       {/* MEMBER DETAIL MODAL */}
       {showMemberDetailModal && selectedMember && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowMemberDetailModal(false)}>
-          <div className="modal-contents" style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "1000px", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>Member Details: <strong>{selectedMember.name}</strong></h2>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1100,
+          }}
+          onClick={() => setShowMemberDetailModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "40px",
+              width: "90vw",
+              maxWidth: "1000px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>
+              Member Details: <strong>{selectedMember.name}</strong>
+            </h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px" }}>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Name:</strong> {selectedMember.name}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Email:</strong> {selectedMember.email || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Phone:</strong> {selectedMember.phone || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Designation:</strong> {selectedMember.designation || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Gender:</strong> {selectedMember.gender || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>City:</strong> {selectedMember.city || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>State:</strong> {selectedMember.state || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Category:</strong> {selectedMember.category || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Service:</strong> {selectedMember.service || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Rank:</strong> {selectedMember.rank || "—"}</div>
-              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}><strong style={{ color: "#1976d2" }}>Level:</strong> {selectedMember.level || "—"}</div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Name:</strong> {selectedMember.name}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Email:</strong> {selectedMember.email || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Phone:</strong> {selectedMember.phone || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Designation:</strong> {selectedMember.designation || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Gender:</strong> {selectedMember.gender || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>City:</strong> {selectedMember.city || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>State:</strong> {selectedMember.state || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Category:</strong> {selectedMember.category || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Service:</strong> {selectedMember.service || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Rank:</strong> {selectedMember.rank || "—"}
+              </div>
+              <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
+                <strong style={{ color: "#1976d2" }}>Level:</strong> {selectedMember.level || "—"}
+              </div>
               {selectedMember.resume_fileurl && (
                 <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
                   <strong style={{ color: "#1976d2" }}>Resume:</strong>{" "}
-                  <a href={selectedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", textDecoration: "underline" }}>
+                  <a
+                    href={selectedMember.resume_fileurl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#1976d2", textDecoration: "underline" }}
+                  >
                     View Resume
                   </a>
                 </div>
               )}
             </div>
-            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
-              <button className="btn secondary" onClick={() => setShowMemberDetailModal(false)} style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
+              <button
+                onClick={() => setShowMemberDetailModal(false)}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
                 Close
               </button>
             </div>
@@ -1494,26 +1978,70 @@ export default function RequirementsPage() {
 
       {/* STATS DETAIL MODAL */}
       {showStatsModal && (
-        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowStatsModal(false)}>
-          <div className="modal-contents" style={{ background: "white", borderRadius: "20px", padding: "40px", maxWidth: "900px", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.2)", animation: "fadeIn 0.3s" }} onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1100,
+          }}
+          onClick={() => setShowStatsModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "40px",
+              width: "90vw",
+              maxWidth: "900px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>
               {statsModalType === "total" && "All Requirements"}
               {statsModalType === "active" && "Open Requirements"}
               {statsModalType === "completed" && "Closed Requirements"}
             </h2>
-            <div style={{ maxHeight: "500px", overflowY: "auto", border: "2px solid #e2e8f0", borderRadius: "16px", padding: "20px", backgroundColor: "white" }}>
+
+            <div
+              style={{
+                maxHeight: "500px",
+                overflowY: "auto",
+                border: "2px solid #e2e8f0",
+                borderRadius: "16px",
+                padding: "20px",
+                backgroundColor: "white",
+              }}
+            >
               {(() => {
                 const list =
-                  statsModalType === "total" ? requirementsData :
-                  statsModalType === "active" ? requirementsData.filter(r => r.status === "active") :
-                  requirementsData.filter(r => r.status === "completed");
+                  statsModalType === "total"
+                    ? requirementsData
+                    : statsModalType === "active"
+                    ? requirementsData.filter((r) => r.status === "active")
+                    : requirementsData.filter((r) => r.status === "completed");
 
                 return list.length === 0 ? (
                   <p style={{ textAlign: "center", color: "#888", fontSize: "16px" }}>No requirements found.</p>
                 ) : (
                   <ul style={{ listStyle: "none", padding: 0 }}>
                     {list.map((req) => (
-                      <li key={req.id} style={{ padding: "16px 0", borderBottom: "1px solid #eee", fontSize: "16px", color: "#374151" }}>
+                      <li
+                        key={req.id}
+                        style={{
+                          padding: "16px 0",
+                          borderBottom: "1px solid #eee",
+                          fontSize: "16px",
+                          color: "#374151",
+                        }}
+                      >
                         <strong>{req.title}</strong> — {req.company} (
                         <span style={{ color: req.status === "active" ? "#22c55e" : "#ef4444" }}>
                           {req.status === "active" ? "Open" : "Closed"}
@@ -1525,20 +2053,26 @@ export default function RequirementsPage() {
                 );
               })()}
             </div>
-            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
-              <button className="btn secondary" onClick={() => setShowStatsModal(false)} style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer", transition: "background-color 0.3s" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#d1d5db"} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#e5e7eb"}>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "40px" }}>
+              <button
+                onClick={() => setShowStatsModal(false)}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#e5e7eb",
+                  color: "#1f2937",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
                 Close
               </button>
             </div>
           </div>
         </div>
       )}
-      {/* <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-      `}</style> */}
     </div>
   );
 }

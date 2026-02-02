@@ -685,7 +685,13 @@ export default function BriskOliveNewsletterApp() {
   const filteredJobs = jobs.filter((j) => selectedJobs.some((s) => s.value === j.id));
   const filteredProjects = projects.filter((p) => selectedProjects.some((s) => s.value === p.id));
 
-  if (loading) return <div className="loading">Loading newsletter data...</div>;
+    if (loading) {
+    return (
+      <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+        Loading Newsletter...
+      </div>
+    );
+  }
 
   return (
     <div className="newsletter-app">
@@ -998,6 +1004,7 @@ export default function BriskOliveNewsletterApp() {
           margin-bottom: 2rem;
           height: 900px;
           background: white;
+          min-width: 100%;
         }
 
         .pdf-viewer {
@@ -1141,6 +1148,8 @@ export default function BriskOliveNewsletterApp() {
         }
           
       `}</style>
+
+      
     </div>
   );
 }

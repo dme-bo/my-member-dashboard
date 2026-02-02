@@ -2336,6 +2336,8 @@ body {
   align-items: center;
 }
 
+
+
 .searchable-dropdown {
   position: absolute;
   top: 100%;
@@ -2353,6 +2355,7 @@ body {
   flex-direction: column;
 }
 
+
 .searchable-dropdown input {
   padding: 10px;
   border: none;
@@ -2364,6 +2367,28 @@ body {
 .options-list {
   max-height: 240px;
   overflow-y: auto;
+}
+.submenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;           /* ← was probably 12px or more — reduce it */
+  padding: 10px 1.5rem 10px 3.2rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+}
+
+/* Or completely remove gap and control spacing with margin instead */
+.submenu-item {
+  gap: 0;                     /* remove flex gap */
+}
+
+.submenu-item .submenu-icon {
+  margin-right: 8px;          /* ← this gives controlled space between icon and text */
+  font-size: 1.1rem;
+  min-width: 20px;
+  text-align: center;         /* helps alignment */
 }
 
 .option {

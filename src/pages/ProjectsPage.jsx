@@ -446,7 +446,7 @@ export default function ProjectsPage() {
       <div className="content-with-sidebar">
         <div className="table-container">
           {loading ? (
-            <div style={{ padding: "60px", textAlign: "center", fontSize: "18px" }}>
+            <div style={{ height: "100vh", width: "82vw",padding: "60px", textAlign: "center", fontSize: "18px" }}>
               Loading applications...
             </div>
           ) : (
