@@ -426,7 +426,7 @@ export default function RecruitmentPage() {
               marginLeft: "auto",
             }}
           >
-           Total Applications:- {loading ? "—" : totalItems} 
+           Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
           </span>
         </div>
 

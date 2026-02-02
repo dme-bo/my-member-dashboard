@@ -427,7 +427,7 @@ export default function TempStaffPage() {
               }}
               style={{
                 padding: "12px 14px 12px 40px",
-                width: "220%",
+                width: "126%",
                 borderRadius: "8px",
                 border: "1px solid #d1d5db",
                 fontSize: "14px",

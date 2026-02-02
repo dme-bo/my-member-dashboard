@@ -30,6 +30,7 @@ export default function MemberListPage({ onMemberClick }) {
     Status: "All",
     "Placement Status": "All",
     Experience: "All",
+    BOCategory: "All",
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -129,6 +130,7 @@ export default function MemberListPage({ onMemberClick }) {
       State: getUniqueValues("state"),
       Education: getUniqueValues("graduation_course"),
       Status: getUniqueValues("status"),
+      BOCategory: getUniqueValues("BOCategory"),
       "Placement Status": ["All", "Placed", "Active"],
       Experience: buckets,
     };
@@ -151,6 +153,7 @@ export default function MemberListPage({ onMemberClick }) {
       State: "All",
       Education: "All",
       Status: "All",
+      BOCategory: "All",
       "Placement Status": "All",
       Experience: "All",
     });
@@ -200,6 +203,7 @@ export default function MemberListPage({ onMemberClick }) {
       City: "city",
       State: "state",
       Education: "graduation_course",
+      BOCategory: "BOCategory",
     };
 
     Object.entries(sidebarFilters).forEach(([key, value]) => {
@@ -283,6 +287,7 @@ export default function MemberListPage({ onMemberClick }) {
     "City",
     "Education",
     "Experience",
+    "BOCategory",
   ];
 
   // Close dropdown on click-outside
