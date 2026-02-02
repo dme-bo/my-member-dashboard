@@ -48,7 +48,6 @@ export default function MemberDetailModal({ member, onClose }) {
       4: "Good - Proactive & Professional",
       5: "Excellent - Highly recommended",
     };
-    return labels[stars] || "Not Rated";
   };
 
   const renderStars = () => {
@@ -63,11 +62,9 @@ export default function MemberDetailModal({ member, onClose }) {
               fontSize: "20px",
             }}
           >
-            ★
           </span>
         ))}
         <span style={{ marginLeft: "8px", fontSize: "14px", fontWeight: "500" }}>
-          {rating}/5
         </span>
       </div>
     );

@@ -88,7 +88,7 @@ export default function RequirementsPage() {
 
     if (isAnyModalOpen) {
       document.body.style.overflow = "hidden";
-      document.body.style.paddingRight = "17px"; // Prevent layout shift (scrollbar width)
+      document.body.style.paddingRight = "17px"; // Prevent layout shift
     } else {
       document.body.style.overflow = "";
       document.body.style.paddingRight = "";
@@ -132,6 +132,7 @@ export default function RequirementsPage() {
         }));
 
         const combined = [...jobs, ...projects];
+
         const transformed = combined.map((item) => {
           let title, jd, salary, location, company, logo, postedOn, status, benefits;
           if (item.type === "job") {
@@ -197,6 +198,7 @@ export default function RequirementsPage() {
         setLoading(false);
       }
     };
+
     fetchRequirements();
   }, []);
 
@@ -208,12 +210,14 @@ export default function RequirementsPage() {
         ...doc.data(),
       }));
       setAllAllocations(allocs);
+
       const counts = {};
       allocs.forEach((alloc) => {
         counts[alloc.jobId] = (counts[alloc.jobId] || 0) + 1;
       });
       setAllocatedCounts(counts);
     });
+
     return () => unsubscribe();
   }, []);
 
@@ -297,16 +301,41 @@ export default function RequirementsPage() {
     setCurrentPage(1);
   }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, organizationFilter, serviceFilter, rankFilter, levelFilter, members]);
 
-  /* FILTERED REQUIREMENTS */
+  /* FILTERED REQUIREMENTS (for table) */
   const filteredRequirements = useMemo(() => {
     let list = requirementsData;
-    if (activeFilter === "All") list = list;
-    else if (activeFilter === "Open") list = list.filter((r) => r.status === "active");
-    else if (activeFilter === "Closed") list = list.filter((r) => r.status === "completed");
-    else if (activeFilter === "Projects") list = list.filter((r) => r.type === "project");
-    else if (activeFilter === "Recruitment") list = list.filter((r) => r.type === "job");
+    if (activeFilter === "All") return list;
+    if (activeFilter === "Open") return list.filter((r) => r.status === "active");
+    if (activeFilter === "Closed") return list.filter((r) => r.status === "completed");
+    if (activeFilter === "Projects") return list.filter((r) => r.type === "project");
+    if (activeFilter === "Recruitment") return list.filter((r) => r.type === "job");
     return list;
   }, [requirementsData, activeFilter]);
+
+  /* FILTERED REQUIREMENTS FOR STATS (same logic) */
+  const filteredStatsRequirements = filteredRequirements;
+
+  /* STATS - now dynamic based on current filter */
+  const stats = useMemo(() => {
+    const list = filteredStatsRequirements;
+
+    const active = list.filter((r) => r.status === "active").length;
+    const completed = list.filter((r) => r.status === "completed").length;
+    const total = list.length;
+
+    // Only count allocations for requirements that are currently visible
+    const relevantRequirementIds = new Set(list.map((r) => r.id));
+    const totalAllocated = allAllocations
+      .filter((alloc) => relevantRequirementIds.has(alloc.jobId))
+      .length;
+
+    return {
+      total,
+      active,
+      completed,
+      totalAllocated,
+    };
+  }, [filteredStatsRequirements, allAllocations]);
 
   /* SEARCH + SORT + PAGINATED REQUIREMENTS */
   const displayedRequirements = useMemo(() => {
@@ -352,17 +381,10 @@ export default function RequirementsPage() {
     setSortConfig({ key, direction });
   };
 
-  /* STATS */
-  const stats = useMemo(() => {
-    const active = requirementsData.filter((r) => r.status === "active").length;
-    const completed = requirementsData.filter((r) => r.status === "completed").length;
-    const totalAllocated = Object.values(allocatedCounts).reduce((sum, c) => sum + c, 0);
-    return { total: requirementsData.length, active, completed, totalAllocated };
-  }, [requirementsData, allocatedCounts]);
-
   const handleStatClick = (type) => {
-    if (type === "allocated") setShowAllAllocationsModal(true);
-    else {
+    if (type === "allocated") {
+      setShowAllAllocationsModal(true);
+    } else {
       setStatsModalType(type);
       setShowStatsModal(true);
     }
@@ -400,109 +422,59 @@ export default function RequirementsPage() {
     link.click();
   };
 
-  // if (loading) return <div className="dashboard-container"><div className="loading">Loading Requirements…</div></div>;
-if (error) return <div className="dashboard-container"><div className="error">{error}</div></div>;
-
- 
-// if (loading) {
-//   return (
-//     <div
-//       style={{
-//         minHeight: "100vh",
-//         height: "100vh",
-//         width: "100vw",
-//         display: "flex",
-//         alignItems: "center",
-//         justifyContent: "center",
-//         backgroundColor: "#f4f6f9",
-//         position: "fixed",
-//         inset: 0,
-//         zIndex: 9999,
-//       }}
-//     >
-//       <div
-//         style={{
-//           display: "flex",
-//           flexDirection: "column",
-//           alignItems: "center",
-//           gap: "24px",
-//         }}
-//       >
-//         <div className="spinner" />
-//         <div
-//           style={{
-//             fontSize: "1.3rem",
-//             fontWeight: "600",
-//             color: "#1f2937",
-//           }}
-//         >
-//           Loading Requirements...
-//         </div>
-//         <div
-//           style={{
-//             fontSize: "0.95rem",
-//             color: "#6b7280",
-//           }}
-//         >
-//           Fetching jobs & projects from database
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "87vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+      <div style={{ height: "100vh", width: "87vw", padding: "60px", textAlign: "center", fontSize: "18px" }}>
         Loading Requirements...
       </div>
     );
   }
 
-if (error) {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#f4f6f9",
-        padding: "20px",
-      }}
-    >
+  if (error) {
+    return (
       <div
         style={{
-          background: "white",
-          padding: "40px 60px",
-          borderRadius: "16px",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
-          textAlign: "center",
-          maxWidth: "500px",
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#f4f6f9",
+          padding: "20px",
         }}
       >
-        <div style={{ color: "#ef4444", fontSize: "3.5rem", marginBottom: "16px" }}>⚠️</div>
-        <h2 style={{ color: "#1f2937", marginBottom: "16px" }}>Something went wrong</h2>
-        <p style={{ color: "#4b5563", marginBottom: "24px" }}>{error}</p>
-        <button
-          onClick={() => window.location.reload()}
+        <div
           style={{
-            padding: "12px 32px",
-            backgroundColor: "#1976d2",
-            color: "white",
-            border: "none",
-            borderRadius: "12px",
-            fontWeight: "600",
-            cursor: "pointer",
-            fontSize: "1rem",
+            background: "white",
+            padding: "40px 60px",
+            borderRadius: "16px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+            textAlign: "center",
+            maxWidth: "500px",
           }}
         >
-          Refresh Page
-        </button>
+          <div style={{ color: "#ef4444", fontSize: "3.5rem", marginBottom: "16px" }}>⚠️</div>
+          <h2 style={{ color: "#1f2937", marginBottom: "16px" }}>Something went wrong</h2>
+          <p style={{ color: "#4b5563", marginBottom: "24px" }}>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "12px 32px",
+              backgroundColor: "#1976d2",
+              color: "white",
+              border: "none",
+              borderRadius: "12px",
+              fontWeight: "600",
+              cursor: "pointer",
+              fontSize: "1rem",
+            }}
+          >
+            Refresh Page
+          </button>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
+
   return (
     <div className="dashboard-container" style={{ backgroundColor: "#f4f6f9", minHeight: "100vh", padding: "20px" }}>
       {/* TOAST */}
@@ -535,32 +507,23 @@ if (error) {
 
       {/* HEADER */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", paddingBottom: "10px" }}>
-        <div style={{ display: "flex", gap: "10px",
-  borderRadius: '0.75rem', }}>
+        <div style={{ display: "flex", gap: "10px" }}>
           {["All", "Open", "Closed", "Projects", "Recruitment"].map((filter) => (
             <button
               key={filter}
               className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
               onClick={() => setActiveFilter(filter)}
               style={{
-                padding: "10px 20px",
+                padding: "8px 16px",
                 borderRadius: "30px",
                 backgroundColor: activeFilter === filter ? "#1976d2" : "#e5e7eb",
                 color: activeFilter === filter ? "white" : "#1f2937",
-                fontWeight: "600",
+                fontWeight: "700",
                 border: "none",
                 cursor: "pointer",
-                transition: "all 0.3s",
-                padding: '8px 16px',
-  cursor: 'pointer',
-  // backgroundColor: 'rgb(245, 245, 245)',
-  // color: 'rgba(0, 0, 0, 0.87)',
-  fontWeight: 700,
-  boxShadow: 
-    '0 2px 1px -1px rgba(0,0,0,0.2), ' +
-    '0 1px 1px 0 rgba(0,0,0,0.14), ' +
-    '0 1px 3px 0 rgba(0,0,0,0.12)',
-  transition: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+                boxShadow:
+                  "0 2px 1px -1px rgba(0,0,0,0.2), 0 1px 1px 0 rgba(0,0,0,0.14), 0 1px 3px 0 rgba(0,0,0,0.12)",
+                transition: "box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)",
               }}
             >
               {filter}
@@ -570,7 +533,7 @@ if (error) {
         <button
           onClick={exportToCSV}
           style={{
-            padding: "10px 20px",
+            padding: "8px 16px",
             backgroundColor: "#10b981",
             color: "white",
             borderRadius: "30px",
@@ -579,30 +542,46 @@ if (error) {
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            fontWeight: "600",
-                            padding: '8px 16px',
-  cursor: 'pointer',
-  // backgroundColor: 'rgb(245, 245, 245)',
-  // color: 'rgba(0, 0, 0, 0.87)',
-  fontWeight: 700,
-  boxShadow: 
-    '0 2px 1px -1px rgba(0,0,0,0.2), ' +
-    '0 1px 1px 0 rgba(0,0,0,0.14), ' +
-    '0 1px 3px 0 rgba(0,0,0,0.12)',
-  transition: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+            fontWeight: "700",
+            boxShadow:
+              "0 2px 1px -1px rgba(0,0,0,0.2), 0 1px 1px 0 rgba(0,0,0,0.14), 0 1px 3px 0 rgba(0,0,0,0.12)",
           }}
         >
           <FaFileExport /> Export CSV
         </button>
       </header>
 
-      {/* STATS GRID */}
+      {/* STATS GRID – NOW DYNAMIC */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px", marginBottom: "40px" }}>
         {[
-          { type: "total", label: "Total Requirements", icon: FaBriefcase, color: "#3b82f6", value: stats.total },
-          { type: "active", label: "Open Requirements", icon: FaHourglassHalf, color: "#22c55e", value: stats.active },
-          { type: "completed", label: "Closed Requirements", icon: FaCheckCircle, color: "#06b6d4", value: stats.completed },
-          { type: "allocated", label: "Total Allocated Members", icon: FaUsers, color: "#a855f7", value: stats.totalAllocated },
+          {
+            type: "total",
+            label: activeFilter === "All" ? "Total Requirements" : `${activeFilter} Requirements`,
+            icon: FaBriefcase,
+            color: "#3b82f6",
+            value: stats.total,
+          },
+          {
+            type: "active",
+            label: "Open Requirements",
+            icon: FaHourglassHalf,
+            color: "#22c55e",
+            value: stats.active,
+          },
+          {
+            type: "completed",
+            label: "Closed Requirements",
+            icon: FaCheckCircle,
+            color: "#06b6d4",
+            value: stats.completed,
+          },
+          {
+            type: "allocated",
+            label: "Allocated Members (in view)",
+            icon: FaUsers,
+            color: "#a855f7",
+            value: stats.totalAllocated,
+          },
         ].map((stat) => (
           <div
             key={stat.type}
@@ -644,17 +623,18 @@ if (error) {
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
-          
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "16px",overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "16px" }}>
           <h2 style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#1f2937" }}>
             {activeFilter === "All" && "All Requirements"}
             {activeFilter === "Open" && "Open Requirements"}
             {activeFilter === "Closed" && "Closed Requirements"}
             {activeFilter === "Projects" && "Projects"}
             {activeFilter === "Recruitment" && "Recruitment"}
-            <span style={{ marginLeft: "10px", color: "#10b981", fontSize: "20px" }}>({filteredRequirements.length})</span>
+            <span style={{ marginLeft: "10px", color: "#10b981", fontSize: "20px" }}>
+              ({filteredRequirements.length})
+            </span>
           </h2>
           <div style={{ position: "relative", minWidth: "320px", flex: "1", maxWidth: "420px" }}>
             <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
@@ -692,22 +672,38 @@ if (error) {
             >
               <thead>
                 <tr style={{ backgroundColor: "#1976d2", color: "white", borderRadius: "12px" }}>
-                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>Type</th>
-                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }} onClick={() => handleSort("title")}>
+                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
+                    Type
+                  </th>
+                  <th
+                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
+                    onClick={() => handleSort("title")}
+                  >
                     Title {sortConfig.key === "title" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
                   </th>
-                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }} onClick={() => handleSort("company")}>
+                  <th
+                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
+                    onClick={() => handleSort("company")}
+                  >
                     Company {sortConfig.key === "company" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
                   </th>
-                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }} onClick={() => handleSort("location")}>
+                  <th
+                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
+                    onClick={() => handleSort("location")}
+                  >
                     Location {sortConfig.key === "location" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
                   </th>
-                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }} onClick={() => handleSort("salary")}>
+                  <th
+                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
+                    onClick={() => handleSort("salary")}
+                  >
                     Compensation {sortConfig.key === "salary" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
                   </th>
                   <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Allocated</th>
                   <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Status</th>
-                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>Actions</th>
+                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -741,14 +737,26 @@ if (error) {
                         </span>
                       </td>
                       <td style={{ padding: "16px" }}>
-                        <div style={{ maxWidth: "250px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: "600", color: "#1f2937" }} title={req.title}>
+                        <div
+                          style={{
+                            maxWidth: "250px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            fontWeight: "600",
+                            color: "#1f2937",
+                          }}
+                          title={req.title}
+                        >
                           {req.title}
                         </div>
                       </td>
                       <td style={{ padding: "16px", color: "#4b5563" }}>{req.company}</td>
                       <td style={{ padding: "16px", color: "#4b5563" }}>{req.location}</td>
                       <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
-                      <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>{liveCount}</td>
+                      <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
+                        {liveCount}
+                      </td>
                       <td style={{ padding: "16px", textAlign: "center" }}>
                         <span
                           style={{
@@ -851,6 +859,8 @@ if (error) {
         )}
       </div>
 
+      {/* ------------------ MODALS ------------------ */}
+
       {/* JOB/PROJECT DETAILS MODAL */}
       {showJobModal && selectedReq && (
         <div
@@ -879,7 +889,6 @@ if (error) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* ... Job/Project details content ... */}
             {selectedReq.logo && (
               <img
                 src={selectedReq.logo}
@@ -921,7 +930,6 @@ if (error) {
                 {selectedReq.status === "active" ? "Open" : "Closed"}
               </span>
             </p>
-
             <div style={{ backgroundColor: "#f9fafb", padding: "20px", borderRadius: "12px", marginBottom: "32px" }}>
               <strong style={{ fontSize: "18px", display: "block", marginBottom: "12px" }}>
                 {selectedReq.type === "project" ? "Project Description" : "Job Description"}:
@@ -935,7 +943,6 @@ if (error) {
                 }}
               />
             </div>
-
             <div style={{ display: "flex", gap: "16px", justifyContent: "flex-end" }}>
               {selectedReq.status === "active" && (
                 <button
@@ -1149,7 +1156,7 @@ if (error) {
                   )}
                 </div>
 
-                {/* Pagination */}
+                {/* Pagination for members */}
                 {totalPages > 1 && (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "24px", flexWrap: "wrap", gap: "16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -1281,7 +1288,9 @@ if (error) {
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="states-list">
-                    {uniqueStates.map((s) => <option key={s} value={s} />)}
+                    {uniqueStates.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
                   </datalist>
 
                   <input
@@ -1292,7 +1301,9 @@ if (error) {
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="cities-list">
-                    {uniqueCities.map((c) => <option key={c} value={c} />)}
+                    {uniqueCities.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
                   </datalist>
 
                   <input
@@ -1303,7 +1314,9 @@ if (error) {
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="organizations-list">
-                    {uniqueOrganizations.map((o) => <option key={o} value={o} />)}
+                    {uniqueOrganizations.map((o) => (
+                      <option key={o} value={o} />
+                    ))}
                   </datalist>
 
                   <input
@@ -1314,7 +1327,9 @@ if (error) {
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="services-list">
-                    {uniqueServices.map((s) => <option key={s} value={s} />)}
+                    {uniqueServices.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
                   </datalist>
 
                   <input
@@ -1325,7 +1340,9 @@ if (error) {
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="ranks-list">
-                    {uniqueRanks.map((r) => <option key={r} value={r} />)}
+                    {uniqueRanks.map((r) => (
+                      <option key={r} value={r} />
+                    ))}
                   </datalist>
 
                   <input
@@ -1336,7 +1353,9 @@ if (error) {
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
                   <datalist id="levels-list">
-                    {uniqueLevels.map((l) => <option key={l} value={l} />)}
+                    {uniqueLevels.map((l) => (
+                      <option key={l} value={l} />
+                    ))}
                   </datalist>
                 </div>
               </div>
@@ -1567,7 +1586,7 @@ if (error) {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL - HIGHER Z-INDEX */}
+      {/* DELETE CONFIRMATION MODAL */}
       {showDeleteConfirmModal && allocationToDelete && (
         <div
           className="modal-overlay"
@@ -1578,7 +1597,7 @@ if (error) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 1200, // ← HIGHER than other modals
+            zIndex: 1200,
           }}
           onClick={() => setShowDeleteConfirmModal(false)}
         >
@@ -1907,6 +1926,7 @@ if (error) {
             <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>
               Member Details: <strong>{selectedMember.name}</strong>
             </h2>
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px" }}>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
                 <strong style={{ color: "#1976d2" }}>Name:</strong> {selectedMember.name}
