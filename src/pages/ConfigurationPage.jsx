@@ -1586,317 +1586,317 @@
 
 // // Inside the Papa.parse complete callback, replace the userData object with this:
 
-import React, { useState } from 'react';
-import Papa from 'papaparse';
-import { getFirestore, collection, doc, setDoc } from 'firebase/firestore';
-import { getApp } from 'firebase/app';
-import { Timestamp } from 'firebase/firestore';
+// import React, { useState } from 'react';
+// import Papa from 'papaparse';
+// import { getFirestore, collection, doc, setDoc } from 'firebase/firestore';
+// import { getApp } from 'firebase/app';
+// import { Timestamp } from 'firebase/firestore';
 
-const CSVUploadComponent = () => {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+// const CSVUploadComponent = () => {
+//   const [file, setFile] = useState(null);
+//   const [uploading, setUploading] = useState(false);
+//   const [message, setMessage] = useState('');
+//   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  // Password modal state
-  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+//   // Password modal state
+//   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+//   const [passwordInput, setPasswordInput] = useState('');
+//   const [passwordError, setPasswordError] = useState('');
 
-  const CORRECT_PASSWORD = 'DAA@987';
+//   const CORRECT_PASSWORD = 'DAA@987';
 
-  const db = getFirestore(getApp());
-  const usersMasterCollection = collection(db, 'jobsusersmaster');
+//   const db = getFirestore(getApp());
+//   const usersMasterCollection = collection(db, 'jobsusersmaster');
 
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setMessage('');
-      setProgress({ current: 0, total: 0 });
-    }
-  };
+//   const handleFileChange = (e) => {
+//     if (e.target.files && e.target.files[0]) {
+//       setFile(e.target.files[0]);
+//       setMessage('');
+//       setProgress({ current: 0, total: 0 });
+//     }
+//   };
 
-  const formatDateToDDMMMYYYY = (dateInput) => {
-    if (!dateInput && dateInput !== 0) return '';
+//   const formatDateToDDMMMYYYY = (dateInput) => {
+//     if (!dateInput && dateInput !== 0) return '';
 
-    const dateStr = String(dateInput).trim();
-    if (!dateStr || dateStr === 'null' || dateStr === 'undefined') return '';
+//     const dateStr = String(dateInput).trim();
+//     if (!dateStr || dateStr === 'null' || dateStr === 'undefined') return '';
 
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return '';
+//     const date = new Date(dateStr);
+//     if (isNaN(date.getTime())) return '';
 
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+//     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+//                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
+//     const day = String(date.getDate()).padStart(2, '0');
+//     const month = months[date.getMonth()];
+//     const year = date.getFullYear();
 
-    return `${day} ${month} ${year}`;
-  };
+//     return `${day} ${month} ${year}`;
+//   };
 
-  // Trigger password prompt instead of direct upload
-  const handleUploadClick = () => {
-    if (!file) {
-      setMessage('Please select a CSV file first.');
-      return;
-    }
-    setShowPasswordPrompt(true);
-    setPasswordInput('');
-    setPasswordError('');
-  };
+//   // Trigger password prompt instead of direct upload
+//   const handleUploadClick = () => {
+//     if (!file) {
+//       setMessage('Please select a CSV file first.');
+//       return;
+//     }
+//     setShowPasswordPrompt(true);
+//     setPasswordInput('');
+//     setPasswordError('');
+//   };
 
-  // Confirm password and proceed with upload
-  const confirmUpload = () => {
-    if (passwordInput === CORRECT_PASSWORD) {
-      setShowPasswordPrompt(false);
-      startUpload();
-    } else {
-      setPasswordError('Incorrect password. Please try again.');
-    }
-  };
+//   // Confirm password and proceed with upload
+//   const confirmUpload = () => {
+//     if (passwordInput === CORRECT_PASSWORD) {
+//       setShowPasswordPrompt(false);
+//       startUpload();
+//     } else {
+//       setPasswordError('Incorrect password. Please try again.');
+//     }
+//   };
 
-  // Actual upload logic (same as before)
-  const startUpload = async () => {
-    setUploading(true);
-    setMessage('Parsing CSV and uploading one by one...');
-    setProgress({ current: 0, total: 0 });
+//   // Actual upload logic (same as before)
+//   const startUpload = async () => {
+//     setUploading(true);
+//     setMessage('Parsing CSV and uploading one by one...');
+//     setProgress({ current: 0, total: 0 });
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const rows = results.data;
+//     Papa.parse(file, {
+//       header: true,
+//       skipEmptyLines: true,
+//       complete: async (results) => {
+//         const rows = results.data;
 
-        if (rows.length === 0) {
-          setMessage('No data found in CSV.');
-          setUploading(false);
-          return;
-        }
+//         if (rows.length === 0) {
+//           setMessage('No data found in CSV.');
+//           setUploading(false);
+//           return;
+//         }
 
-        setProgress({ current: 0, total: rows.length });
+//         setProgress({ current: 0, total: rows.length });
 
-        try {
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
+//         try {
+//           for (let i = 0; i < rows.length; i++) {
+//             const row = rows[i];
 
-           const userData = {
-  full_name: row['Name']?.trim() || '',
-  contact_number: row['Contact']?.trim() || '',
-  email_id: row['Email']?.trim() || '',
-  education: row['Education']?.trim() || '',
-  service_experience_years: row['Service Experience (Years)']?.trim() || '',
-  corporate_experience_years: row['Corporate Experience (Years)']?.trim() || '',
-  total_experience_years: row['Total Experience (Years)']?.trim() || '',
-  category: row['Category']?.trim() || '',
-  service: row['Service']?.trim() || '',
-  rank: row['Rank']?.trim() || '',
-  fixed: row['Fixed']?.trim() || '',
-  variable: row['Variable']?.trim() || '',
-  total_ctc_lacs: row['Total CTC (lacs)']?.trim() || '',
-  ectc: row['ECTC']?.trim() || '',
-  notice_period_days: row['Notice Period (Days)']?.trim() || '',
-  client: row['Client']?.trim() || '',
-  current_location: row['Current Location']?.trim() || '',
-  job_location: row['Job Location']?.trim() || '',
-  reason_of_change: row['Reason Of Change, If Any']?.trim() || '',
-  profile: row['Profile']?.trim() || '',
-  cv_link: row['CV']?.trim() || '', // assuming this is a URL or filename
-  source: row['Source']?.trim() || '',
-  details: row['Details']?.trim() || '',
-  erp_link: row['ERP Link']?.trim() || '',
-  availability_date: row['Availability Date']?.trim() || '',
-  availability_time: row['Availability Time']?.trim() || '',
-  internal_interview: row['Internal Interview']?.trim() || '',
-  internal_interview_status: row['Internal Interview Status']?.trim() || '',
-  external_interview: row['External Interview']?.trim() || '',
-  external_interview_status: row['External Interview Status']?.trim() || '', // note the quotes in original header
-  remarks: row['Remarks (Current Conversation)']?.trim() || '',
-  final_status: row['Final Status']?.trim() || '',
+//            const userData = {
+//   full_name: row['Name']?.trim() || '',
+//   contact_number: row['Contact']?.trim() || '',
+//   email_id: row['Email']?.trim() || '',
+//   education: row['Education']?.trim() || '',
+//   service_experience_years: row['Service Experience (Years)']?.trim() || '',
+//   corporate_experience_years: row['Corporate Experience (Years)']?.trim() || '',
+//   total_experience_years: row['Total Experience (Years)']?.trim() || '',
+//   category: row['Category']?.trim() || '',
+//   service: row['Service']?.trim() || '',
+//   rank: row['Rank']?.trim() || '',
+//   fixed: row['Fixed']?.trim() || '',
+//   variable: row['Variable']?.trim() || '',
+//   total_ctc_lacs: row['Total CTC (lacs)']?.trim() || '',
+//   ectc: row['ECTC']?.trim() || '',
+//   notice_period_days: row['Notice Period (Days)']?.trim() || '',
+//   client: row['Client']?.trim() || '',
+//   current_location: row['Current Location']?.trim() || '',
+//   job_location: row['Job Location']?.trim() || '',
+//   reason_of_change: row['Reason Of Change, If Any']?.trim() || '',
+//   profile: row['Profile']?.trim() || '',
+//   cv_link: row['CV']?.trim() || '', // assuming this is a URL or filename
+//   source: row['Source']?.trim() || '',
+//   details: row['Details']?.trim() || '',
+//   erp_link: row['ERP Link']?.trim() || '',
+//   availability_date: row['Availability Date']?.trim() || '',
+//   availability_time: row['Availability Time']?.trim() || '',
+//   internal_interview: row['Internal Interview']?.trim() || '',
+//   internal_interview_status: row['Internal Interview Status']?.trim() || '',
+//   external_interview: row['External Interview']?.trim() || '',
+//   external_interview_status: row['External Interview Status']?.trim() || '', // note the quotes in original header
+//   remarks: row['Remarks (Current Conversation)']?.trim() || '',
+//   final_status: row['Final Status']?.trim() || '',
 
-  // You might want to keep some defaults or metadata
-  city: row['Current Location']?.trim() || '', // using Current Location as city if needed
-  // role: row['Category']?.trim() || '',         // adjust based on your needs
-  status: row['Final Status']?.trim() || 'Active',
+//   // You might want to keep some defaults or metadata
+//   city: row['Current Location']?.trim() || '', // using Current Location as city if needed
+//   // role: row['Category']?.trim() || '',         // adjust based on your needs
+//   status: row['Final Status']?.trim() || 'Active',
 
-  created_time: Timestamp.now(),
-};
-            const userRef = doc(usersMasterCollection);
-            await setDoc(userRef, userData, { merge: true });
+//   created_time: Timestamp.now(),
+// };
+//             const userRef = doc(usersMasterCollection);
+//             await setDoc(userRef, userData, { merge: true });
 
-            setProgress(prev => ({ ...prev, current: i + 1 }));
-          }
+//             setProgress(prev => ({ ...prev, current: i + 1 }));
+//           }
 
-          setMessage(`Successfully imported all ${rows.length} users into 'usersmaster'!`);
-        } catch (error) {
-          console.error('Upload error:', error);
-          setMessage(`Error at row ${progress.current + 1}: ${error.message}`);
-        } finally {
-          setUploading(false);
-        }
-      },
-      error: (err) => {
-        setMessage(`CSV Parse Error: ${err.message}`);
-        setUploading(false);
-      },
-    });
-  };
+//           setMessage(`Successfully imported all ${rows.length} users into 'usersmaster'!`);
+//         } catch (error) {
+//           console.error('Upload error:', error);
+//           setMessage(`Error at row ${progress.current + 1}: ${error.message}`);
+//         } finally {
+//           setUploading(false);
+//         }
+//       },
+//       error: (err) => {
+//         setMessage(`CSV Parse Error: ${err.message}`);
+//         setUploading(false);
+//       },
+//     });
+//   };
 
-  return (
-    <div style={{ padding: '30px', maxWidth: '700px', margin: 'auto', fontFamily: 'Arial' }}>
-      <h2>Import Members to jobsusersmaster Collection</h2>
-      {/* <p>
-        Upload your CSV file (supports large files like 12,000+ rows). 
-        Each record will be uploaded <strong>individually</strong> with a new auto-generated Firestore ID.
-      </p> */}
-      <p style={{ color: 'red', fontWeight: 'bold' }}>
-        ⚠️ This action is password-protected for security.
-      </p>
+//   return (
+//     <div style={{ padding: '30px', maxWidth: '700px', margin: 'auto', fontFamily: 'Arial' }}>
+//       <h2>Import Members to jobsusersmaster Collection</h2>
+//       {/* <p>
+//         Upload your CSV file (supports large files like 12,000+ rows). 
+//         Each record will be uploaded <strong>individually</strong> with a new auto-generated Firestore ID.
+//       </p> */}
+//       <p style={{ color: 'red', fontWeight: 'bold' }}>
+//         ⚠️ This action is password-protected for security.
+//       </p>
 
-      <input
-        type="file"
-        accept=".csv,text/csv"
-        onChange={handleFileChange}
-        disabled={uploading}
-        style={{ display: 'block', marginBottom: '15px' }}
-      />
+//       <input
+//         type="file"
+//         accept=".csv,text/csv"
+//         onChange={handleFileChange}
+//         disabled={uploading}
+//         style={{ display: 'block', marginBottom: '15px' }}
+//       />
 
-      <button
-        onClick={handleUploadClick}
-        disabled={!file || uploading}
-        style={{
-          padding: '10px 20px',
-          background: uploading ? '#ccc' : '#0066ff',
-          color: 'white',
-          border: 'none',
-          borderRadius: '5px',
-          cursor: uploading || !file ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {uploading ? 'Uploading & Processing...' : 'Upload CSV (Password Required)'}
-      </button>
+//       <button
+//         onClick={handleUploadClick}
+//         disabled={!file || uploading}
+//         style={{
+//           padding: '10px 20px',
+//           background: uploading ? '#ccc' : '#0066ff',
+//           color: 'white',
+//           border: 'none',
+//           borderRadius: '5px',
+//           cursor: uploading || !file ? 'not-allowed' : 'pointer',
+//         }}
+//       >
+//         {uploading ? 'Uploading & Processing...' : 'Upload CSV (Password Required)'}
+//       </button>
 
-      {progress.total > 0 && (
-        <div style={{ marginTop: '20px' }}>
-          <p>Progress: {progress.current} / {progress.total} records processed</p>
-          <div style={{
-            width: '100%',
-            backgroundColor: '#f0f0f0',
-            borderRadius: '5px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              width: `${(progress.current / progress.total) * 100}%`,
-              backgroundColor: '#0066ff',
-              height: '20px',
-              transition: 'width 0.3s'
-            }} />
-          </div>
-        </div>
-      )}
+//       {progress.total > 0 && (
+//         <div style={{ marginTop: '20px' }}>
+//           <p>Progress: {progress.current} / {progress.total} records processed</p>
+//           <div style={{
+//             width: '100%',
+//             backgroundColor: '#f0f0f0',
+//             borderRadius: '5px',
+//             overflow: 'hidden'
+//           }}>
+//             <div style={{
+//               width: `${(progress.current / progress.total) * 100}%`,
+//               backgroundColor: '#0066ff',
+//               height: '20px',
+//               transition: 'width 0.3s'
+//             }} />
+//           </div>
+//         </div>
+//       )}
 
-      {message && (
-        <p
-          style={{
-            marginTop: '20px',
-            padding: '10px',
-            background: message.includes('Error') || message.includes('Parse') ? '#ffeeee' : '#eeffee',
-            borderRadius: '5px',
-            color: message.includes('Error') || message.includes('Parse') ? 'red' : 'green',
-          }}
-        >
-          {message}
-        </p>
-      )}
+//       {message && (
+//         <p
+//           style={{
+//             marginTop: '20px',
+//             padding: '10px',
+//             background: message.includes('Error') || message.includes('Parse') ? '#ffeeee' : '#eeffee',
+//             borderRadius: '5px',
+//             color: message.includes('Error') || message.includes('Parse') ? 'red' : 'green',
+//           }}
+//         >
+//           {message}
+//         </p>
+//       )}
 
-      {/* Password Prompt Modal */}
-      {showPasswordPrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: 'white',
-              padding: '30px',
-              borderRadius: '10px',
-              width: '90%',
-              maxWidth: '400px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Enter Password to Proceed</h3>
-            <p>This action requires authorization.</p>
+//       {/* Password Prompt Modal */}
+//       {showPasswordPrompt && (
+//         <div
+//           style={{
+//             position: 'fixed',
+//             top: 0,
+//             left: 0,
+//             width: '100%',
+//             height: '100%',
+//             backgroundColor: 'rgba(0,0,0,0.6)',
+//             display: 'flex',
+//             alignItems: 'center',
+//             justifyContent: 'center',
+//             zIndex: 1000,
+//           }}
+//         >
+//           <div
+//             style={{
+//               background: 'white',
+//               padding: '30px',
+//               borderRadius: '10px',
+//               width: '90%',
+//               maxWidth: '400px',
+//               boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+//             }}
+//           >
+//             <h3 style={{ marginTop: 0 }}>Enter Password to Proceed</h3>
+//             <p>This action requires authorization.</p>
 
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && confirmUpload()}
-              placeholder="Enter password"
-              autoFocus
-              style={{
-                width: '100%',
-                padding: '10px',
-                fontSize: '16px',
-                marginBottom: '10px',
-                border: '1px solid #ccc',
-                borderRadius: '5px',
-              }}
-            />
+//             <input
+//               type="password"
+//               value={passwordInput}
+//               onChange={(e) => setPasswordInput(e.target.value)}
+//               onKeyDown={(e) => e.key === 'Enter' && confirmUpload()}
+//               placeholder="Enter password"
+//               autoFocus
+//               style={{
+//                 width: '100%',
+//                 padding: '10px',
+//                 fontSize: '16px',
+//                 marginBottom: '10px',
+//                 border: '1px solid #ccc',
+//                 borderRadius: '5px',
+//               }}
+//             />
 
-            {passwordError && (
-              <p style={{ color: 'red', margin: '10px 0' }}>{passwordError}</p>
-            )}
+//             {passwordError && (
+//               <p style={{ color: 'red', margin: '10px 0' }}>{passwordError}</p>
+//             )}
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => {
-                  setShowPasswordPrompt(false);
-                  setPasswordError('');
-                }}
-                style={{
-                  padding: '8px 16px',
-                  background: '#ccc',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmUpload}
-                style={{
-                  padding: '8px 16px',
-                  background: '#0066ff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                }}
-              >
-                Confirm Upload
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+//             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+//               <button
+//                 onClick={() => {
+//                   setShowPasswordPrompt(false);
+//                   setPasswordError('');
+//                 }}
+//                 style={{
+//                   padding: '8px 16px',
+//                   background: '#ccc',
+//                   border: 'none',
+//                   borderRadius: '5px',
+//                   cursor: 'pointer',
+//                 }}
+//               >
+//                 Cancel
+//               </button>
+//               <button
+//                 onClick={confirmUpload}
+//                 style={{
+//                   padding: '8px 16px',
+//                   background: '#0066ff',
+//                   color: 'white',
+//                   border: 'none',
+//                   borderRadius: '5px',
+//                   cursor: 'pointer',
+//                 }}
+//               >
+//                 Confirm Upload
+//               </button>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   );
+// };
 
-export default CSVUploadComponent;
+// export default CSVUploadComponent;
 
 
 //
@@ -2043,3 +2043,452 @@ export default CSVUploadComponent;
 // };
 
 // export default NewsletterDataMigrator;
+
+// // src/components/SignUp.jsx
+// import { useState, useEffect } from 'react';
+// import {
+//   getAuth,
+//   sendSignInLinkToEmail,
+//   isSignInWithEmailLink,
+//   signInWithEmailLink,
+//   updateProfile,
+// } from 'firebase/auth';
+// import { getFirestore, doc, setDoc } from 'firebase/firestore';
+// import { app } from '../firebase'; // ← your firebase config file
+
+// const auth = getAuth(app);
+// const db = getFirestore(app);
+
+// export default function SignUp() {
+//   const [email, setEmail] = useState('');
+//   const [name, setName] = useState('');
+//   const [phone, setPhone] = useState('');
+//   const [loading, setLoading] = useState(false);
+//   const [message, setMessage] = useState('');
+//   const [error, setError] = useState('');
+//   const [isVerifying, setIsVerifying] = useState(false);
+
+//   // Check if the user arrived via magic link
+//   useEffect(() => {
+//     if (isSignInWithEmailLink(auth, window.location.href)) {
+//       setIsVerifying(true);
+
+//       // Get email from localStorage (saved when sending the link)
+//       let emailForSignIn = localStorage.getItem('emailForSignIn');
+
+//       // If email is missing (opened on different device/browser), ask user
+//       if (!emailForSignIn) {
+//         emailForSignIn = window.prompt('Please confirm your email:');
+//       }
+
+//       if (!emailForSignIn) {
+//         setError('Email is required to complete sign-in');
+//         setIsVerifying(false);
+//         return;
+//       }
+
+//       signInWithEmailLink(auth, emailForSignIn, window.location.href)
+//         .then(async (result) => {
+//           const user = result.user;
+
+//           // Update display name if we have it
+//           if (name) {
+//             await updateProfile(user, { displayName: name });
+//           }
+
+//           // Save / update user data in Firestore
+//           await setDoc(
+//             doc(db, 'users', user.uid),
+//             {
+//               uid: user.uid,
+//               email: user.email,
+//               name: name || null,
+//               phone: phone || null,
+//               createdAt: new Date().toISOString(),
+//               lastSignIn: new Date().toISOString(),
+//               authMethod: 'email-link',
+//               // you can add more fields here
+//             },
+//             { merge: true }
+//           );
+
+//           setMessage('Welcome! You are now signed in.');
+//           localStorage.removeItem('emailForSignIn');
+
+//           // Optional: redirect to dashboard
+//           // window.location.href = '/dashboard';
+//         })
+//         .catch((err) => {
+//           setError(err.message || 'Failed to sign in. Please try again.');
+//         })
+//         .finally(() => {
+//           setIsVerifying(false);
+//         });
+//     }
+//   }, [name, phone]);
+
+//   const handleSendMagicLink = async (e) => {
+//     e.preventDefault();
+
+//     if (!email || !name) {
+//       setError('Name and email are required');
+//       return;
+//     }
+
+//     setLoading(true);
+//     setError('');
+//     setMessage('');
+
+//     const actionCodeSettings = {
+//       // IMPORTANT: This URL must be added in Firebase Console → Authentication → Authorized domains
+//       url: 'http://localhost:5173/signup', // ← change to your real deployed URL in production
+//       handleCodeInApp: true,
+//       // dynamicLinkDomain: 'yourapp.page.link' // optional (for Firebase Dynamic Links)
+//     };
+
+//     try {
+//       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+
+//       // Save email so we can use it when user comes back from link
+//       localStorage.setItem('emailForSignIn', email);
+
+//       setMessage(`A sign-in link has been sent to ${email}.\nCheck your inbox (including spam).`);
+//       setEmail('');
+//       setName('');
+//       setPhone('');
+//     } catch (err) {
+//       setError(err.message || 'Could not send the link. Please try again.');
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   if (isVerifying) {
+//     return <div style={{ padding: '40px', textAlign: 'center' }}>Verifying your sign-in...</div>;
+//   }
+
+//   return (
+//     <div style={{ maxWidth: '420px', margin: '60px auto', padding: '24px', border: '1px solid #ddd', borderRadius: '8px' }}>
+//       <h2 style={{ textAlign: 'center' }}>Create Account</h2>
+//       <p style={{ textAlign: 'center', color: '#555', marginBottom: '24px' }}>
+//         No password needed — we'll send you a magic link
+//       </p>
+
+//       {message && (
+//         <div style={{ padding: '12px', background: '#e8f5e9', color: '#2e7d32', borderRadius: '4px', marginBottom: '16px' }}>
+//           {message}
+//         </div>
+//       )}
+
+//       {error && (
+//         <div style={{ padding: '12px', background: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '16px' }}>
+//           {error}
+//         </div>
+//       )}
+
+//       <form onSubmit={handleSendMagicLink}>
+//         <div style={{ marginBottom: '16px' }}>
+//           <label style={{ display: 'block', marginBottom: '6px' }}>Full Name *</label>
+//           <input
+//             type="text"
+//             value={name}
+//             onChange={(e) => setName(e.target.value)}
+//             required
+//             style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+//           />
+//         </div>
+
+//         <div style={{ marginBottom: '16px' }}>
+//           <label style={{ display: 'block', marginBottom: '6px' }}>Email *</label>
+//           <input
+//             type="email"
+//             value={email}
+//             onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
+//             required
+//             style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+//           />
+//         </div>
+
+//         <div style={{ marginBottom: '24px' }}>
+//           <label style={{ display: 'block', marginBottom: '6px' }}>Phone (optional)</label>
+//           <input
+//             type="tel"
+//             value={phone}
+//             onChange={(e) => setPhone(e.target.value)}
+//             style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+//           />
+//         </div>
+
+//         <button
+//           type="submit"
+//           disabled={loading}
+//           style={{
+//             width: '100%',
+//             padding: '12px',
+//             backgroundColor: loading ? '#ccc' : '#1976d2',
+//             color: 'white',
+//             border: 'none',
+//             borderRadius: '6px',
+//             fontSize: '16px',
+//             cursor: loading ? 'not-allowed' : 'pointer',
+//           }}
+//         >
+//           {loading ? 'Sending...' : 'Send Magic Link'}
+//         </button>
+//       </form>
+
+//       <p style={{ marginTop: '24px', fontSize: '0.9em', color: '#666', textAlign: 'center' }}>
+//         We'll email you a secure sign-in link.<br />
+//         Just click it to get started — no password required.
+//       </p>
+//     </div>
+//   );
+// }
+
+import React, { useState } from 'react';
+import { getFirestore, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { getApp } from 'firebase/app';
+
+const DeleteMemberUsersComponent = () => {
+  const [deleting, setDeleting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [previewCount, setPreviewCount] = useState(0);
+
+  const CORRECT_PASSWORD = 'DAA@987';
+
+  const db = getFirestore(getApp());
+  const usersMasterCollection = collection(db, 'users');
+
+  // Step 1: Preview how many users have BOCategory = "Member"
+  const handlePreviewClick = async () => {
+    try {
+      setMessage('Checking how many Member users exist...');
+      const q = query(usersMasterCollection, where("BOCategory", "==", "Member"));
+      const snapshot = await getDocs(q);
+
+      setPreviewCount(snapshot.size);
+      setMessage(`Found ${snapshot.size} user(s) with BOCategory = "Member"`);
+
+      if (snapshot.size > 0) {
+        setShowPasswordPrompt(true);
+        setPasswordInput('');
+        setPasswordError('');
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage(`Error: ${error.message}`);
+    }
+  };
+
+  // Step 2: Confirm password and start deletion
+  const confirmDelete = () => {
+    if (passwordInput === CORRECT_PASSWORD) {
+      setShowPasswordPrompt(false);
+      startDeletion();
+    } else {
+      setPasswordError('Incorrect password. Please try again.');
+    }
+  };
+
+  // Actual deletion logic with batch
+  const startDeletion = async () => {
+    setDeleting(true);
+    setMessage('Deleting Member users... Please wait.');
+    setProgress({ current: 0, total: previewCount });
+
+    try {
+      const q = query(usersMasterCollection, where("BOCategory", "==", "Member"));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        setMessage('No Member users found to delete.');
+        setDeleting(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      let deletedCount = 0;
+
+      querySnapshot.forEach((document) => {
+        batch.delete(document.ref);
+        deletedCount++;
+
+        // Update progress (for visual feedback)
+        if (deletedCount % 50 === 0) {
+          setProgress(prev => ({ ...prev, current: deletedCount }));
+        }
+      });
+
+      await batch.commit();
+
+      setProgress({ current: deletedCount, total: deletedCount });
+      setMessage(`✅ Successfully deleted ${deletedCount} user(s) with BOCategory = "Member"`);
+      setPreviewCount(0);
+
+    } catch (error) {
+      console.error('Delete error:', error);
+      setMessage(`❌ Error during deletion: ${error.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: '30px', maxWidth: '700px', margin: 'auto', fontFamily: 'Arial' }}>
+      <h2>Delete Users where BOCategory = "Member"</h2>
+
+      <p style={{ color: 'red', fontWeight: 'bold' }}>
+        ⚠️ This action is irreversible and password-protected.
+      </p>
+
+      <button
+        onClick={handlePreviewClick}
+        disabled={deleting}
+        style={{
+          padding: '12px 24px',
+          background: deleting ? '#ccc' : '#d32f2f',
+          color: 'white',
+          border: 'none',
+          borderRadius: '5px',
+          cursor: deleting ? 'not-allowed' : 'pointer',
+          fontSize: '16px',
+          marginBottom: '20px'
+        }}
+      >
+        {deleting ? 'Processing...' : 'Preview & Delete Member Users'}
+      </button>
+
+      {previewCount > 0 && !deleting && (
+        <p style={{ fontSize: '18px', color: '#d32f2f', fontWeight: 'bold' }}>
+          ⚠️ {previewCount} user(s) will be permanently deleted if you proceed.
+        </p>
+      )}
+
+      {progress.total > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <p>Progress: {progress.current} / {progress.total} users deleted</p>
+          <div style={{
+            width: '100%',
+            backgroundColor: '#f0f0f0',
+            borderRadius: '5px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              width: `${(progress.current / progress.total) * 100}%`,
+              backgroundColor: '#d32f2f',
+              height: '20px',
+              transition: 'width 0.3s'
+            }} />
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <p
+          style={{
+            marginTop: '20px',
+            padding: '12px',
+            background: message.includes('Error') || message.includes('❌') ? '#ffeeee' : '#eeffee',
+            borderRadius: '5px',
+            color: message.includes('Error') || message.includes('❌') ? 'red' : 'green',
+            whiteSpace: 'pre-wrap'
+          }}
+        >
+          {message}
+        </p>
+      )}
+
+      {/* Password Prompt Modal */}
+      {showPasswordPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '30px',
+              borderRadius: '10px',
+              width: '90%',
+              maxWidth: '420px',
+              boxShadow: '0 4px 25px rgba(0,0,0,0.4)',
+            }}
+          >
+            <h3 style={{ marginTop: 0, color: '#d32f2f' }}>⚠️ Confirm Permanent Deletion</h3>
+            <p><strong>{previewCount}</strong> users with <strong>BOCategory = "Member"</strong> will be deleted forever.</p>
+            <p>This action cannot be undone.</p>
+
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && confirmDelete()}
+              placeholder="Enter password"
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '16px',
+                marginBottom: '15px',
+                border: '1px solid #ccc',
+                borderRadius: '5px',
+              }}
+            />
+
+            {passwordError && (
+              <p style={{ color: 'red', margin: '10px 0' }}>{passwordError}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowPasswordPrompt(false);
+                  setPasswordError('');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  background: '#888',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: '10px 20px',
+                  background: '#d32f2f',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                }}
+              >
+                Yes, Delete Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DeleteMemberUsersComponent;

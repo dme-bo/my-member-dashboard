@@ -11,57 +11,33 @@ import { Pie, Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
+import {
+  normalizeMemberRecord,
+  getMemberOrganization,
+  getMemberService,
+  getMemberRank,
+  getMemberState,
+  getMemberCity,
+  parseMemberDate,
+} from '../utils/memberFields';
 
 export default function DashboardPage() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [organizationFilter, setOrganizationFilter] = useState('All');
   const [serviceFilter, setServiceFilter] = useState('All');
   const [rankFilter, setRankFilter] = useState('All');
   const [stateFilter, setStateFilter] = useState('All');
   const [cityFilter, setCityFilter] = useState('All');
 
   // ────────────────────────────────────────────────
-  // Date parser (unchanged)
-  const parseRegDate = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return null;
-    const trimmed = dateStr.trim();
-    const parts = trimmed.split(/\s+/);
-    if (parts.length !== 3) return null;
-    const [dayStr, monthStr, yearStr] = parts;
-    const day = parseInt(dayStr, 10);
-    const year = parseInt(yearStr, 10);
-    if (isNaN(day) || isNaN(year)) return null;
-
-    const monthNames = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    const monthIndex = monthNames.findIndex((name) =>
-      name.toLowerCase().startsWith(monthStr.toLowerCase().replace('.', ''))
-    );
-    if (monthIndex === -1) return null;
-
-    return new Date(year, monthIndex, day);
-  };
-
   useEffect(() => {
     const fetchMembers = async () => {
       try {
         const db = getFirestore();
-        const snapshot = await getDocs(collection(db, 'usersmaster'));
-        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        const snapshot = await getDocs(collection(db, 'users'));
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...normalizeMemberRecord(doc.data()) }));
         setMembers(data);
       } catch (error) {
         console.error('Error fetching members:', error);
@@ -74,28 +50,19 @@ export default function DashboardPage() {
 
   // Filter options logic (unchanged) ────────────────────────────────────────────────
   const filterOptions = useMemo(() => {
-    const categories = ['All', ...new Set(members.map((m) => m.category?.trim()).filter(Boolean))].sort();
+    const organizations = ['All', ...new Set(members.map((m) => getMemberOrganization(m)).filter(Boolean))].sort();
+    const states = ['All', ...new Set(members.map((m) => getMemberState(m)).filter(Boolean))].sort();
 
-    const stateCounts = members.reduce((acc, m) => {
-      const s = m.state?.trim();
-      if (s) acc[s] = (acc[s] || 0) + 1;
-      return acc;
-    }, {});
-    const topStates = Object.keys(stateCounts)
-      .sort((a, b) => stateCounts[b] - stateCounts[a])
-      .slice(0, 25);
-    const states = ['All', ...topStates];
-
-    return { categories, states };
+    return { organizations, states };
   }, [members]);
 
   const availableServices = useMemo(() => {
     let filtered = members;
-    if (categoryFilter !== 'All') {
-      filtered = filtered.filter((m) => m.category?.trim() === categoryFilter);
+    if (organizationFilter !== 'All') {
+      filtered = filtered.filter((m) => getMemberOrganization(m) === organizationFilter);
     }
     const serviceCounts = filtered.reduce((acc, m) => {
-      const s = m.service?.trim();
+      const s = getMemberService(m);
       if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
@@ -103,15 +70,15 @@ export default function DashboardPage() {
       .sort((a, b) => serviceCounts[b] - serviceCounts[a])
       .slice(0, 30);
     return ['All', ...topServices];
-  }, [members, categoryFilter]);
+  }, [members, organizationFilter]);
 
   const availableRanks = useMemo(() => {
     let filtered = members;
-    if (categoryFilter !== 'All') filtered = filtered.filter((m) => m.category?.trim() === categoryFilter);
-    if (serviceFilter !== 'All') filtered = filtered.filter((m) => m.service?.trim() === serviceFilter);
+    if (organizationFilter !== 'All') filtered = filtered.filter((m) => getMemberOrganization(m) === organizationFilter);
+    if (serviceFilter !== 'All') filtered = filtered.filter((m) => getMemberService(m) === serviceFilter);
 
     const rankCounts = filtered.reduce((acc, m) => {
-      const r = m.rank?.trim();
+      const r = getMemberRank(m);
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
@@ -119,15 +86,15 @@ export default function DashboardPage() {
       .sort((a, b) => rankCounts[b] - rankCounts[a])
       .slice(0, 25);
     return ['All', ...topRanks];
-  }, [members, categoryFilter, serviceFilter]);
+  }, [members, organizationFilter, serviceFilter]);
 
   const availableCities = useMemo(() => {
     let filtered = members;
     if (stateFilter !== 'All') {
-      filtered = filtered.filter((m) => m.state?.trim() === stateFilter);
+      filtered = filtered.filter((m) => getMemberState(m) === stateFilter);
     }
     const cityCounts = filtered.reduce((acc, m) => {
-      const c = m.city?.trim();
+      const c = getMemberCity(m);
       if (c) acc[c] = (acc[c] || 0) + 1;
       return acc;
     }, {});
@@ -137,20 +104,20 @@ export default function DashboardPage() {
     return ['All', ...topCities];
   }, [members, stateFilter]);
 
-  useEffect(() => { setServiceFilter('All'); }, [categoryFilter]);
-  useEffect(() => { setRankFilter('All'); }, [serviceFilter, categoryFilter]);
+  useEffect(() => { setServiceFilter('All'); }, [organizationFilter]);
+  useEffect(() => { setRankFilter('All'); }, [serviceFilter, organizationFilter]);
   useEffect(() => { setCityFilter('All'); }, [stateFilter]);
 
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
-      if (categoryFilter !== 'All' && member.category?.trim() !== categoryFilter) return false;
-      if (serviceFilter !== 'All' && member.service?.trim() !== serviceFilter) return false;
-      if (rankFilter !== 'All' && member.rank?.trim() !== rankFilter) return false;
-      if (stateFilter !== 'All' && member.state?.trim() !== stateFilter) return false;
-      if (cityFilter !== 'All' && member.city?.trim() !== cityFilter) return false;
+      if (organizationFilter !== 'All' && getMemberOrganization(member) !== organizationFilter) return false;
+      if (serviceFilter !== 'All' && getMemberService(member) !== serviceFilter) return false;
+      if (rankFilter !== 'All' && getMemberRank(member) !== rankFilter) return false;
+      if (stateFilter !== 'All' && getMemberState(member) !== stateFilter) return false;
+      if (cityFilter !== 'All' && getMemberCity(member) !== cityFilter) return false;
       return true;
     });
-  }, [members, categoryFilter, serviceFilter, rankFilter, stateFilter, cityFilter]);
+  }, [members, organizationFilter, serviceFilter, rankFilter, stateFilter, cityFilter]);
 
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
@@ -165,12 +132,12 @@ export default function DashboardPage() {
       return acc;
     }, {});
 
-    const categoryCountsRaw = filteredMembers.reduce((acc, m) => {
-      const c = m.category?.trim();
+    const organizationCountsRaw = filteredMembers.reduce((acc, m) => {
+      const c = getMemberOrganization(m);
       if (c) acc[c] = (acc[c] || 0) + 1;
       return acc;
     }, {});
-    const categoryCounts = Object.fromEntries(Object.entries(categoryCountsRaw).sort(([, a], [, b]) => b - a));
+    const organizationCounts = Object.fromEntries(Object.entries(organizationCountsRaw).sort(([, a], [, b]) => b - a));
 
     const serviceCountsRaw = filteredMembers.reduce((acc, m) => {
       const s = m.service?.trim();
@@ -180,7 +147,7 @@ export default function DashboardPage() {
     const serviceCounts = Object.fromEntries(Object.entries(serviceCountsRaw).sort(([, a], [, b]) => b - a));
 
     const rankCountsRaw = filteredMembers.reduce((acc, m) => {
-      const r = m.rank?.trim();
+      const r = getMemberRank(m);
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
@@ -199,7 +166,7 @@ export default function DashboardPage() {
     const avgExp = total > 0 ? (expSum / total).toFixed(1) + 'Y' : '0Y';
 
     const parsedDates = filteredMembers
-      .map((m) => parseRegDate(m.registration_date))
+      .map((m) => parseMemberDate(m.registration_date))
       .filter((d) => d !== null);
 
     const now = new Date();
@@ -219,7 +186,7 @@ export default function DashboardPage() {
     return {
       total,
       genderCounts,
-      categoryCounts,
+      organizationCounts,
       serviceCounts,
       rankCounts: topRanks,
       stateCounts,
@@ -232,7 +199,7 @@ export default function DashboardPage() {
   }, [filteredMembers, loading]);
 
   const clearAllFilters = () => {
-    setCategoryFilter('All');
+    setOrganizationFilter('All');
     setServiceFilter('All');
     setRankFilter('All');
     setStateFilter('All');
@@ -543,10 +510,10 @@ export default function DashboardPage() {
           <div className="filter-controls">
             <div className="filter-group">
               <label>Category</label>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                {filterOptions.categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+              <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)}>
+                {filterOptions.organizations.map((organization) => (
+                  <option key={organization} value={organization}>
+                    {organization}
                   </option>
                 ))}
               </select>
@@ -644,12 +611,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="chart-card">
-            <h3>Category Wise Distribution</h3>
-            <div className="chart-container">
-              <Bar data={createChartData(analytics.categoryCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+            <div className="chart-card">
+              <h3>Category Wise Distribution</h3>
+              <div className="chart-container">
+                <Bar data={createChartData(analytics.organizationCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+              </div>
             </div>
-          </div>
 
           <div className="chart-card">
             <h3>Service Wise Distribution</h3>

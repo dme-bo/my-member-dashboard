@@ -11,6 +11,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberOrganization, parseMemberDate } from "../utils/memberFields";
 
 export default function MemberDetailModal({ member, onClose }) {
   const [activeTab, setActiveTab] = useState("personal");
@@ -23,9 +24,10 @@ export default function MemberDetailModal({ member, onClose }) {
   const [currentEmployment, setCurrentEmployment] = useState(null); // null | "TCS" | { name: string }
   const [employmentLoading, setEmploymentLoading] = useState(false);
 
-  const fullName = member.full_name?.trim() || "N/A";
-  const userId = member.id || member.uid || member.member_id;
-  const phoneNumber = member.phone_number?.trim();
+  const normalizedMember = normalizeMemberRecord(member);
+  const fullName = getMemberName(normalizedMember) || "N/A";
+  const userId = normalizedMember.id || normalizedMember.uid || normalizedMember.member_id;
+  const phoneNumber = getMemberPhone(normalizedMember);
 
   const tabs = [
     { id: "personal", label: "Personal Info" },
@@ -38,7 +40,7 @@ export default function MemberDetailModal({ member, onClose }) {
     { id: "interaction", label: "Interaction & Notes" },
   ];
 
-  const rating = parseInt(member.rating) || 0;
+  const rating = parseInt(normalizedMember.rating) || 0;
 
   const getRatingLabel = (stars) => {
     const labels = {
@@ -74,18 +76,8 @@ export default function MemberDetailModal({ member, onClose }) {
   const formatDateDDMMMYYYY = (dateInput) => {
     if (!dateInput) return "-";
 
-    let date;
-    if (typeof dateInput === "string" && dateInput.includes("-")) {
-      date = new Date(dateInput + "T00:00:00");
-    } else if (dateInput.toDate) {
-      date = dateInput.toDate();
-    } else if (dateInput instanceof Date) {
-      date = dateInput;
-    } else {
-      return "-";
-    }
-
-    if (isNaN(date.getTime())) return "-";
+    const date = parseMemberDate(dateInput);
+    if (!date) return "-";
 
     return date.toLocaleDateString("en-GB", {
       day: "2-digit",
@@ -109,7 +101,7 @@ export default function MemberDetailModal({ member, onClose }) {
     const fetchSavedNotes = async () => {
       setLoading(true);
       try {
-        const interactionsRef = collection(db, "usersmaster", userId, "interactions");
+        const interactionsRef = collection(db, "users", userId, "interactions");
         const q = query(interactionsRef, orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
 
@@ -160,7 +152,7 @@ export default function MemberDetailModal({ member, onClose }) {
     const checkEmploymentStatus = async () => {
       setEmploymentLoading(true);
       try {
-        // 1. Check tcsusersmaster first
+        // 1. Check tcsusers first
         const tcsRef = collection(db, "tcsusersmaster");
         const tcsQuery = query(tcsRef, where("contact_number", "==", phoneNumber));
         const tcsSnapshot = await getDocs(tcsQuery);
@@ -232,7 +224,7 @@ export default function MemberDetailModal({ member, onClose }) {
 
     setLoading(true);
     try {
-      const interactionsRef = collection(db, "usersmaster", userId, "interactions");
+      const interactionsRef = collection(db, "users", userId, "interactions");
 
       const savePromises = validNotes.map((note) =>
         addDoc(interactionsRef, {
@@ -334,7 +326,7 @@ export default function MemberDetailModal({ member, onClose }) {
             <div style={{ flex: 1 }}>
               <h2>{fullName}</h2>
               <p style={{ margin: "5px 0", opacity: 0.9, fontSize: "15px" }}>
-                {member.phone_number || "N/A"} • {member.email || "N/A"}
+                {phoneNumber || "N/A"} • {normalizedMember.email || "N/A"}
               </p>
             </div>
 
@@ -369,55 +361,56 @@ export default function MemberDetailModal({ member, onClose }) {
             {activeTab === "personal" && (
               <div className="detail-grid">
                 <div><strong>Full Name:</strong> {fullName}</div>
-                <div><strong>Email:</strong> {member.email || "-"}</div>
-                <div><strong>Mobile:</strong> {member.phone_number || "-"}</div>
-                <div><strong>Gender:</strong> {member.gender || "-"}</div>
-                <div><strong>Date of Birth:</strong> {member.dateofbirth || "-"}</div>
-                <div><strong>Current City:</strong> {member.city || "-"}</div>
-                <div><strong>State:</strong> {member.state || "-"}</div>
-                <div><strong>Country:</strong> {member.country || "India"}</div>
-                <div><strong>Preferred Job Location:</strong> {member.preferred_job_location || "-"}</div>
-                <div><strong>Permanent Address:</strong> {member.permanent_address || "-"}</div>
-                <div><strong>PIN Code:</strong> {member.pincode || "-"}</div>
-                <div><strong>Father's Name:</strong> {member.father_name || "-"}</div>
-                <div><strong>Mother's Name:</strong> {member.mother_name || "-"}</div>
+                <div><strong>Email:</strong> {normalizedMember.email || "-"}</div>
+                <div><strong>Mobile:</strong> {phoneNumber || "-"}</div>
+                <div><strong>Gender:</strong> {normalizedMember.gender || "-"}</div>
+                <div><strong>Date of Birth:</strong> {normalizedMember.dateofbirth || "-"}</div>
+                <div><strong>Current City:</strong> {normalizedMember.city || "-"}</div>
+                <div><strong>State:</strong> {normalizedMember.state || "-"}</div>
+                <div><strong>Country:</strong> {normalizedMember.country || "India"}</div>
+                <div><strong>Preferred Job Location:</strong> {normalizedMember.preferred_job_location || "-"}</div>
+                <div><strong>Permanent Address:</strong> {normalizedMember.permanent_address || "-"}</div>
+                <div><strong>PIN Code:</strong> {normalizedMember.pincode || "-"}</div>
+                <div><strong>Father's Name:</strong> {normalizedMember.father_name || "-"}</div>
+                <div><strong>Mother's Name:</strong> {normalizedMember.mother_name || "-"}</div>
               </div>
             )}
 
             {/* EDUCATION TAB */}
             {activeTab === "education" && (
               <div className="detail-grid">
-                <div><strong>Education:</strong> {member.graduation_course || "-"}</div>
-                <div><strong>Graduation %:</strong> {member.graduation_percentage || "-"}</div>
-                <div><strong>11th %:</strong> {member.percentage11th || "-"}</div>
-                <div><strong>12th %:</strong> {member.percentage12th || "-"}</div>
-                <div><strong>MBA:</strong> {member.mba || "-"}</div>
-                <div><strong>English Proficiency:</strong> {member.english_proficiency || "-"}</div>
-                <div><strong>IT Skills:</strong> {member.it_skills || "-"}</div>
-                <div><strong>Other Skills:</strong> {member.skills || "-"}</div>
+                <div><strong>Education:</strong> {normalizedMember.graduation_course || normalizedMember.education || "-"}</div>
+                <div><strong>Graduation %:</strong> {normalizedMember.graduation_percentage || "-"}</div>
+                <div><strong>11th %:</strong> {normalizedMember.percentage11th || "-"}</div>
+                <div><strong>12th %:</strong> {normalizedMember.percentage12th || "-"}</div>
+                <div><strong>MBA:</strong> {normalizedMember.mba || "-"}</div>
+                <div><strong>English Proficiency:</strong> {normalizedMember.english_proficiency || normalizedMember.english || "-"}</div>
+                <div><strong>IT Skills:</strong> {normalizedMember.it_skills || "-"}</div>
+                <div><strong>Other Skills:</strong> {normalizedMember.skills || "-"}</div>
               </div>
             )}
 
             {/* SERVICE TAB */}
             {activeTab === "service" && (
               <div className="detail-grid">
-                <div><strong>Service/Organization:</strong> {member.service || "-"}</div>
-                <div><strong>Rank:</strong> {member.rank || "-"}</div>
-                <div><strong>Level:</strong> {member.level || "-"}</div>
-                <div><strong>Trade:</strong> {member.trade || "-"}</div>
-                <div><strong>Year of Commission:</strong> {member.year_of_commission || "-"}</div>
-                <div><strong>Actual Retirement Date:</strong> {member.actual_retirement_date || "-"}</div>
-                <div><strong>Planned Retirement Date:</strong> {member.planned_retirement_date || "-"}</div>
+                <div><strong>Service/Category:</strong> {normalizedMember.service || "-"}</div>
+                <div><strong>Category:</strong> {getMemberOrganization(normalizedMember) || "-"}</div>
+                <div><strong>Rank:</strong> {normalizedMember.rank || "-"}</div>
+                <div><strong>Level:</strong> {normalizedMember.level || "-"}</div>
+                <div><strong>Trade:</strong> {normalizedMember.trade || "-"}</div>
+                <div><strong>Year of Commission:</strong> {normalizedMember.year_of_commission || "-"}</div>
+                <div><strong>Actual Retirement Date:</strong> {normalizedMember.actual_retirement_date || "-"}</div>
+                <div><strong>Planned Retirement Date:</strong> {normalizedMember.planned_retirement_date || "-"}</div>
               </div>
             )}
 
             {/* EXPERIENCE TAB */}
             {activeTab === "experience" && (
               <div className="detail-grid">
-                <div><strong>Govt Experience:</strong> {member.govt_experience || "-"}</div>
-                <div><strong>Corporate Experience:</strong> {member.corporate_experience || "-"}</div>
-                <div><strong>Total Experience:</strong> {member.total_experience || "-"}</div>
-                <div><strong>Work Experience:</strong> {member.work_experience || "-"}</div>
+                <div><strong>Govt Experience:</strong> {normalizedMember.govt_experience || "-"}</div>
+                <div><strong>Corporate Experience:</strong> {normalizedMember.corporate_experience || "-"}</div>
+                <div><strong>Total Experience:</strong> {normalizedMember.total_experience || "-"}</div>
+                <div><strong>Work Experience:</strong> {normalizedMember.work_experience || "-"}</div>
               </div>
             )}
 
@@ -469,12 +462,12 @@ export default function MemberDetailModal({ member, onClose }) {
             {/* JOB PREFERENCES TAB */}
             {activeTab === "job" && (
               <div className="detail-grid">
-                <div><strong>Applied Jobs:</strong> {member.open_jobs || "-"}</div>
-                <div><strong>Preferred Job Location:</strong> {member.preferred_job_location || "Anywhere"}</div>
-                <div><strong>Current City:</strong> {member.city || "-"}</div>
-                <div><strong>Current CTC:</strong> {member.current_ctc || "0"}</div>
-                <div><strong>Expected CTC:</strong> {member.expected_ctc || "0"}</div>
-                <div><strong>Notice Period:</strong> {member.notice_period || "-"}</div>
+                <div><strong>Applied Jobs:</strong> {normalizedMember.open_jobs || "-"}</div>
+                <div><strong>Preferred Job Location:</strong> {normalizedMember.preferred_job_location || "Anywhere"}</div>
+                <div><strong>Current City:</strong> {normalizedMember.city || "-"}</div>
+                <div><strong>Current CTC:</strong> {normalizedMember.current_ctc || "0"}</div>
+                <div><strong>Expected CTC:</strong> {normalizedMember.expected_ctc || "0"}</div>
+                <div><strong>Notice Period:</strong> {normalizedMember.notice_period || "-"}</div>
               </div>
             )}
 
@@ -483,22 +476,22 @@ export default function MemberDetailModal({ member, onClose }) {
               <div className="detail-grid">
                 <div>
                   <strong>Resume:</strong>{" "}
-                  {member.resume_fileurl ? (
-                    <a href={member.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
+                  {normalizedMember.resume_fileurl ? (
+                    <a href={normalizedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
                       View Resume
                     </a>
                   ) : "Not Uploaded"}
                 </div>
                 <div>
                   <strong>Photo:</strong>{" "}
-                  {member.photo_url ? (
-                    <a href={member.photo_url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
+                  {normalizedMember.photo_url ? (
+                    <a href={normalizedMember.photo_url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
                       View Photo
                     </a>
                   ) : "Not Uploaded"}
                 </div>
-                <div><strong>Member ID:</strong> {member.member_id || "-"}</div>
-                <div><strong>Registration Date:</strong> {member.registration_date || "-"}</div>
+                <div><strong>Member ID:</strong> {normalizedMember.member_id || "-"}</div>
+                <div><strong>Registration Date:</strong> {normalizedMember.registration_date || normalizedMember.entry_date || "-"}</div>
               </div>
             )}
 

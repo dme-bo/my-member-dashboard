@@ -5,6 +5,19 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
+import {
+  normalizeMemberRecord,
+  getMemberName,
+  getMemberPhone,
+  getMemberOrganization,
+  getMemberEmail,
+  getMemberService,
+  getMemberRank,
+  getMemberState,
+  getMemberCity,
+  getMemberEducation,
+  getMemberExperience,
+} from "../utils/memberFields";
 
 export default function MemberListPage({ onMemberClick }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -62,12 +75,12 @@ export default function MemberListPage({ onMemberClick }) {
   // Fetch members from Firestore
   useEffect(() => {
     const unsubscribe = onSnapshot(
-      collection(db, "usersmaster" || "users"),
-      (snapshot) => {
-        const membersList = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        collection(db, "users" || "users"),
+        (snapshot) => {
+          const membersList = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...normalizeMemberRecord(doc.data()),
+          }));
         setMembers(membersList);
         setCurrentPage(1);
       },
@@ -98,7 +111,7 @@ export default function MemberListPage({ onMemberClick }) {
     };
 
     const experiences = members
-      .map((m) => parseFloat(m.experience))
+      .map((m) => parseFloat(getMemberExperience(m)))
       .filter((exp) => !isNaN(exp) && exp >= 0);
 
     let buckets = ["All"];
@@ -121,14 +134,14 @@ export default function MemberListPage({ onMemberClick }) {
 
     return {
       Gender: getUniqueValues("gender"),
-      Category: getUniqueValues("category"),
+      Category: getUniqueValues("organization"),
       Service: getUniqueValues("service"),
       Rank: getUniqueValues("rank"),
       Level: getUniqueValues("level"),
       Trade: getUniqueValues("trade"),
       City: getUniqueValues("city"),
       State: getUniqueValues("state"),
-      Education: getUniqueValues("graduation_course"),
+      Education: getUniqueValues("education"),
       Status: getUniqueValues("status"),
       BOCategory: getUniqueValues("BOCategory"),
       "Placement Status": ["All", "Placed", "Active"],
@@ -178,9 +191,9 @@ export default function MemberListPage({ onMemberClick }) {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       list = list.filter((member) => {
-        const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim().toLowerCase();
-        const email = member.email?.toLowerCase() || "";
-        const phone = member.phone_number || "";
+        const fullName = getMemberName(member).toLowerCase();
+        const email = getMemberEmail(member).toLowerCase();
+        const phone = getMemberPhone(member) || "";
         return fullName.includes(term) || email.includes(term) || phone.includes(term);
       });
     }
@@ -195,14 +208,14 @@ export default function MemberListPage({ onMemberClick }) {
     // Sidebar filters
     const fieldMap = {
       Gender: "gender",
-      Category: "category",
+      Category: "organization",
       Service: "service",
       Rank: "rank",
       Level: "level",
       Trade: "trade",
       City: "city",
       State: "state",
-      Education: "graduation_course",
+      Education: "education",
       BOCategory: "BOCategory",
     };
 
@@ -215,7 +228,7 @@ export default function MemberListPage({ onMemberClick }) {
           const range = parseExperienceRange(value);
           if (range) {
             list = list.filter((member) => {
-              const exp = parseFloat(member.experience);
+              const exp = parseFloat(getMemberExperience(member));
               if (isNaN(exp)) return false;
               return exp >= range.min && (range.max === Infinity || exp <= range.max);
             });
@@ -236,9 +249,8 @@ export default function MemberListPage({ onMemberClick }) {
     // Improved Alphabetical Sort (A → Z)
     list.sort((a, b) => {
       const getName = (member) => {
-        const full = `${member.first_name || ""} ${member.last_name || ""}`.trim();
+        const full = getMemberName(member);
         if (full) return full;
-        if (member.full_name) return member.full_name.trim();
         return "ZZZ_NO_NAME"; // Push nameless to bottom
       };
 
@@ -304,17 +316,17 @@ export default function MemberListPage({ onMemberClick }) {
   // Export to Excel (XLSX)
   const handleExportXLSX = () => {
     const dataToExport = filteredMembers.map((member) => ({
-      Name: `${member.first_name || ""} ${member.last_name || ""}`.trim() || member.full_name || "No Name",
-      Mobile: member.phone_number || "",
-      Email: member.email || "",
-      Category: member.category || "",
-      Service: member.service || "",
-      Rank: member.rank || "",
+      Name: getMemberName(member),
+      Mobile: getMemberPhone(member) || "",
+      Email: getMemberEmail(member) || "",
+      Category: getMemberOrganization(member) || "",
+      Service: getMemberService(member) || "",
+      Rank: getMemberRank(member) || "",
       Gender: member.gender || "",
-      State: member.state || "",
-      City: member.city || "",
-      Education: member.graduation_course || "",
-      Experience: member.experience || "",
+      State: getMemberState(member) || "",
+      City: getMemberCity(member) || "",
+      Education: getMemberEducation(member) || "",
+      Experience: getMemberExperience(member) || "",
       Status: member.status || "",
       "Placement Status": member.isPlaced ? "Placed" : "Active",
     }));
@@ -560,17 +572,15 @@ export default function MemberListPage({ onMemberClick }) {
                     >
                       <td className="sticky-name">
                         <div className="member-name">
-                          {member.first_name || member.full_name
-                            ? `${member.first_name || ""} ${member.last_name || ""}`.trim() || member.full_name
-                            : "No Name"}
+                          {getMemberName(member)}
                         </div>
                       </td>
-                      <td>{member.phone_number || "-"}</td>
-                      <td>{member.category || "-"}</td>
-                      <td>{member.service || "-"}</td>
-                      <td>{member.rank || "-"}</td>
-                      <td>{member.state || "-"}</td>
-                      <td>{member.city || "-"}</td>
+                      <td>{getMemberPhone(member) || "-"}</td>
+                      <td>{getMemberOrganization(member) || "-"}</td>
+                      <td>{getMemberService(member) || "-"}</td>
+                      <td>{getMemberRank(member) || "-"}</td>
+                      <td>{getMemberState(member) || "-"}</td>
+                      <td>{getMemberCity(member) || "-"}</td>
                     </tr>
                   ))
                 ) : (

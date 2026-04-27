@@ -26,6 +26,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import Papa from "papaparse";
+import { normalizeMemberRecord, getMemberOrganization } from "../utils/memberFields";
 
 export default function RequirementsPage() {
   const [requirementsData, setRequirementsData] = useState([]);
@@ -242,7 +243,7 @@ export default function RequirementsPage() {
   useEffect(() => {
     const fetchMembers = async () => {
       try {
-        const q = query(collection(db, "usersmaster"));
+        const q = query(collection(db, "users"));
         const snapshot = await getDocs(q);
         const membersList = snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -253,11 +254,11 @@ export default function RequirementsPage() {
           gender: doc.data().gender || "",
           state: doc.data().state || "",
           city: doc.data().city || "",
-          category: doc.data().category || "",
+          organization: doc.data().organization || doc.data().category || "",
           service: doc.data().service || "",
           rank: doc.data().rank || "",
           level: doc.data().level || "",
-          ...doc.data(),
+          ...normalizeMemberRecord(doc.data()),
         }));
         setMembers(membersList);
         setFilteredMembers(membersList);
@@ -271,7 +272,7 @@ export default function RequirementsPage() {
   /* UNIQUE FILTER VALUES */
   const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
   const uniqueCities = useMemo(() => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(), [members]);
-  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => m.category).filter(Boolean))].sort(), [members]);
+  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => getMemberOrganization(m)).filter(Boolean))].sort(), [members]);
   const uniqueServices = useMemo(() => [...new Set(members.map((m) => m.service).filter(Boolean))].sort(), [members]);
   const uniqueRanks = useMemo(() => [...new Set(members.map((m) => m.rank).filter(Boolean))].sort(), [members]);
   const uniqueLevels = useMemo(() => [...new Set(members.map((m) => m.level).filter(Boolean))].sort(), [members]);
@@ -292,7 +293,7 @@ export default function RequirementsPage() {
     if (genderFilter) filtered = filtered.filter((m) => m.gender?.toLowerCase() === genderFilter.toLowerCase());
     if (stateFilter) filtered = filtered.filter((m) => m.state === stateFilter);
     if (cityFilter) filtered = filtered.filter((m) => m.city === cityFilter);
-    if (organizationFilter) filtered = filtered.filter((m) => m.category === organizationFilter);
+    if (organizationFilter) filtered = filtered.filter((m) => getMemberOrganization(m) === organizationFilter);
     if (serviceFilter) filtered = filtered.filter((m) => m.service === serviceFilter);
     if (rankFilter) filtered = filtered.filter((m) => m.rank === rankFilter);
     if (levelFilter) filtered = filtered.filter((m) => m.level === levelFilter);
@@ -1950,7 +1951,7 @@ export default function RequirementsPage() {
                 <strong style={{ color: "#1976d2" }}>State:</strong> {selectedMember.state || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Category:</strong> {selectedMember.category || "—"}
+                <strong style={{ color: "#1976d2" }}>Category:</strong> {getMemberOrganization(selectedMember) || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
                 <strong style={{ color: "#1976d2" }}>Service:</strong> {selectedMember.service || "—"}
