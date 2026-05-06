@@ -168,7 +168,7 @@ export default function MemberLocationPage() {
 
     const initMap = async () => {
       if (!GOOGLE_MAPS_API_KEY) {
-        setMapError("Missing Google Maps API key. Add VITE_GOOGLE_MAPS_API_KEY to my-react-app/.env.local");
+        setMapError("Missing Google Maps API key. Set VITE_GOOGLE_MAPS_API_KEY in your deployment environment and redeploy.");
         setMapLoading(false);
         return;
       }
