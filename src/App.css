@@ -13,6 +13,8 @@ body {
 .app-container {
   display: flex;
   min-height: 100vh;
+  width: 100vw;
+  overflow-x: hidden;
 }
 
 /* ====================== SIDEBAR ====================== */
@@ -95,10 +97,14 @@ body {
 .main-content {
   margin-left: 260px;
   padding: 0;
-  width: calc(100% - 260px);
+  width: auto;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   overflow-x: hidden;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ====================== DASHBOARD PAGE ====================== */
@@ -2635,9 +2641,6 @@ body {
 }
 
         
-
-
-
 
 
 

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { 
   MdDashboard, 
   MdPeople,           // Members Master List
+  MdLocationOn,       // Member Location
   MdAssignment,       // Applications
   MdWork,             // Requirements
   MdEmail,            // Newsletter
@@ -76,6 +77,15 @@ export default function Sidebar() {
         >
           <MdPeople className="menu-icon" />
           <span>Members Master List</span>
+        </NavLink>
+
+        <NavLink
+          to="/member-location"
+          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
+          onClick={() => setExpandedMenu(null)}
+        >
+          <MdLocationOn className="menu-icon" />
+          <span>Member Location</span>
         </NavLink>
 
         {/* Expandable Members Applications */}

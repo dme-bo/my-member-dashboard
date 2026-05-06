@@ -1,8 +1,9 @@
-// src/pages/MemberListPage.jsx
+﻿// src/pages/MemberListPage.jsx
 import { useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import DualRangeSlider from "../components/DualRangeSlider";
 import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import {
@@ -17,6 +18,7 @@ import {
   getMemberCity,
   getMemberEducation,
   getMemberExperience,
+  parseMemberSkills,
 } from "../utils/memberFields";
 
 export default function MemberListPage({ onMemberClick }) {
@@ -29,6 +31,16 @@ export default function MemberListPage({ onMemberClick }) {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filterSearchTerms, setFilterSearchTerms] = useState({});
   const filtersRef = useRef(null);
+  const [retirementStatus, setRetirementStatus] = useState("All");
+  const [ageRange, setAgeRange] = useState([0, 100]);
+  const [tagModalMember, setTagModalMember] = useState(null);
+  const [availableTags, setAvailableTags] = useState([]);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedTagValue, setSelectedTagValue] = useState("");
+  const [tagSearchTerm, setTagSearchTerm] = useState("");
+  const [tagModalSaving, setTagModalSaving] = useState(false);
+  const [tagModalError, setTagModalError] = useState("");
+  const [tagSuccessPopup, setTagSuccessPopup] = useState({ show: false, message: "" });
 
   const [sidebarFilters, setSidebarFilters] = useState({
     Gender: "All",
@@ -149,6 +161,50 @@ export default function MemberListPage({ onMemberClick }) {
     };
   }, [members]);
 
+  const ageBounds = useMemo(() => {
+    const ages = members.map((member) => member.age_years).filter((age) => Number.isFinite(age));
+    if (ages.length === 0) return { min: 0, max: 100 };
+    const min = Math.max(0, Math.floor(Math.min(...ages)));
+    const max = Math.max(min, Math.ceil(Math.max(...ages)));
+    return { min, max };
+  }, [members]);
+
+  useEffect(() => {
+    setAgeRange([ageBounds.min, ageBounds.max]);
+  }, [ageBounds.min, ageBounds.max]);
+
+  const normalizeTagLabel = (tagDoc) => {
+    if (!tagDoc) return "";
+    if (typeof tagDoc === "string") return tagDoc.trim();
+    if (typeof tagDoc !== "object") return "";
+    return String(
+      tagDoc.name ||
+        tagDoc.tag ||
+        tagDoc.label ||
+        tagDoc.title ||
+        tagDoc.skill ||
+        tagDoc.value ||
+        tagDoc.id ||
+        ""
+    ).trim();
+  };
+
+  useEffect(() => {
+    const loadTags = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "tags"));
+        const tags = snapshot.docs
+          .map((tagDoc) => normalizeTagLabel({ id: tagDoc.id, ...tagDoc.data() }))
+          .filter(Boolean);
+        setAvailableTags(Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b)));
+      } catch (error) {
+        console.error("Error loading tags:", error);
+      }
+    };
+
+    loadTags();
+  }, []);
+
   const handleFilterChange = (key, value) => {
     setSidebarFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1);
@@ -170,6 +226,8 @@ export default function MemberListPage({ onMemberClick }) {
       "Placement Status": "All",
       Experience: "All",
     });
+    setRetirementStatus("All");
+    setAgeRange([ageBounds.min, ageBounds.max]);
     setCurrentPage(1);
   };
 
@@ -203,6 +261,19 @@ export default function MemberListPage({ onMemberClick }) {
       list = list.filter((m) => m.isPlaced === true);
     } else if (filterPlaced === "active") {
       list = list.filter((m) => m.isPlaced !== true);
+    }
+
+    if (retirementStatus !== "All") {
+      list = list.filter((member) => member.retirement_status === retirementStatus);
+    }
+
+    const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
+    if (ageFilterActive) {
+      list = list.filter((member) => {
+        const age = member.age_years;
+        if (!Number.isFinite(age)) return false;
+        return age >= ageRange[0] && age <= ageRange[1];
+      });
     }
 
     // Sidebar filters
@@ -261,7 +332,7 @@ export default function MemberListPage({ onMemberClick }) {
     });
 
     return list;
-  }, [members, searchTerm, filterPlaced, sidebarFilters]);
+  }, [members, searchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
 
   // Pagination logic with "All" support
   const totalItems = filteredMembers.length;
@@ -280,6 +351,80 @@ export default function MemberListPage({ onMemberClick }) {
   const goToPrevious = () => currentPage > 1 && setCurrentPage(currentPage - 1);
   const goToNext = () => currentPage < totalPages && setCurrentPage(currentPage + 1);
   const toggleFilter = () => setIsFilterOpen(!isFilterOpen);
+
+  const openTagModal = (member) => {
+    setTagModalMember(member);
+    setSelectedTags([]);
+    setSelectedTagValue("");
+    setTagSearchTerm("");
+    setTagModalError("");
+  };
+
+  const closeTagModal = () => {
+    setTagModalMember(null);
+    setSelectedTags([]);
+    setSelectedTagValue("");
+    setTagSearchTerm("");
+    setTagModalError("");
+    setTagModalSaving(false);
+  };
+
+  const addSelectedTag = () => {
+    const tag = selectedTagValue.trim();
+    if (!tag) return;
+    setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+    setSelectedTagValue("");
+  };
+
+  const handleSaveTags = async () => {
+    if (!tagModalMember?.id) return;
+
+    const currentSkills = parseMemberSkills(tagModalMember);
+    const mergedSkills = Array.from(
+      new Map(
+        [...currentSkills, ...selectedTags].map((skill) => [String(skill).trim().toLowerCase(), String(skill).trim()])
+      ).values()
+    ).filter(Boolean);
+
+    if (mergedSkills.length === 0) {
+      setTagModalError("Please select at least one tag.");
+      return;
+    }
+
+    setTagModalSaving(true);
+    setTagModalError("");
+
+    try {
+      await updateDoc(doc(db, "users", tagModalMember.id), {
+        skills: mergedSkills,
+        Skills: mergedSkills.join(", "),
+      });
+      setMembers((prev) =>
+        prev.map((member) =>
+          member.id === tagModalMember.id
+            ? {
+                ...member,
+                skills: mergedSkills,
+                Skills: mergedSkills.join(", "),
+              }
+            : member
+        )
+      );
+      setTagSuccessPopup({
+        show: true,
+        message: `${getMemberName(tagModalMember)} is tagged successfully.`,
+      });
+      setTimeout(() => {
+        setTagSuccessPopup({ show: false, message: "" });
+      }, 2500);
+      closeTagModal();
+    } catch (error) {
+      console.error("Error saving tags:", error);
+      setTagModalError("Could not save tags. Please try again.");
+    } finally {
+      setTagModalSaving(false);
+    }
+  };
 
   const filterData = {
     filters: sidebarFilters,
@@ -494,12 +639,59 @@ export default function MemberListPage({ onMemberClick }) {
 
         {/* Inline Filters */}
         {isFilterOpen && (
-          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
-              <button onClick={() => { clearFilters(); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
+          <div
+            ref={filtersRef}
+            style={{
+              borderTop: "1px solid #e5e7eb",
+              marginTop: "14px",
+              paddingTop: "16px",
+              background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: "12px",
+                marginBottom: "14px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ minWidth: "220px" }}>
+                <strong style={{ fontSize: "15px", color: "#0f172a", display: "block", marginBottom: "4px" }}>Filters</strong>
+              </div>
+              <button
+                onClick={() => {
+                  clearFilters();
+                  setOpenDropdown(null);
+                }}
+                style={{
+                  padding: "9px 15px",
+                  background: "linear-gradient(180deg, #f97316 0%, #ef4444 100%)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  boxShadow: "0 8px 18px rgba(239, 68, 68, 0.18)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Clear All
+              </button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))",
+                gap: "12px",
+                marginBottom: "14px",
+                alignItems: "start",
+              }}
+            >
               {filterKeys.map(filterKey => {
                 const selectedValue = sidebarFilters[filterKey];
                 const filterOpts = filterOptions[filterKey] || [];
@@ -508,32 +700,40 @@ export default function MemberListPage({ onMemberClick }) {
                 const isDropdownOpen = openDropdown === filterKey;
 
                 return (
-                  <div key={filterKey} style={{ marginBottom: "8px" }}>
-                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey}</label>
+                  <div
+                    key={filterKey}
+                    style={{
+                      padding: "4px 0",
+                      minWidth: 0,
+                    }}
+                  >
+                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "12px", textTransform: "capitalize", color: "#334155" }}>{filterKey}</label>
                     <div style={{ position: "relative" }}>
                       <div
                         onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
                         style={{
-                          padding: "10px 12px",
-                          border: "1px solid #d1d5db",
-                          borderRadius: "6px",
-                          background: "#fff",
+                          padding: "11px 12px",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "10px",
+                          background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
                           cursor: "pointer",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
                           fontSize: "13px",
+                          color: "#0f172a",
+                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
                         }}
                       >
                         <span>{selectedValue || "All"}</span>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
                       </div>
                       {isDropdownOpen && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #dbe3ee", borderRadius: "10px", marginTop: "6px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 14px 30px rgba(15, 23, 42, 0.12)" }}>
+                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", outline: "none", fontSize: "12px", color: "#0f172a", background: "#f8fafc" }} />
                           <div style={{ maxHeight: "180px", overflowY: "auto" }}>
-                            {filteredOpts.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOpts.map(o => (
-                              <div key={o} onClick={() => { handleFilterChange(filterKey, o); setOpenDropdown(null); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValue === o ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValue === o && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
+                            {filteredOpts.length === 0 ? <div style={{ padding: "10px 12px", color: "#94a3b8", fontSize: "12px" }}>No options</div> : filteredOpts.map(o => (
+                              <div key={o} onClick={() => { handleFilterChange(filterKey, o); setOpenDropdown(null); }} style={{ padding: "9px 12px", cursor: "pointer", background: selectedValue === o ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#0f172a" }}><span>{o}</span>{selectedValue === o && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
                             ))}
                           </div>
                         </div>
@@ -542,6 +742,63 @@ export default function MemberListPage({ onMemberClick }) {
                   </div>
                 );
               })}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "12px",
+                alignItems: "stretch",
+              }}
+            >
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #dbe3ee",
+                  borderRadius: "12px",
+                  padding: "14px",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
+                }}
+              >
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "700", fontSize: "12px", color: "#334155" }}>Retirement Status</label>
+                <select
+                  value={retirementStatus}
+                  onChange={(e) => {
+                    setRetirementStatus(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "11px 12px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "10px",
+                    background: "#fff",
+                    fontSize: "13px",
+                    color: "#111827",
+                    outline: "none",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
+                  }}
+                >
+                  <option value="All">All</option>
+                  <option value="Retired">Retired</option>
+                  <option value="Not Retired">Not Retired</option>
+                </select>
+              </div>
+              <div style={{ border: "1px solid #dbe3ee", borderRadius: "12px", background: "#f8fafc", overflow: "hidden" }}>
+                <DualRangeSlider
+                  label="Age Range"
+                  helperText="Drag both handles to narrow the visible age range."
+                  min={ageBounds.min}
+                  max={ageBounds.max}
+                  value={ageRange}
+                  onChange={(nextValue) => {
+                    setAgeRange(nextValue);
+                    setCurrentPage(1);
+                  }}
+                  suffix=" yrs"
+                  className="member-age-range"
+                />
+              </div>
             </div>
           </div>
         )}
@@ -560,6 +817,7 @@ export default function MemberListPage({ onMemberClick }) {
                   <th>Rank</th>
                   <th>State</th>
                   <th>City</th>
+                  <th>Tag</th>
                 </tr>
               </thead>
               <tbody>
@@ -581,11 +839,32 @@ export default function MemberListPage({ onMemberClick }) {
                       <td>{getMemberRank(member) || "-"}</td>
                       <td>{getMemberState(member) || "-"}</td>
                       <td>{getMemberCity(member) || "-"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openTagModal(member);
+                          }}
+                          style={{
+                            padding: "8px 14px",
+                            borderRadius: "999px",
+                            border: "1px solid #2563eb",
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                          }}
+                        >
+                         Add Tag
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="empty-message">
+                    <td colSpan={8} className="empty-message">
                       No members match your filters
                     </td>
                   </tr>
@@ -626,6 +905,235 @@ export default function MemberListPage({ onMemberClick }) {
           </div>
         </div>
       </div>
+
+      {tagModalMember && (
+        <div
+          onClick={closeTagModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 3000,
+            padding: "16px",
+          }}
+        >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: "720px",
+                background: "#fff",
+                borderRadius: "16px",
+                boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+                overflow: "hidden",
+              }}
+            >
+            <div
+              style={{
+                padding: "18px 20px",
+                borderBottom: "1px solid #e5e7eb",
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: "22px", color: "#0f172a" }}>{getMemberName(tagModalMember)}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeTagModal}
+                style={{
+                  border: "none",
+                  background: "#f1f5f9",
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "999px",
+                  cursor: "pointer",
+                  fontSize: "18px",
+                  color: "#334155",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: "18px 20px 20px" }}>
+              <div style={{ marginBottom: "18px" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
+                  Existing Tags
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {parseMemberSkills(tagModalMember).length > 0 ? (
+                    parseMemberSkills(tagModalMember).map((skill) => (
+                      <span
+                        key={skill}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          background: "#f1f5f9",
+                          color: "#334155",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: "13px", color: "#94a3b8" }}>No tags saved yet.</span>
+                  )}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  background: "#fafafa",
+                  padding: "14px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
+                  Add Tag
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search tags..."
+                  value={tagSearchTerm}
+                  onChange={(e) => setTagSearchTerm(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    outline: "none",
+                    fontSize: "13px",
+                    marginBottom: "10px",
+                    background: "#fff",
+                    color: "#0f172a",
+                  }}
+                />
+                <select
+                  value={selectedTagValue}
+                  onChange={(e) => setSelectedTagValue(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    outline: "none",
+                    fontSize: "13px",
+                    background: "#fff",
+                    color: "#0f172a",
+                  }}
+                >
+                  <option value="" disabled>
+                    Select a tag
+                  </option>
+                  {availableTags
+                    .filter((tag) => tag.toLowerCase().includes(tagSearchTerm.toLowerCase()))
+                    .map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))}
+                </select>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={addSelectedTag}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: "10px",
+                      border: "none",
+                      background: "#2563eb",
+                      color: "#fff",
+                      cursor: "pointer",
+                      fontWeight: "700",
+                      fontSize: "13px",
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+                {selectedTags.length > 0 && (
+                  <div style={{ marginTop: "10px", fontSize: "12px", color: "#475569" }}>
+                    Selected: {selectedTags.join(", ")}
+                  </div>
+                )}
+              </div>
+
+              {tagModalError ? (
+                <div style={{ marginBottom: "14px", color: "#dc2626", fontSize: "13px", fontWeight: "600" }}>
+                  {tagModalError}
+                </div>
+              ) : null}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={closeTagModal}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#fff",
+                    color: "#0f172a",
+                    cursor: "pointer",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTags}
+                  disabled={tagModalSaving}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "none",
+                    background: tagModalSaving ? "#93c5fd" : "#2563eb",
+                    color: "#fff",
+                    cursor: tagModalSaving ? "not-allowed" : "pointer",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                  }}
+                >
+                  {tagModalSaving ? "Saving..." : "Save Tags"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tagSuccessPopup.show && (
+        <div
+          style={{
+            position: "fixed",
+            right: "20px",
+            top: "20px",
+            background: "#0f766e",
+            color: "#fff",
+            padding: "14px 18px",
+            borderRadius: "12px",
+            boxShadow: "0 18px 40px rgba(15, 118, 110, 0.25)",
+            zIndex: 4000,
+            fontWeight: "700",
+            fontSize: "13px",
+          }}
+        >
+          {tagSuccessPopup.message}
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import MemberDetailModal from "./components/MemberDetailModal";
 
 import DashboardPage from "./pages/DashboardPage";
 import MemberListPage from "./pages/MemberListPage";
+import MemberLocationPage from "./pages/MemberLocationPage";
 import TempStaffPage from "./pages/TempStaffPage";
 import RecruitmentPage from "./pages/RecruitmentPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -74,6 +75,10 @@ function Layout() {
                 filterKeys={memberFilterKeys}
               />
             }
+          />
+          <Route
+            path="/member-location"
+            element={<MemberLocationPage />}
           />
           <Route
             path="/tempstaff"

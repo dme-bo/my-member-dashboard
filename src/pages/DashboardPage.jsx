@@ -11,13 +11,11 @@ import { Pie, Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import DualRangeSlider from '../components/DualRangeSlider';
 import {
   normalizeMemberRecord,
-  getMemberOrganization,
-  getMemberService,
-  getMemberRank,
-  getMemberState,
-  getMemberCity,
   parseMemberDate,
 } from '../utils/memberFields';
 
@@ -30,6 +28,24 @@ export default function DashboardPage() {
   const [rankFilter, setRankFilter] = useState('All');
   const [stateFilter, setStateFilter] = useState('All');
   const [cityFilter, setCityFilter] = useState('All');
+  const [retirementFilter, setRetirementFilter] = useState('All');
+  const [ageRange, setAgeRange] = useState([0, 100]);
+  const [registrationDateFrom, setRegistrationDateFrom] = useState('');
+  const [registrationDateTo, setRegistrationDateTo] = useState('');
+
+  const toDatePickerValue = (value) => {
+    if (!value) return null;
+    const parsed = new Date(`${value}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const toDateInputValue = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // ────────────────────────────────────────────────
   useEffect(() => {
@@ -50,8 +66,8 @@ export default function DashboardPage() {
 
   // Filter options logic (unchanged) ────────────────────────────────────────────────
   const filterOptions = useMemo(() => {
-    const organizations = ['All', ...new Set(members.map((m) => getMemberOrganization(m)).filter(Boolean))].sort();
-    const states = ['All', ...new Set(members.map((m) => getMemberState(m)).filter(Boolean))].sort();
+    const organizations = ['All', ...new Set(members.map((m) => m.organization).filter(Boolean))].sort();
+    const states = ['All', ...new Set(members.map((m) => m.state).filter(Boolean))].sort();
 
     return { organizations, states };
   }, [members]);
@@ -59,10 +75,10 @@ export default function DashboardPage() {
   const availableServices = useMemo(() => {
     let filtered = members;
     if (organizationFilter !== 'All') {
-      filtered = filtered.filter((m) => getMemberOrganization(m) === organizationFilter);
+      filtered = filtered.filter((m) => m.organization === organizationFilter);
     }
     const serviceCounts = filtered.reduce((acc, m) => {
-      const s = getMemberService(m);
+      const s = m.service;
       if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
@@ -74,11 +90,11 @@ export default function DashboardPage() {
 
   const availableRanks = useMemo(() => {
     let filtered = members;
-    if (organizationFilter !== 'All') filtered = filtered.filter((m) => getMemberOrganization(m) === organizationFilter);
-    if (serviceFilter !== 'All') filtered = filtered.filter((m) => getMemberService(m) === serviceFilter);
+    if (organizationFilter !== 'All') filtered = filtered.filter((m) => m.organization === organizationFilter);
+    if (serviceFilter !== 'All') filtered = filtered.filter((m) => m.service === serviceFilter);
 
     const rankCounts = filtered.reduce((acc, m) => {
-      const r = getMemberRank(m);
+      const r = m.rank;
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
@@ -91,33 +107,72 @@ export default function DashboardPage() {
   const availableCities = useMemo(() => {
     let filtered = members;
     if (stateFilter !== 'All') {
-      filtered = filtered.filter((m) => getMemberState(m) === stateFilter);
+      filtered = filtered.filter((m) => m.state === stateFilter);
     }
-    const cityCounts = filtered.reduce((acc, m) => {
-      const c = getMemberCity(m);
-      if (c) acc[c] = (acc[c] || 0) + 1;
-      return acc;
-    }, {});
-    const topCities = Object.keys(cityCounts)
-      .sort((a, b) => cityCounts[b] - cityCounts[a])
-      .slice(0, 30);
-    return ['All', ...topCities];
+    const cities = ['All', ...new Set(filtered.map((m) => m.city).filter(Boolean))].sort();
+    return cities;
   }, [members, stateFilter]);
+
+  const ageBounds = useMemo(() => {
+    const ages = members.map((member) => member.age_years).filter((age) => Number.isFinite(age));
+    if (ages.length === 0) return { min: 0, max: 100 };
+    const min = Math.max(0, Math.floor(Math.min(...ages)));
+    const max = Math.max(min, Math.ceil(Math.max(...ages)));
+    return { min, max };
+  }, [members]);
 
   useEffect(() => { setServiceFilter('All'); }, [organizationFilter]);
   useEffect(() => { setRankFilter('All'); }, [serviceFilter, organizationFilter]);
   useEffect(() => { setCityFilter('All'); }, [stateFilter]);
+  useEffect(() => { setAgeRange([ageBounds.min, ageBounds.max]); }, [ageBounds.min, ageBounds.max]);
+
+  const parseDateBoundary = (value, endOfDay = false) => {
+    if (!value) return null;
+    const boundary = new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00'}`);
+    return Number.isNaN(boundary.getTime()) ? null : boundary;
+  };
 
   const filteredMembers = useMemo(() => {
+    const fromBoundary = parseDateBoundary(registrationDateFrom, false);
+    const toBoundary = parseDateBoundary(registrationDateTo, true);
+
     return members.filter((member) => {
-      if (organizationFilter !== 'All' && getMemberOrganization(member) !== organizationFilter) return false;
-      if (serviceFilter !== 'All' && getMemberService(member) !== serviceFilter) return false;
-      if (rankFilter !== 'All' && getMemberRank(member) !== rankFilter) return false;
-      if (stateFilter !== 'All' && getMemberState(member) !== stateFilter) return false;
-      if (cityFilter !== 'All' && getMemberCity(member) !== cityFilter) return false;
+      if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
+      if (serviceFilter !== 'All' && member.service !== serviceFilter) return false;
+      if (rankFilter !== 'All' && member.rank !== rankFilter) return false;
+      if (stateFilter !== 'All' && member.state !== stateFilter) return false;
+      if (cityFilter !== 'All' && member.city !== cityFilter) return false;
+      if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
+
+      const registrationDate = parseMemberDate(member.registration_date);
+      if (fromBoundary || toBoundary) {
+        if (!registrationDate) return false;
+        if (fromBoundary && registrationDate < fromBoundary) return false;
+        if (toBoundary && registrationDate > toBoundary) return false;
+      }
+
+      const age = member.age_years;
+      const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
+      if (ageFilterActive) {
+        if (!Number.isFinite(age)) return false;
+        if (age < ageRange[0] || age > ageRange[1]) return false;
+      }
       return true;
     });
-  }, [members, organizationFilter, serviceFilter, rankFilter, stateFilter, cityFilter]);
+  }, [
+    members,
+    organizationFilter,
+    serviceFilter,
+    rankFilter,
+    stateFilter,
+    cityFilter,
+    retirementFilter,
+    ageRange,
+    ageBounds.min,
+    ageBounds.max,
+    registrationDateFrom,
+    registrationDateTo,
+  ]);
 
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
@@ -133,7 +188,7 @@ export default function DashboardPage() {
     }, {});
 
     const organizationCountsRaw = filteredMembers.reduce((acc, m) => {
-      const c = getMemberOrganization(m);
+      const c = m.organization;
       if (c) acc[c] = (acc[c] || 0) + 1;
       return acc;
     }, {});
@@ -147,7 +202,7 @@ export default function DashboardPage() {
     const serviceCounts = Object.fromEntries(Object.entries(serviceCountsRaw).sort(([, a], [, b]) => b - a));
 
     const rankCountsRaw = filteredMembers.reduce((acc, m) => {
-      const r = getMemberRank(m);
+      const r = m.rank;
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
@@ -162,7 +217,7 @@ export default function DashboardPage() {
     }, {});
     const stateCounts = Object.fromEntries(Object.entries(stateCountsRaw).sort(([, a], [, b]) => b - a));
 
-    const expSum = filteredMembers.reduce((sum, m) => sum + (parseFloat(m.total_experience) || 0), 0);
+    const expSum = filteredMembers.reduce((sum, m) => sum + (m.experience_years || parseFloat(m.total_experience) || 0), 0);
     const avgExp = total > 0 ? (expSum / total).toFixed(1) + 'Y' : '0Y';
 
     const parsedDates = filteredMembers
@@ -204,6 +259,10 @@ export default function DashboardPage() {
     setRankFilter('All');
     setStateFilter('All');
     setCityFilter('All');
+    setRetirementFilter('All');
+    setAgeRange([ageBounds.min, ageBounds.max]);
+    setRegistrationDateFrom('');
+    setRegistrationDateTo('');
   };
 
   const createChartData = (counts, colors = [
@@ -299,59 +358,202 @@ export default function DashboardPage() {
         .dashboard-container {
           width: 100%;
           min-height: 100vh;
-          padding: 16px 20px;
+          padding: 20px;
           box-sizing: border-box;
         }
 
         .top-header {
           margin-bottom: 24px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%);
+          border-radius: 24px;
+          padding: 22px;
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+          border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .top-header-inner {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 20px;
+          flex-wrap: wrap;
+        }
+
+        .filter-heading {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
         }
 
         .filter-controls {
-          display: flex;
-          flex-wrap: wrap;
+          display: grid;
+          grid-template-columns: repeat(12, minmax(0, 1fr));
           gap: 16px;
-          align-items: flex-end;
+          align-items: end;
         }
 
         .filter-group {
           display: flex;
           flex-direction: column;
-          min-width: 160px;
-          flex: 1 1 160px;
+          min-width: 0;
+          gap: 6px;
+          padding: 0;
+        }
+
+        .filter-span-2 {
+          grid-column: span 2;
+        }
+
+        .filter-span-6 {
+          grid-column: span 6;
         }
 
         .filter-group label {
-          font-weight: 600;
-          margin-bottom: 6px;
-          font-size: 0.95rem;
-          color: var(--text-color);
+          font-weight: 700;
+          font-size: 0.82rem;
+          color: #334155;
+          letter-spacing: 0.02em;
         }
 
         .filter-group select {
-          padding: 10px 12px;
-          border-radius: 6px;
-          border: 1px solid #ccc;
-          font-size: 1rem;
-          background: var(--input-bg);
-          color: var(--text-color);
+          width: 100%;
+          min-height: 46px;
+          padding: 12px 14px;
+          border-radius: 18px;
+          border: 1px solid #cbd5e1;
+          font-size: 0.95rem;
+          background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+          color: #0f172a;
+          outline: none;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        }
+
+        .filter-group select:hover {
+          border-color: #94a3b8;
+        }
+
+        .filter-group select:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+
+        .filter-group select option {
+          color: #0f172a;
+        }
+
+        .date-range-row input[type="date"],
+        .date-range-row select,
+        .date-picker-input {
+          width: 100%;
+          min-height: 46px;
+          padding: 12px 14px;
+          border-radius: 18px;
+          border: 1px solid #cbd5e1;
+          font-size: 0.95rem;
+          background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+          color: #0f172a;
+          outline: none;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        }
+
+        .date-range-row input[type="date"]:hover,
+        .date-range-row select:hover,
+        .date-picker-input:hover {
+          border-color: #94a3b8;
+        }
+
+        .date-range-row input[type="date"]:focus,
+        .date-range-row select:focus,
+        .date-picker-input:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+
+        .date-picker-wrapper {
+          width: 100%;
+        }
+
+        .date-picker-input {
+          font-family: inherit;
+          font-size: 0.95rem;
+          color: #0f172a;
+        }
+
+        .date-picker-calendar {
+          border-radius: 16px;
+          border: 1px solid #dbe7f3;
+          box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+          overflow: hidden;
+        }
+
+        .date-range-group {
+          grid-column: span 6;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          border: 1px solid rgba(148, 163, 184, 0.22);
+          border-radius: 22px;
+          padding: 16px;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .date-range-row {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .date-range-row .filter-group {
+          gap: 6px;
+        }
+
+        .date-range-note {
+          font-size: 12px;
+          color: #64748b;
+          line-height: 1.45;
+        }
+
+        .filter-actions {
+          display: flex;
+          align-items: end;
+          justify-content: flex-end;
+          grid-column: 1 / -1;
+          padding-top: 4px;
+        }
+
+        .range-filter-card {
+          grid-column: span 6;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          border-radius: 22px;
+          padding: 18px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         }
 
         .clear-btn {
-          padding: 10px 24px;
-          background-color: #dc3545;
+          min-height: 46px;
+          padding: 0 20px;
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
           color: white;
           border: none;
-          border-radius: 6px;
+          border-radius: 16px;
           font-weight: 600;
           cursor: pointer;
           white-space: nowrap;
-          height: 38px;
-          transition: background-color 0.2s;
+          transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+          box-shadow: 0 10px 20px rgba(220, 38, 38, 0.16);
         }
 
         .clear-btn:hover {
-          background-color: #c82333;
+          filter: brightness(1.02);
+          transform: translateY(-1px);
         }
 
         .stats-grid {
@@ -452,23 +654,42 @@ export default function DashboardPage() {
           .charts-grid {
             grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
           }
+
+          .filter-controls {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .filter-span-2,
+          .date-range-group,
+          .range-filter-card {
+            grid-column: 1 / -1;
+          }
         }
 
         @media (max-width: 768px) {
-          .filter-controls {
-            flex-direction: column;
-            align-items: stretch;
+          .dashboard-container {
+            padding: 16px;
           }
 
-          .filter-group {
-            min-width: unset;
-            width: 100%;
+          .top-header {
+            padding: 16px;
+            border-radius: 20px;
+          }
+
+          .filter-controls {
+            grid-template-columns: 1fr;
+          }
+
+          .date-range-row {
+            grid-template-columns: 1fr;
+          }
+
+          .range-filter-card {
+            min-width: 0;
           }
 
           .clear-btn {
             width: 100%;
-            height: auto;
-            padding: 12px;
           }
 
           .stats-grid {
@@ -493,6 +714,10 @@ export default function DashboardPage() {
             padding: 12px 16px;
           }
 
+          .top-header {
+            padding: 16px;
+          }
+
           .chart-container {
             height: 300px;
           }
@@ -507,8 +732,16 @@ export default function DashboardPage() {
 
       <div className="dashboard-container">
         <header className="top-header">
+          <div className="top-header-inner">
+            <div className="filter-heading">
+              <h1 style={{ margin: 0, fontSize: "30px", color: "#0f172a", fontWeight: 800 }}>Filters</h1>
+            </div>
+            <button className="clear-btn" onClick={clearAllFilters}>
+              Clear All
+            </button>
+          </div>
           <div className="filter-controls">
-            <div className="filter-group">
+            <div className="filter-group filter-span-2">
               <label>Category</label>
               <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)}>
                 {filterOptions.organizations.map((organization) => (
@@ -519,7 +752,7 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-span-2">
               <label>Service</label>
               <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
                 {availableServices.map((srv) => (
@@ -530,7 +763,7 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-span-2">
               <label>Rank</label>
               <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)}>
                 {availableRanks.map((rank) => (
@@ -541,7 +774,7 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-span-2">
               <label>State</label>
               <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
                 {filterOptions.states.map((state) => (
@@ -552,7 +785,7 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-span-2">
               <label>City</label>
               <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
                 {availableCities.map((city) => (
@@ -563,9 +796,63 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <button className="clear-btn" onClick={clearAllFilters}>
-              Clear All
-            </button>
+            <div className="filter-group filter-span-2">
+              <label>Retirement Status</label>
+              <select value={retirementFilter} onChange={(e) => setRetirementFilter(e.target.value)}>
+                <option value="All">All</option>
+                <option value="Retired">Retired</option>
+                <option value="Not Retired">Not Retired</option>
+              </select>
+            </div>
+
+            <div className="date-range-group">
+              <div className="date-range-title">
+                <strong>Date Range</strong>
+              </div>
+              <div className="date-range-row">
+                <div className="filter-group">
+                  <label>From Date</label>
+                  <DatePicker
+                    selected={toDatePickerValue(registrationDateFrom)}
+                    onChange={(date) => setRegistrationDateFrom(toDateInputValue(date))}
+                    dateFormat="dd-MM-yyyy"
+                    placeholderText="Select date"
+                    className="date-picker-input"
+                    wrapperClassName="date-picker-wrapper"
+                    calendarClassName="date-picker-calendar"
+                    showPopperArrow={false}
+                  />
+                </div>
+
+                <div className="filter-group">
+                  <label>To Date</label>
+                  <DatePicker
+                    selected={toDatePickerValue(registrationDateTo)}
+                    onChange={(date) => setRegistrationDateTo(toDateInputValue(date))}
+                    dateFormat="dd-MM-yyyy"
+                    placeholderText="Select date"
+                    className="date-picker-input"
+                    wrapperClassName="date-picker-wrapper"
+                    calendarClassName="date-picker-calendar"
+                    showPopperArrow={false}
+                  />
+                </div>
+              </div>
+              <div className="date-range-note">
+                Pick start and end dates to filter registrations.
+              </div>
+            </div>
+
+            <DualRangeSlider
+              className="range-filter-card"
+              label="Age Range"
+              helperText="Drag both handles to narrow the visible age range."
+              min={ageBounds.min}
+              max={ageBounds.max}
+              value={ageRange}
+              onChange={setAgeRange}
+              suffix=" yrs"
+            />
           </div>
         </header>
 

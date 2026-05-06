@@ -11,6 +11,7 @@ function Navbar() {
     const titles = {
       dashboard: "Members Analytics Dashboard",
       memberlist: "Members List",
+      "member-location": "Member Location",
       tempstaff: "TCS Applications",
       recruitment: "Recruitment Applications",
       projects: "Projects Applications",
