@@ -174,6 +174,37 @@ export default function DashboardPage() {
     registrationDateTo,
   ]);
 
+  const registrationMetricsMembers = useMemo(() => {
+    return members.filter((member) => {
+      if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
+      if (serviceFilter !== 'All' && member.service !== serviceFilter) return false;
+      if (rankFilter !== 'All' && member.rank !== rankFilter) return false;
+      if (stateFilter !== 'All' && member.state !== stateFilter) return false;
+      if (cityFilter !== 'All' && member.city !== cityFilter) return false;
+      if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
+
+      const age = member.age_years;
+      const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
+      if (ageFilterActive) {
+        if (!Number.isFinite(age)) return false;
+        if (age < ageRange[0] || age > ageRange[1]) return false;
+      }
+
+      return true;
+    });
+  }, [
+    members,
+    organizationFilter,
+    serviceFilter,
+    rankFilter,
+    stateFilter,
+    cityFilter,
+    retirementFilter,
+    ageRange,
+    ageBounds.min,
+    ageBounds.max,
+  ]);
+
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
     if (loading || !filteredMembers.length) return null;
@@ -252,6 +283,36 @@ export default function DashboardPage() {
       registered3Months,
     };
   }, [filteredMembers, loading]);
+
+  const registrationAnalytics = useMemo(() => {
+    if (loading || !registrationMetricsMembers.length) return null;
+
+    const parsedDates = registrationMetricsMembers
+      .map((m) => parseMemberDate(m.registration_date))
+      .filter((d) => d !== null);
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const registeredToday = parsedDates.filter((d) => d >= todayStart).length;
+
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - 7);
+    const registeredWeek = parsedDates.filter((d) => d >= weekStart).length;
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const registeredMonth = parsedDates.filter((d) => d >= monthStart).length;
+
+    const threeMonthsStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const registered3Months = parsedDates.filter((d) => d >= threeMonthsStart).length;
+
+    return {
+      registeredToday,
+      registeredWeek,
+      registeredMonth,
+      registered3Months,
+    };
+  }, [registrationMetricsMembers, loading]);
+  const hasData = Boolean(analytics);
 
   const clearAllFilters = () => {
     setOrganizationFilter('All');
@@ -340,8 +401,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-  if (!analytics) return <div className="loading">No data available</div>;
-  
 
   return (
     <>
@@ -638,6 +697,37 @@ export default function DashboardPage() {
           height: 480px;
         }
 
+        .empty-dashboard-state {
+          min-height: 420px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px 0 8px;
+        }
+
+        .empty-dashboard-card {
+          width: min(100%, 720px);
+          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          border-radius: 24px;
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+          padding: 32px 28px;
+          text-align: center;
+        }
+
+        .empty-dashboard-card h2 {
+          margin: 0 0 10px 0;
+          font-size: 1.5rem;
+          color: #0f172a;
+        }
+
+        .empty-dashboard-card p {
+          margin: 0;
+          color: #64748b;
+          font-size: 0.98rem;
+          line-height: 1.6;
+        }
+
         .loading {
         height: 100vh;
         width: 100vw;
@@ -856,105 +946,118 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="card-icon blue">
-              <FaUsers size={28} />
-            </div>
-            <div className="card-label">Total Members</div>
-            <div className="card-value">{analytics.total.toLocaleString()}</div>
-          </div>
+        {hasData ? (
+          <>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="card-icon blue">
+                  <FaUsers size={28} />
+                </div>
+                <div className="card-label">Total Members</div>
+                <div className="card-value">{analytics.total.toLocaleString()}</div>
+              </div>
 
-          <div className="stat-card">
-            <div className="card-icon red">
-              <FaClock size={28} />
-            </div>
-            <div className="card-label">Avg Experience</div>
-            <div className="card-value">{analytics.avgExp}</div>
-          </div>
+              <div className="stat-card">
+                <div className="card-icon red">
+                  <FaClock size={28} />
+                </div>
+                <div className="card-label">Avg Experience</div>
+                <div className="card-value">{analytics.avgExp}</div>
+              </div>
 
-          <div className="stat-card">
-            <div className="card-icon new">
-              <FaUserPlus size={28} />
-            </div>
-            <div className="card-label">Registered Today</div>
-            <div className="card-value">{analytics.registeredToday}</div>
-          </div>
+              <div className="stat-card">
+                <div className="card-icon new">
+                  <FaUserPlus size={28} />
+                </div>
+                <div className="card-label">Registered Today</div>
+                <div className="card-value">{registrationAnalytics?.registeredToday ?? 0}</div>
+              </div>
 
-          <div className="stat-card">
-            <div className="card-icon quarter">
-              <FaCalendarAlt size={28} />
-            </div>
-            <div className="card-label">Last 3 Months</div>
-            <div className="card-value">{analytics.registered3Months}</div>
-          </div>
-        </div>
-
-        <div className="charts-grid">
-          <div className="chart-card">
-            <h3>Gender Wise Distribution</h3>
-            <div className="chart-container">
-              <Pie data={createChartData(analytics.genderCounts)} options={pieOptions} plugins={[ChartDataLabels]} />
-            </div>
-          </div>
-
-            <div className="chart-card">
-              <h3>Category Wise Distribution</h3>
-              <div className="chart-container">
-                <Bar data={createChartData(analytics.organizationCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+              <div className="stat-card">
+                <div className="card-icon quarter">
+                  <FaCalendarAlt size={28} />
+                </div>
+                <div className="card-label">Last 3 Months</div>
+                <div className="card-value">{registrationAnalytics?.registered3Months ?? 0}</div>
               </div>
             </div>
 
-          <div className="chart-card">
-            <h3>Service Wise Distribution</h3>
-            <div className="chart-container">
-              <Bar data={createChartData(analytics.serviceCounts)} options={barOptions} plugins={[ChartDataLabels]} />
-            </div>
-          </div>
+            <div className="charts-grid">
+              <div className="chart-card">
+                <h3>Gender Wise Distribution</h3>
+                <div className="chart-container">
+                  <Pie data={createChartData(analytics.genderCounts)} options={pieOptions} plugins={[ChartDataLabels]} />
+                </div>
+              </div>
 
-          <div className="chart-card">
-            <h3>Ranks Wise Distribution</h3>
-            <div className="chart-container">
-              <Bar data={createChartData(analytics.rankCounts)} options={barOptions} plugins={[ChartDataLabels]} />
-            </div>
-          </div>
+              <div className="chart-card">
+                <h3>Category Wise Distribution</h3>
+                <div className="chart-container">
+                  <Bar data={createChartData(analytics.organizationCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+                </div>
+              </div>
 
-          <div className="chart-card">
-            <h3>Registration Trends</h3>
-            <div className="chart-container">
-              <Bar
-                data={createChartData({
-                  Today: analytics.registeredToday,
-                  'Last 7 Days': analytics.registeredWeek,
-                  'This Month': analytics.registeredMonth,
-                  'Last 3 Months': analytics.registered3Months,
-                })}
-                options={barOptions}
-                plugins={[ChartDataLabels]}
-              />
-            </div>
-          </div>
+              <div className="chart-card">
+                <h3>Service Wise Distribution</h3>
+                <div className="chart-container">
+                  <Bar data={createChartData(analytics.serviceCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+                </div>
+              </div>
 
-          <div className="chart-card">
-            <h3>State Wise Distribution (India)</h3>
-            <div className="chart-container geo">
-              <Chart
-                chartType="GeoChart"
-                data={[['State', 'Members'], ...Object.entries(analytics.stateCounts).map(([state, count]) => [state, count])]}
-                options={{
-                  region: 'IN',
-                  resolution: 'provinces',
-                  colorAxis: { colors: ['#e3f2fd', '#1976d2'] },
-                  backgroundColor: 'transparent',
-                  datalessRegionColor: '#f0f4f8',
-                  keepAspectRatio: false,
-                }}
-                width="100%"
-                height="100%"
-              />
+              <div className="chart-card">
+                <h3>Ranks Wise Distribution</h3>
+                <div className="chart-container">
+                  <Bar data={createChartData(analytics.rankCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+                </div>
+              </div>
+
+              <div className="chart-card">
+                <h3>Registration Trends</h3>
+                <div className="chart-container">
+                  <Bar
+                    data={createChartData({
+                      Today: registrationAnalytics?.registeredToday ?? 0,
+                      'Last 7 Days': registrationAnalytics?.registeredWeek ?? 0,
+                      'This Month': registrationAnalytics?.registeredMonth ?? 0,
+                      'Last 3 Months': registrationAnalytics?.registered3Months ?? 0,
+                    })}
+                    options={barOptions}
+                    plugins={[ChartDataLabels]}
+                  />
+                </div>
+              </div>
+
+              <div className="chart-card">
+                <h3>State Wise Distribution (India)</h3>
+                <div className="chart-container geo">
+                  <Chart
+                    chartType="GeoChart"
+                    data={[['State', 'Members'], ...Object.entries(analytics.stateCounts).map(([state, count]) => [state, count])]}
+                    options={{
+                      region: 'IN',
+                      resolution: 'provinces',
+                      colorAxis: { colors: ['#e3f2fd', '#1976d2'] },
+                      backgroundColor: 'transparent',
+                      datalessRegionColor: '#f0f4f8',
+                      keepAspectRatio: false,
+                    }}
+                    width="100%"
+                    height="100%"
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="empty-dashboard-state">
+            <div className="empty-dashboard-card">
+              <h2>No results for the current filters</h2>
+              <p>
+                Try clearing one or more filters to bring the dashboard charts back.
+              </p>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   );

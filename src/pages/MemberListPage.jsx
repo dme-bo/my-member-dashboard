@@ -36,11 +36,13 @@ export default function MemberListPage({ onMemberClick }) {
   const [tagModalMember, setTagModalMember] = useState(null);
   const [availableTags, setAvailableTags] = useState([]);
   const [selectedTags, setSelectedTags] = useState([]);
-  const [selectedTagValue, setSelectedTagValue] = useState("");
   const [tagSearchTerm, setTagSearchTerm] = useState("");
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [expandedTagsMemberId, setExpandedTagsMemberId] = useState(null);
   const [tagModalSaving, setTagModalSaving] = useState(false);
   const [tagModalError, setTagModalError] = useState("");
-  const [tagSuccessPopup, setTagSuccessPopup] = useState({ show: false, message: "" });
+  const [tagSuccessPopup, setTagSuccessPopup] = useState({ show: false, message: "", type: "success" });
+  const [removeTagTarget, setRemoveTagTarget] = useState(null);
 
   const [sidebarFilters, setSidebarFilters] = useState({
     Gender: "All",
@@ -56,6 +58,7 @@ export default function MemberListPage({ onMemberClick }) {
     "Placement Status": "All",
     Experience: "All",
     BOCategory: "All",
+    Tags: "All",
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -155,7 +158,8 @@ export default function MemberListPage({ onMemberClick }) {
       State: getUniqueValues("state"),
       Education: getUniqueValues("education"),
       Status: getUniqueValues("status"),
-      BOCategory: getUniqueValues("BOCategory"),
+      BOCategory: getUniqueValues("tags"),
+      Tags: ["All", ...Array.from(new Set(members.flatMap((member) => parseMemberSkills(member)))).sort((a, b) => a.localeCompare(b))],
       "Placement Status": ["All", "Placed", "Active"],
       Experience: buckets,
     };
@@ -225,6 +229,7 @@ export default function MemberListPage({ onMemberClick }) {
       BOCategory: "All",
       "Placement Status": "All",
       Experience: "All",
+      Tags: "All",
     });
     setRetirementStatus("All");
     setAgeRange([ageBounds.min, ageBounds.max]);
@@ -287,11 +292,17 @@ export default function MemberListPage({ onMemberClick }) {
       City: "city",
       State: "state",
       Education: "education",
-      BOCategory: "BOCategory",
+      BOCategory: "tags",
     };
 
     Object.entries(sidebarFilters).forEach(([key, value]) => {
       if (value !== "All") {
+        if (key === "Tags") {
+          list = list.filter((member) =>
+            parseMemberSkills(member).some((tag) => String(tag).toLowerCase() === String(value).toLowerCase())
+          );
+          return;
+        }
         if (key === "Placement Status") {
           const isPlacedVal = value === "Placed";
           list = list.filter((member) => member.isPlaced === isPlacedVal);
@@ -354,36 +365,47 @@ export default function MemberListPage({ onMemberClick }) {
 
   const openTagModal = (member) => {
     setTagModalMember(member);
-    setSelectedTags([]);
-    setSelectedTagValue("");
+    setSelectedTags(parseMemberSkills(member));
     setTagSearchTerm("");
+    setTagPickerOpen(false);
     setTagModalError("");
   };
 
   const closeTagModal = () => {
     setTagModalMember(null);
     setSelectedTags([]);
-    setSelectedTagValue("");
     setTagSearchTerm("");
+    setTagPickerOpen(false);
     setTagModalError("");
     setTagModalSaving(false);
   };
 
-  const addSelectedTag = () => {
-    const tag = selectedTagValue.trim();
-    if (!tag) return;
-    setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
-    setSelectedTagValue("");
+  const updateMemberSkillsLocally = (memberId, nextSkills) => {
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.id === memberId
+          ? { ...member, skills: nextSkills, Skills: nextSkills.join(", ") }
+          : member
+      )
+    );
+  };
+
+  const persistMemberSkills = async (memberId, nextSkills) => {
+    await updateDoc(doc(db, "users", memberId), {
+      skills: nextSkills,
+      Skills: nextSkills.join(", "),
+    });
+  };
+
+  const toggleExpandedTags = (memberId) => {
+    setExpandedTagsMemberId((prev) => (prev === memberId ? null : memberId));
   };
 
   const handleSaveTags = async () => {
     if (!tagModalMember?.id) return;
 
-    const currentSkills = parseMemberSkills(tagModalMember);
     const mergedSkills = Array.from(
-      new Map(
-        [...currentSkills, ...selectedTags].map((skill) => [String(skill).trim().toLowerCase(), String(skill).trim()])
-      ).values()
+      new Map(selectedTags.map((skill) => [String(skill).trim().toLowerCase(), String(skill).trim()])).values()
     ).filter(Boolean);
 
     if (mergedSkills.length === 0) {
@@ -391,39 +413,80 @@ export default function MemberListPage({ onMemberClick }) {
       return;
     }
 
-    setTagModalSaving(true);
-    setTagModalError("");
+    const memberId = tagModalMember.id;
+    const memberName = getMemberName(tagModalMember);
+    const previousMembers = members;
 
-    try {
-      await updateDoc(doc(db, "users", tagModalMember.id), {
-        skills: mergedSkills,
-        Skills: mergedSkills.join(", "),
-      });
-      setMembers((prev) =>
-        prev.map((member) =>
-          member.id === tagModalMember.id
-            ? {
-                ...member,
-                skills: mergedSkills,
-                Skills: mergedSkills.join(", "),
-              }
-            : member
-        )
-      );
+    setTagModalError("");
+    updateMemberSkillsLocally(memberId, mergedSkills);
+    closeTagModal();
+
+    setTagSuccessPopup({
+      show: true,
+      message: `${memberName} tagged successfully.`,
+      type: "success",
+    });
+    setTimeout(() => {
+      setTagSuccessPopup({ show: false, message: "", type: "success" });
+    }, 2200);
+
+    void persistMemberSkills(memberId, mergedSkills).catch((error) => {
+      console.error("Error saving tags:", error);
+      setMembers(previousMembers);
       setTagSuccessPopup({
         show: true,
-        message: `${getMemberName(tagModalMember)} is tagged successfully.`,
+        message: "Could not save tags. Please try again.",
+        type: "error",
       });
       setTimeout(() => {
-        setTagSuccessPopup({ show: false, message: "" });
-      }, 2500);
-      closeTagModal();
-    } catch (error) {
-      console.error("Error saving tags:", error);
-      setTagModalError("Could not save tags. Please try again.");
-    } finally {
-      setTagModalSaving(false);
-    }
+        setTagSuccessPopup({ show: false, message: "", type: "success" });
+      }, 3000);
+    });
+  };
+
+  const openRemoveTagConfirm = (member, tag) => {
+    setRemoveTagTarget({ member, tag });
+  };
+
+  const closeRemoveTagConfirm = () => {
+    setRemoveTagTarget(null);
+  };
+
+  const confirmRemoveTag = () => {
+    if (!removeTagTarget?.member?.id || !removeTagTarget?.tag) return;
+
+    const memberId = removeTagTarget.member.id;
+    const memberName = getMemberName(removeTagTarget.member);
+    const tagToRemove = removeTagTarget.tag;
+    const previousMembers = members;
+    const nextSkills = parseMemberSkills(removeTagTarget.member).filter(
+      (skill) => String(skill).trim().toLowerCase() !== String(tagToRemove).trim().toLowerCase()
+    );
+
+    updateMemberSkillsLocally(memberId, nextSkills);
+    closeRemoveTagConfirm();
+
+    setTagSuccessPopup({
+      show: true,
+      message: `${tagToRemove} removed from ${memberName}.`,
+      type: "success",
+    });
+    setTimeout(() => {
+      setTagSuccessPopup({ show: false, message: "", type: "success" });
+    }, 2200);
+
+    void persistMemberSkills(memberId, nextSkills).catch((error) => {
+      console.error("Error removing tag:", error);
+      setMembers(previousMembers);
+      setTagSuccessPopup({
+        show: true,
+        message: "Could not remove tag. Please try again.",
+        type: "error",
+      });
+      setTimeout(() => {
+        setTagSuccessPopup({ show: false, message: "", type: "success" });
+      }, 3000);
+    });
   };
 
   const filterData = {
@@ -443,6 +506,7 @@ export default function MemberListPage({ onMemberClick }) {
     "State",
     "City",
     "Education",
+    "Tags",
     "Experience",
     "BOCategory",
   ];
@@ -817,51 +881,152 @@ export default function MemberListPage({ onMemberClick }) {
                   <th>Rank</th>
                   <th>State</th>
                   <th>City</th>
-                  <th>Tag</th>
+                  <th>Tags</th>
                 </tr>
               </thead>
               <tbody>
                 {currentPageData.length > 0 ? (
-                  currentPageData.map((member) => (
-                    <tr
-                      key={member.id}
-                      onClick={() => onMemberClick(member)}
-                      className="member-row clickable"
-                    >
-                      <td className="sticky-name">
-                        <div className="member-name">
-                          {getMemberName(member)}
-                        </div>
-                      </td>
-                      <td>{getMemberPhone(member) || "-"}</td>
-                      <td>{getMemberOrganization(member) || "-"}</td>
-                      <td>{getMemberService(member) || "-"}</td>
-                      <td>{getMemberRank(member) || "-"}</td>
-                      <td>{getMemberState(member) || "-"}</td>
-                      <td>{getMemberCity(member) || "-"}</td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openTagModal(member);
-                          }}
-                          style={{
-                            padding: "8px 14px",
-                            borderRadius: "999px",
-                            border: "1px solid #2563eb",
-                            background: "#eff6ff",
-                            color: "#1d4ed8",
-                            fontWeight: "700",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                          }}
-                        >
-                         Add Tag
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  currentPageData.map((member) => {
+                    const memberSkills = parseMemberSkills(member);
+                    const visibleSkills =
+                      expandedTagsMemberId === member.id ? memberSkills : memberSkills.slice(0, 2);
+
+                    return (
+                      <tr
+                        key={member.id}
+                        onClick={() => onMemberClick(member)}
+                        className="member-row clickable"
+                      >
+                        <td className="sticky-name">
+                          <div className="member-name">
+                            {getMemberName(member)}
+                          </div>
+                        </td>
+                        <td>{getMemberPhone(member) || "-"}</td>
+                        <td>{getMemberOrganization(member) || "-"}</td>
+                        <td>{getMemberService(member) || "-"}</td>
+                        <td>{getMemberRank(member) || "-"}</td>
+                        <td>{getMemberState(member) || "-"}</td>
+                        <td>{getMemberCity(member) || "-"}</td>
+                        <td>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              {memberSkills.length > 0 ? (
+                                <>
+                                  {visibleSkills.map((tag) => (
+                                    <span
+                                      key={tag}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "6px",
+                                        padding: "4px 8px 4px 10px",
+                                        borderRadius: "999px",
+                                        background: "#f1f5f9",
+                                        color: "#475569",
+                                        fontSize: "11px",
+                                        fontWeight: "600",
+                                      }}
+                                    >
+                                      <span>{tag}</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openRemoveTagConfirm(member, tag);
+                                        }}
+                                        aria-label={`Remove tag ${tag}`}
+                                        style={{
+                                          width: "16px",
+                                          height: "16px",
+                                          borderRadius: "999px",
+                                          border: "none",
+                                          background: "#cbd5e1",
+                                          color: "#0f172a",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          cursor: "pointer",
+                                          fontSize: "11px",
+                                          lineHeight: 1,
+                                          padding: 0,
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                  {memberSkills.length > 2 && expandedTagsMemberId !== member.id ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleExpandedTags(member.id);
+                                      }}
+                                      style={{
+                                        border: "none",
+                                        background: "#e2e8f0",
+                                        color: "#334155",
+                                        borderRadius: "999px",
+                                        padding: "4px 8px",
+                                        fontSize: "11px",
+                                        fontWeight: "700",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      +{memberSkills.length - 2}
+                                    </button>
+                                  ) : null}
+                                  {expandedTagsMemberId === member.id && memberSkills.length > 2 ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleExpandedTags(member.id);
+                                      }}
+                                      style={{
+                                        border: "none",
+                                        background: "transparent",
+                                        color: "#2563eb",
+                                        fontSize: "11px",
+                                        fontWeight: "700",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                      }}
+                                    >
+                                      Show less
+                                    </button>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <span style={{ fontSize: "12px", color: "#94a3b8" }}>-</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTagModal(member);
+                              }}
+                              style={{
+                                alignSelf: "flex-start",
+                                padding: "6px 10px",
+                                borderRadius: "999px",
+                                border: "1px solid #2563eb",
+                                background: "#eff6ff",
+                                color: "#1d4ed8",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Add Tag
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={8} className="empty-message">
@@ -1000,13 +1165,17 @@ export default function MemberListPage({ onMemberClick }) {
                 }}
               >
                 <div style={{ fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
-                  Add Tag
+                  Add Tags
                 </div>
                 <input
                   type="text"
-                  placeholder="Search tags..."
+                  placeholder="Search and select tags..."
                   value={tagSearchTerm}
-                  onChange={(e) => setTagSearchTerm(e.target.value)}
+                  onFocus={() => setTagPickerOpen(true)}
+                  onChange={(e) => {
+                    setTagSearchTerm(e.target.value);
+                    setTagPickerOpen(true);
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px 12px",
@@ -1019,54 +1188,60 @@ export default function MemberListPage({ onMemberClick }) {
                     color: "#0f172a",
                   }}
                 />
-                <select
-                  value={selectedTagValue}
-                  onChange={(e) => setSelectedTagValue(e.target.value)}
+                <div
                   style={{
                     width: "100%",
-                    padding: "10px 12px",
+                    marginTop: "10px",
                     borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    outline: "none",
-                    fontSize: "13px",
+                    border: "1px solid #dbe3ee",
                     background: "#fff",
-                    color: "#0f172a",
+                    overflow: "hidden",
                   }}
                 >
-                  <option value="" disabled>
-                    Select a tag
-                  </option>
-                  {availableTags
-                    .filter((tag) => tag.toLowerCase().includes(tagSearchTerm.toLowerCase()))
-                    .map((tag) => (
-                      <option key={tag} value={tag}>
-                        {tag}
-                      </option>
-                    ))}
-                </select>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "10px" }}>
-                  <button
-                    type="button"
-                    onClick={addSelectedTag}
-                    style={{
-                      padding: "9px 14px",
-                      borderRadius: "10px",
-                      border: "none",
-                      background: "#2563eb",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontWeight: "700",
-                      fontSize: "13px",
-                    }}
-                  >
-                    Add
-                  </button>
+                  {tagPickerOpen && (
+                    <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                      {availableTags.filter((tag) => tag.toLowerCase().includes(tagSearchTerm.toLowerCase())).length > 0 ? (
+                        availableTags
+                          .filter((tag) => tag.toLowerCase().includes(tagSearchTerm.toLowerCase()))
+                          .map((tag) => {
+                            const checked = selectedTags.includes(tag);
+                            return (
+                              <label
+                                key={tag}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "10px",
+                                  padding: "10px 12px",
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #f1f5f9",
+                                  background: checked ? "#eff6ff" : "#fff",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() =>
+                                    setSelectedTags((prev) =>
+                                      prev.includes(tag)
+                                        ? prev.filter((item) => item !== tag)
+                                        : [...prev, tag]
+                                    )
+                                  }
+                                  style={{ width: "16px", height: "16px" }}
+                                />
+                                <span style={{ fontSize: "13px", color: "#0f172a", fontWeight: checked ? "700" : "500" }}>
+                                  {tag}
+                                </span>
+                              </label>
+                            );
+                          })
+                      ) : (
+                        <div style={{ padding: "12px", color: "#94a3b8", fontSize: "13px" }}>No tags found.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {selectedTags.length > 0 && (
-                  <div style={{ marginTop: "10px", fontSize: "12px", color: "#475569" }}>
-                    Selected: {selectedTags.join(", ")}
-                  </div>
-                )}
               </div>
 
               {tagModalError ? (
@@ -1115,17 +1290,92 @@ export default function MemberListPage({ onMemberClick }) {
         </div>
       )}
 
+      {removeTagTarget && (
+        <div
+          onClick={closeRemoveTagConfirm}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 3100,
+            padding: "16px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "420px",
+              background: "#fff",
+              borderRadius: "16px",
+              boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+              overflow: "hidden",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <div style={{ padding: "18px 20px 10px" }}>
+              <h3 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>Remove tag?</h3>
+              <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#475569", lineHeight: 1.5 }}>
+                Do you want to remove <strong>{removeTagTarget.tag}</strong> from{" "}
+                <strong>{getMemberName(removeTagTarget.member)}</strong>?
+              </p>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", padding: "0 20px 20px" }}>
+              <button
+                type="button"
+                onClick={closeRemoveTagConfirm}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: "10px",
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#0f172a",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  fontSize: "13px",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveTag}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#ef4444",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  fontSize: "13px",
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tagSuccessPopup.show && (
         <div
           style={{
             position: "fixed",
             right: "20px",
             top: "20px",
-            background: "#0f766e",
+            background: tagSuccessPopup.type === "error" ? "#dc2626" : "#0f766e",
             color: "#fff",
             padding: "14px 18px",
             borderRadius: "12px",
-            boxShadow: "0 18px 40px rgba(15, 118, 110, 0.25)",
+            boxShadow:
+              tagSuccessPopup.type === "error"
+                ? "0 18px 40px rgba(220, 38, 38, 0.25)"
+                : "0 18px 40px rgba(15, 118, 110, 0.25)",
             zIndex: 4000,
             fontWeight: "700",
             fontSize: "13px",

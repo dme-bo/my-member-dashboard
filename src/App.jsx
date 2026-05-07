@@ -42,20 +42,12 @@ function Layout() {
   const recruitmentFilterData = useFilters([], ['Company', 'Position', 'Location', 'Status']);
   const projectsFilterData = useFilters([], ['Client', 'Domain', 'Status']);
 
-  const handleMenuClick = (page) => {
-    if (page === "applications") {
-      setExpandedMenu(expandedMenu === "applications" ? null : "applications");
-    }
-  };
-
-  // No need for handleSubMenuClick anymore – navigation is done by <Link> in Sidebar
-
   return (
     <div className="app-container">
       <Sidebar
         currentPage={currentPage}
         expandedMenu={expandedMenu}
-        onMenuClick={handleMenuClick}
+        onMenuClick={setExpandedMenu}
       />
 
       <div className="main-content">

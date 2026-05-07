@@ -136,7 +136,7 @@ export const getMemberTrade = (record) =>
   pickMemberText(record, ["trade", "Trade"]);
 
 export const getMemberEducation = (record) =>
-  pickMemberText(record, ["education", "Education", "graduation_course", "Graduation Course"]);
+  pickMemberText(record, ["education"]);
 
 export const getMemberLatLongText = (record) =>
   (() => {

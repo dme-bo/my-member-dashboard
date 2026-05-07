@@ -1,6 +1,5 @@
 // src/components/Sidebar.jsx
 import { NavLink, useLocation } from "react-router-dom";
-import { useState } from "react";
 
 // Icons from react-icons (feel free to choose different ones)
 import { 
@@ -10,9 +9,7 @@ import {
   MdAssignment,       // Applications
   MdWork,             // Requirements
   MdEmail,            // Newsletter
-  MdSettings,         // Configuration
-  MdExpandMore,       // Arrow for expandable items
-  MdExpandLess 
+  MdSettings          // Configuration
 } from "react-icons/md";
 
 import { 
@@ -21,9 +18,14 @@ import {
   FaTasks             // Projects
 } from "react-icons/fa";
 
-export default function Sidebar() {
+export default function Sidebar({ expandedMenu, onMenuClick }) {
   const location = useLocation();
-  const [expandedMenu, setExpandedMenu] = useState(null);
+  const isDashboardActive = location.pathname === "/";
+  const isMemberListActive = location.pathname === "/memberlist";
+  const isMemberLocationActive = location.pathname === "/member-location";
+  const isRequirementsActive = location.pathname === "/requirements";
+  const isNewsletterActive = location.pathname === "/newsletter";
+  const isConfigurationActive = location.pathname === "/configuration";
 
   // Determine if "Member Applications" parent should look active
   const isApplicationsActive =
@@ -32,21 +34,9 @@ export default function Sidebar() {
 
   const isApplicationsExpanded = expandedMenu === "applications";
 
-  // Determine if "Members Master List" parent should look active
-  const isMemberListActive =
-    expandedMenu === "memberlist" ||
-    location.pathname === "/memberlist";
-
-  const isMemberListExpanded = expandedMenu === "memberlist";
-
   const handleApplicationsClick = (e) => {
     e.preventDefault();
-    setExpandedMenu(expandedMenu === "applications" ? null : "applications");
-  };
-
-  const handleMemberListClick = (e) => {
-    e.preventDefault();
-    setExpandedMenu(expandedMenu === "memberlist" ? null : "memberlist");
+    onMenuClick?.(expandedMenu === "applications" ? null : "applications");
   };
 
   return (
@@ -60,30 +50,17 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebar-menu">
-        <NavLink
-          to="/"
-          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
-          end
-          onClick={() => setExpandedMenu(null)}
-        >
+        <NavLink to="/" className={`menu-item ${isDashboardActive ? "active" : ""}`} end onClick={() => onMenuClick?.(null)}>
           <MdDashboard className="menu-icon" />
           <span>Dashboard</span>
         </NavLink>
 
-        <NavLink
-          to="/memberlist"
-          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
-          onClick={() => setExpandedMenu(null)}
-        >
+        <NavLink to="/memberlist" className={`menu-item ${isMemberListActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdPeople className="menu-icon" />
           <span>Members Master List</span>
         </NavLink>
 
-        <NavLink
-          to="/member-location"
-          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
-          onClick={() => setExpandedMenu(null)}
-        >
+        <NavLink to="/member-location" className={`menu-item ${isMemberLocationActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdLocationOn className="menu-icon" />
           <span>Member Location</span>
         </NavLink>
@@ -127,29 +104,17 @@ export default function Sidebar() {
           </div>
         )}
 
-        <NavLink
-          to="/requirements"
-          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
-          onClick={() => setExpandedMenu(null)}
-        >
+        <NavLink to="/requirements" className={`menu-item ${isRequirementsActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdWork className="menu-icon" />
           <span>Requirements</span>
         </NavLink>
 
-        <NavLink
-          to="/newsletter"
-          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
-          onClick={() => setExpandedMenu(null)}
-        >
+        <NavLink to="/newsletter" className={`menu-item ${isNewsletterActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdEmail className="menu-icon" />
           <span>News Letter</span>
         </NavLink>
 
-        <NavLink
-          to="/configuration"
-          className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
-          onClick={() => setExpandedMenu(null)}
-        >
+        <NavLink to="/configuration" className={`menu-item ${isConfigurationActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdSettings className="menu-icon" />
           <span>Configuration</span>
         </NavLink>
