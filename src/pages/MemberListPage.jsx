@@ -6,6 +6,7 @@ import { db } from "../firebase";
 import DualRangeSlider from "../components/DualRangeSlider";
 import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
+import useDebouncedValue from "../hooks/useDebouncedValue";
 import {
   normalizeMemberRecord,
   getMemberName,
@@ -62,6 +63,7 @@ export default function MemberListPage({ onMemberClick }) {
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
 
   // Load URL params on mount
   useEffect(() => {
@@ -251,8 +253,8 @@ export default function MemberListPage({ onMemberClick }) {
     let list = [...members];
 
     // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
+    if (debouncedSearchTerm) {
+      const term = debouncedSearchTerm.toLowerCase();
       list = list.filter((member) => {
         const fullName = getMemberName(member).toLowerCase();
         const email = getMemberEmail(member).toLowerCase();
@@ -343,7 +345,7 @@ export default function MemberListPage({ onMemberClick }) {
     });
 
     return list;
-  }, [members, searchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
+  }, [members, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
 
   // Pagination logic with "All" support
   const totalItems = filteredMembers.length;

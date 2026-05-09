@@ -1,21 +1,21 @@
 // src/App.jsx
-import React, { useState } from "react";
+import React, { Suspense, lazy, useState } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MemberDetailModal from "./components/MemberDetailModal";
 
-import DashboardPage from "./pages/DashboardPage";
-import MemberListPage from "./pages/MemberListPage";
-import MemberLocationPage from "./pages/MemberLocationPage";
-import TempStaffPage from "./pages/TempStaffPage";
-import RecruitmentPage from "./pages/RecruitmentPage";
-import ProjectsPage from "./pages/ProjectsPage";
-import RequirementsPage from "./pages/RequirementsPage";
-import ConfigurationPage from "./pages/ConfigurationPage";
-import NewsLetterPage from "./pages/NewsLetterPage";
-import PartnerAgentList from "./pages/PartnerAgentList";
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const MemberListPage = lazy(() => import("./pages/MemberListPage"));
+const MemberLocationPage = lazy(() => import("./pages/MemberLocationPage"));
+const TempStaffPage = lazy(() => import("./pages/TempStaffPage"));
+const RecruitmentPage = lazy(() => import("./pages/RecruitmentPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const RequirementsPage = lazy(() => import("./pages/RequirementsPage"));
+const ConfigurationPage = lazy(() => import("./pages/ConfigurationPage"));
+const NewsLetterPage = lazy(() => import("./pages/NewsLetterPage"));
+const PartnerAgentList = lazy(() => import("./pages/PartnerAgentList"));
 
 
 import { membersData } from "./data/membersData";
@@ -52,57 +52,65 @@ function Layout() {
 
       <div className="main-content">
         <Navbar />
-        <Routes>
-          <Route path="/" element={<DashboardPage
-                onMemberClick={setSelectedMember}
-                filterData={memberFilterData}
-                filterKeys={memberFilterKeys}
-              />} />
-          <Route
-            path="/memberlist"
-            element={
-              <MemberListPage
-                onMemberClick={setSelectedMember}
-                filterData={memberFilterData}
-                filterKeys={memberFilterKeys}
-              />
-            }
-          />
-          <Route
-            path="/member-location"
-            element={<MemberLocationPage />}
-          />
-          <Route
-            path="/tempstaff"
-            element={<TempStaffPage filterData={tempStaffFilterData} filterKeys={['Company', 'Role', 'Duration', 'Status']} />}
-          />
-          <Route
-            path="/recruitment"
-            element={<RecruitmentPage filterData={recruitmentFilterData} filterKeys={['Company', 'Position', 'Location', 'Status']} />}
-          />
-          <Route
-            path="/projects"
-            element={<ProjectsPage filterData={projectsFilterData} filterKeys={['Client', 'Domain', 'Status']} />}
-          />
-          <Route
-            path="/requirements"
-            element={<RequirementsPage/>}
-          />
-          <Route
-            path="/configuration"
-            element={<ConfigurationPage/>}
-          />
-          <Route
-            path="/newsletter"
-            element={<NewsLetterPage/>}
-          />
-          <Route
-            path="/partneragent"
-            element={<PartnerAgentList/>}
-          />
-          {/* Optional: 404 page */}
-          <Route path="*" element={<div>Page not found</div>} />
-        </Routes>
+        <Suspense
+          fallback={
+            <div style={{ padding: "24px", color: "#475569", fontWeight: 600 }}>
+              Loading page...
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<DashboardPage
+                  onMemberClick={setSelectedMember}
+                  filterData={memberFilterData}
+                  filterKeys={memberFilterKeys}
+                />} />
+            <Route
+              path="/memberlist"
+              element={
+                <MemberListPage
+                  onMemberClick={setSelectedMember}
+                  filterData={memberFilterData}
+                  filterKeys={memberFilterKeys}
+                />
+              }
+            />
+            <Route
+              path="/member-location"
+              element={<MemberLocationPage />}
+            />
+            <Route
+              path="/tempstaff"
+              element={<TempStaffPage filterData={tempStaffFilterData} filterKeys={['Company', 'Role', 'Duration', 'Status']} />}
+            />
+            <Route
+              path="/recruitment"
+              element={<RecruitmentPage filterData={recruitmentFilterData} filterKeys={['Company', 'Position', 'Location', 'Status']} />}
+            />
+            <Route
+              path="/projects"
+              element={<ProjectsPage filterData={projectsFilterData} filterKeys={['Client', 'Domain', 'Status']} />}
+            />
+            <Route
+              path="/requirements"
+              element={<RequirementsPage/>}
+            />
+            <Route
+              path="/configuration"
+              element={<ConfigurationPage/>}
+            />
+            <Route
+              path="/newsletter"
+              element={<NewsLetterPage/>}
+            />
+            <Route
+              path="/partneragent"
+              element={<PartnerAgentList/>}
+            />
+            {/* Optional: 404 page */}
+            <Route path="*" element={<div>Page not found</div>} />
+          </Routes>
+        </Suspense>
       </div>
 
       {/* Member detail modal – shown on top of any route */}

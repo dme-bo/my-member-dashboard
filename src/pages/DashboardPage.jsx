@@ -109,8 +109,8 @@ export default function DashboardPage() {
     if (stateFilter !== 'All') {
       filtered = filtered.filter((m) => m.state === stateFilter);
     }
-    const cities = ['All', ...new Set(filtered.map((m) => m.city).filter(Boolean))].sort();
-    return cities;
+    const cities = [...new Set(filtered.map((m) => m.city).filter(Boolean))].sort();
+    return ['All', ...cities];
   }, [members, stateFilter]);
 
   const ageBounds = useMemo(() => {
@@ -174,36 +174,7 @@ export default function DashboardPage() {
     registrationDateTo,
   ]);
 
-  const registrationMetricsMembers = useMemo(() => {
-    return members.filter((member) => {
-      if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
-      if (serviceFilter !== 'All' && member.service !== serviceFilter) return false;
-      if (rankFilter !== 'All' && member.rank !== rankFilter) return false;
-      if (stateFilter !== 'All' && member.state !== stateFilter) return false;
-      if (cityFilter !== 'All' && member.city !== cityFilter) return false;
-      if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
-
-      const age = member.age_years;
-      const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
-      if (ageFilterActive) {
-        if (!Number.isFinite(age)) return false;
-        if (age < ageRange[0] || age > ageRange[1]) return false;
-      }
-
-      return true;
-    });
-  }, [
-    members,
-    organizationFilter,
-    serviceFilter,
-    rankFilter,
-    stateFilter,
-    cityFilter,
-    retirementFilter,
-    ageRange,
-    ageBounds.min,
-    ageBounds.max,
-  ]);
+  const registrationMetricsMembers = filteredMembers;
 
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
@@ -432,17 +403,20 @@ export default function DashboardPage() {
 
         .top-header-inner {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
           gap: 16px;
           margin-bottom: 20px;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+          width: 100%;
         }
 
         .filter-heading {
           display: flex;
           flex-direction: column;
           gap: 4px;
+          flex: 1 1 auto;
+          min-width: 0;
         }
 
         .filter-controls {
@@ -608,6 +582,7 @@ export default function DashboardPage() {
           white-space: nowrap;
           transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
           box-shadow: 0 10px 20px rgba(220, 38, 38, 0.16);
+          margin-left: auto;
         }
 
         .clear-btn:hover {
@@ -768,6 +743,15 @@ export default function DashboardPage() {
 
           .filter-controls {
             grid-template-columns: 1fr;
+          }
+
+          .top-header-inner {
+            flex-wrap: wrap;
+          }
+
+          .clear-btn {
+            width: 100%;
+            margin-left: 0;
           }
 
           .date-range-row {
