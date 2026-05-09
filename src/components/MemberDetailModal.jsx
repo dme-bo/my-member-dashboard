@@ -86,6 +86,20 @@ export default function MemberDetailModal({ member, onClose }) {
     });
   };
 
+  const formatCommaSeparatedValue = (value) => {
+    if (Array.isArray(value)) {
+      const items = value.map((item) => String(item).trim()).filter(Boolean);
+      return items.length > 0 ? items.join(", ") : "-";
+    }
+
+    if (typeof value === "string") {
+      const items = value.split(",").map((item) => item.trim()).filter(Boolean);
+      return items.length > 0 ? items.join(", ") : "-";
+    }
+
+    return value ? String(value) : "-";
+  };
+
   // Toast function
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -386,7 +400,7 @@ export default function MemberDetailModal({ member, onClose }) {
                 <div><strong>MBA:</strong> {normalizedMember.mba || "-"}</div>
                 <div><strong>English Proficiency:</strong> {normalizedMember.english_proficiency || normalizedMember.english || "-"}</div>
                 <div><strong>IT Skills:</strong> {normalizedMember.it_skills || "-"}</div>
-                <div><strong>Other Skills:</strong> {normalizedMember.skills || "-"}</div>
+                <div><strong>Other Skills:</strong> {formatCommaSeparatedValue(normalizedMember.skills || normalizedMember.Skills)}</div>
               </div>
             )}
 

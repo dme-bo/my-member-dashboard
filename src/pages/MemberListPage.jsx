@@ -1,7 +1,6 @@
 ﻿// src/pages/MemberListPage.jsx
-import { useSearchParams } from "react-router-dom";
-import { useState, useMemo, useEffect, useRef } from "react";
-import { collection, onSnapshot, getDocs, doc, updateDoc } from "firebase/firestore";
+import { useState, useMemo, useEffect, useRef, useTransition } from "react";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import DualRangeSlider from "../components/DualRangeSlider";
 import FilterSidebar from "../components/FilterSidebar";
@@ -26,12 +25,15 @@ export default function MemberListPage({ onMemberClick }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPlaced, setFilterPlaced] = useState("all");
   const [members, setMembers] = useState([]);
+  const [isMembersLoaded, setIsMembersLoaded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filterSearchTerms, setFilterSearchTerms] = useState({});
   const filtersRef = useRef(null);
+  const loadSequenceRef = useRef(0);
+  const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
   const [ageRange, setAgeRange] = useState([0, 100]);
   const [tagModalMember, setTagModalMember] = useState(null);
@@ -44,6 +46,7 @@ export default function MemberListPage({ onMemberClick }) {
   const [tagModalError, setTagModalError] = useState("");
   const [tagSuccessPopup, setTagSuccessPopup] = useState({ show: false, message: "", type: "success" });
   const [removeTagTarget, setRemoveTagTarget] = useState(null);
+  const [loadProgress, setLoadProgress] = useState(0);
 
   const [sidebarFilters, setSidebarFilters] = useState({
     Gender: "All",
@@ -58,62 +61,130 @@ export default function MemberListPage({ onMemberClick }) {
     Status: "All",
     "Placement Status": "All",
     Experience: "All",
-    BOCategory: "All",
     Tags: "All",
   });
 
-  const [searchParams, setSearchParams] = useSearchParams();
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
-
-  // Load URL params on mount
-  useEffect(() => {
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const rows = parseInt(searchParams.get("rows") || "100", 10);
-    const search = searchParams.get("search") || "";
-    const status = searchParams.get("status") || "all";
-
-    setCurrentPage(page);
-    setRowsPerPage(rows);
-    setSearchTerm(search);
-    setFilterPlaced(status);
-  }, []);
-
-  // Sync state to URL (skip saving "All" rows to URL)
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (currentPage > 1) params.set("page", currentPage.toString());
-    if (rowsPerPage !== 100 && rowsPerPage !== 999999) params.set("rows", rowsPerPage.toString());
-    if (searchTerm) params.set("search", searchTerm);
-    if (filterPlaced !== "all") params.set("status", filterPlaced);
-
-    setSearchParams(params, { replace: true });
-  }, [currentPage, rowsPerPage, searchTerm, filterPlaced, setSearchParams]);
 
   // Fetch members from Firestore
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-        collection(db, "users" || "users"),
-        (snapshot) => {
-          const membersList = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...normalizeMemberRecord(doc.data()),
-          }));
-        setMembers(membersList);
-        setCurrentPage(1);
-      },
-      (error) => {
-        console.error("Error fetching users from Firestore:", error);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-  
+    const loadSequence = ++loadSequenceRef.current;
+    let cancelled = false;
 
+    const sleepFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const loadMembers = async () => {
+      setIsMembersLoaded(false);
+      setLoadProgress(0);
+
+      try {
+        const snapshot = await getDocs(collection(db, "users"));
+        if (cancelled || loadSequenceRef.current !== loadSequence) return;
+
+        const docs = snapshot.docs;
+        const nextMembers = [];
+        const chunkSize = 1000;
+
+        if (docs.length === 0) {
+          setMembers([]);
+          setCurrentPage(1);
+          setIsMembersLoaded(true);
+          setLoadProgress(100);
+          return;
+        }
+
+        for (let index = 0; index < docs.length; index += chunkSize) {
+          if (cancelled || loadSequenceRef.current !== loadSequence) return;
+
+          const chunk = docs.slice(index, index + chunkSize).map((snapDoc) => ({
+            id: snapDoc.id,
+            ...normalizeMemberRecord(snapDoc.data()),
+          }));
+
+          nextMembers.push(...chunk);
+          const loadedCount = Math.min(index + chunk.length, docs.length);
+          setLoadProgress(Math.round((loadedCount / docs.length) * 100));
+
+          if (index + chunkSize < docs.length) {
+            await sleepFrame();
+          }
+        }
+
+        if (!cancelled && loadSequenceRef.current === loadSequence) {
+          setMembers(nextMembers);
+          setCurrentPage(1);
+          setIsMembersLoaded(true);
+          setLoadProgress(100);
+        }
+      } catch (error) {
+        console.error("Error fetching users from Firestore:", error);
+        if (!cancelled && loadSequenceRef.current === loadSequence) {
+          setIsMembersLoaded(true);
+          setLoadProgress(100);
+        }
+      }
+    };
+
+    void loadMembers();
+
+    return () => {
+      cancelled = true;
+      loadSequenceRef.current += 1;
+    };
+  }, []);
+
+  const memberIndex = useMemo(() => {
+    return members.map((member) => {
+      const name = getMemberName(member);
+      const email = getMemberEmail(member);
+      const phone = getMemberPhone(member) || "";
+      const organization = getMemberOrganization(member);
+      const service = getMemberService(member);
+      const rank = getMemberRank(member);
+      const state = getMemberState(member);
+      const city = getMemberCity(member);
+      const education = getMemberEducation(member);
+      const skills = parseMemberSkills(member);
+      const experienceText = getMemberExperience(member);
+      const experienceValue = parseFloat(experienceText);
+
+      return {
+        ...member,
+        __name: name,
+        __emailLower: String(email || "").toLowerCase(),
+        __phoneLower: String(phone || "").toLowerCase(),
+        __organizationLower: String(organization || "").toLowerCase(),
+        __serviceLower: String(service || "").toLowerCase(),
+        __rankLower: String(rank || "").toLowerCase(),
+        __stateLower: String(state || "").toLowerCase(),
+        __cityLower: String(city || "").toLowerCase(),
+        __educationLower: String(education || "").toLowerCase(),
+        __skills: skills,
+        __skillsLower: skills.map((skill) => String(skill).toLowerCase()),
+        __searchBlob: [
+          name,
+          email,
+          phone,
+          organization,
+          service,
+          rank,
+          state,
+          city,
+          education,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase(),
+        __experienceValue: Number.isFinite(experienceValue) ? experienceValue : NaN,
+        __tagsLower: String(member.tags || member.Tags || "").toLowerCase(),
+      };
+    });
+  }, [members]);
   // Dynamic filter options
   const filterOptions = useMemo(() => {
     const getUniqueValues = (field) => {
       const set = new Set();
-      members.forEach((member) => {
+      memberIndex.forEach((member) => {
         let value = member[field];
         if (value) {
           value = String(value).trim();
@@ -127,8 +198,8 @@ export default function MemberListPage({ onMemberClick }) {
       return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
     };
 
-    const experiences = members
-      .map((m) => parseFloat(getMemberExperience(m)))
+    const experiences = memberIndex
+      .map((m) => m.__experienceValue)
       .filter((exp) => !isNaN(exp) && exp >= 0);
 
     let buckets = ["All"];
@@ -160,20 +231,19 @@ export default function MemberListPage({ onMemberClick }) {
       State: getUniqueValues("state"),
       Education: getUniqueValues("education"),
       Status: getUniqueValues("status"),
-      BOCategory: getUniqueValues("tags"),
-      Tags: ["All", ...Array.from(new Set(members.flatMap((member) => parseMemberSkills(member)))).sort((a, b) => a.localeCompare(b))],
+      Tags: ["All", ...Array.from(new Set(memberIndex.flatMap((member) => member.__skills))).sort((a, b) => a.localeCompare(b))],
       "Placement Status": ["All", "Placed", "Active"],
       Experience: buckets,
     };
-  }, [members]);
+  }, [memberIndex]);
 
   const ageBounds = useMemo(() => {
-    const ages = members.map((member) => member.age_years).filter((age) => Number.isFinite(age));
+    const ages = memberIndex.map((member) => member.age_years).filter((age) => Number.isFinite(age));
     if (ages.length === 0) return { min: 0, max: 100 };
     const min = Math.max(0, Math.floor(Math.min(...ages)));
     const max = Math.max(min, Math.ceil(Math.max(...ages)));
     return { min, max };
-  }, [members]);
+  }, [memberIndex]);
 
   useEffect(() => {
     setAgeRange([ageBounds.min, ageBounds.max]);
@@ -212,30 +282,33 @@ export default function MemberListPage({ onMemberClick }) {
   }, []);
 
   const handleFilterChange = (key, value) => {
-    setSidebarFilters((prev) => ({ ...prev, [key]: value }));
-    setCurrentPage(1);
+    startTransition(() => {
+      setSidebarFilters((prev) => ({ ...prev, [key]: value }));
+      setCurrentPage(1);
+    });
   };
 
   const clearFilters = () => {
-    setSidebarFilters({
-      Gender: "All",
-      Category: "All",
-      Service: "All",
-      Rank: "All",
-      Level: "All",
-      Trade: "All",
-      City: "All",
-      State: "All",
-      Education: "All",
-      Status: "All",
-      BOCategory: "All",
-      "Placement Status": "All",
-      Experience: "All",
-      Tags: "All",
+    startTransition(() => {
+      setSidebarFilters({
+        Gender: "All",
+        Category: "All",
+        Service: "All",
+        Rank: "All",
+        Level: "All",
+        Trade: "All",
+        City: "All",
+        State: "All",
+        Education: "All",
+        Status: "All",
+        "Placement Status": "All",
+        Experience: "All",
+        Tags: "All",
+      });
+      setRetirementStatus("All");
+      setAgeRange([ageBounds.min, ageBounds.max]);
+      setCurrentPage(1);
     });
-    setRetirementStatus("All");
-    setAgeRange([ageBounds.min, ageBounds.max]);
-    setCurrentPage(1);
   };
 
   const parseExperienceRange = (range) => {
@@ -250,16 +323,15 @@ export default function MemberListPage({ onMemberClick }) {
 
   // Filtered + Sorted Members (Robust Alphabetical A → Z)
   const filteredMembers = useMemo(() => {
-    let list = [...members];
+    let list = [...memberIndex];
 
     // Search filter
     if (debouncedSearchTerm) {
       const term = debouncedSearchTerm.toLowerCase();
       list = list.filter((member) => {
-        const fullName = getMemberName(member).toLowerCase();
-        const email = getMemberEmail(member).toLowerCase();
-        const phone = getMemberPhone(member) || "";
-        return fullName.includes(term) || email.includes(term) || phone.includes(term);
+        return member.__searchBlob.includes(term) ||
+          member.__phoneLower.includes(term) ||
+          member.__emailLower.includes(term);
       });
     }
 
@@ -294,14 +366,13 @@ export default function MemberListPage({ onMemberClick }) {
       City: "city",
       State: "state",
       Education: "education",
-      BOCategory: "tags",
     };
 
     Object.entries(sidebarFilters).forEach(([key, value]) => {
       if (value !== "All") {
         if (key === "Tags") {
           list = list.filter((member) =>
-            parseMemberSkills(member).some((tag) => String(tag).toLowerCase() === String(value).toLowerCase())
+            member.__skillsLower.some((tag) => tag === String(value).toLowerCase())
           );
           return;
         }
@@ -312,8 +383,8 @@ export default function MemberListPage({ onMemberClick }) {
           const range = parseExperienceRange(value);
           if (range) {
             list = list.filter((member) => {
-              const exp = parseFloat(getMemberExperience(member));
-              if (isNaN(exp)) return false;
+              const exp = member.__experienceValue;
+              if (!Number.isFinite(exp)) return false;
               return exp >= range.min && (range.max === Infinity || exp <= range.max);
             });
           }
@@ -321,9 +392,14 @@ export default function MemberListPage({ onMemberClick }) {
           const dbField = fieldMap[key];
           if (dbField) {
             list = list.filter((member) => {
-              const memberValue = member[dbField];
-              if (!memberValue) return false;
-              return String(memberValue).toLowerCase() === value.toLowerCase();
+              const target = String(value).toLowerCase();
+              if (dbField === "organization") return member.__organizationLower === target;
+              if (dbField === "service") return member.__serviceLower === target;
+              if (dbField === "rank") return member.__rankLower === target;
+              if (dbField === "state") return member.__stateLower === target;
+              if (dbField === "city") return member.__cityLower === target;
+              if (dbField === "education") return member.__educationLower === target;
+              return String(member[dbField] || "").toLowerCase() === target;
             });
           }
         }
@@ -345,7 +421,7 @@ export default function MemberListPage({ onMemberClick }) {
     });
 
     return list;
-  }, [members, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
+  }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
 
   // Pagination logic with "All" support
   const totalItems = filteredMembers.length;
@@ -357,8 +433,10 @@ export default function MemberListPage({ onMemberClick }) {
 
   const handleRowsPerPageChange = (e) => {
     const value = Number(e.target.value);
-    setRowsPerPage(value);
-    setCurrentPage(1);
+    startTransition(() => {
+      setRowsPerPage(value);
+      setCurrentPage(1);
+    });
   };
 
   const goToPrevious = () => currentPage > 1 && setCurrentPage(currentPage - 1);
@@ -510,7 +588,6 @@ export default function MemberListPage({ onMemberClick }) {
     "Education",
     "Tags",
     "Experience",
-    "BOCategory",
   ];
 
   // Close dropdown on click-outside
@@ -567,7 +644,7 @@ export default function MemberListPage({ onMemberClick }) {
   };
 
   // Loading state
-  if (members.length === 0) {
+  if (!isMembersLoaded) {
     return (
       <div className="member-list-page" style={{ padding: "20px", maxWidth: "100%", margin: "0 auto" }}>
         <style>{`
@@ -615,7 +692,10 @@ export default function MemberListPage({ onMemberClick }) {
             <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}>
               ⏳
             </div>
-            <p style={{ height: "100vh", width: "82vw", fontSize: "16px", color: "#666", margin: "0" }}>Loading members...</p>
+            <p style={{ fontSize: "16px", color: "#666", margin: "0 0 8px" }}>Loading members...</p>
+            <div style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 600 }}>
+              {loadProgress > 0 ? `Loading data ${loadProgress}%` : "Connecting..."}
+            </div>
             <style>{`
               @keyframes spin {
                 0% { transform: rotate(0deg); }
@@ -642,13 +722,16 @@ export default function MemberListPage({ onMemberClick }) {
           {/* Search Input */}
           <div style={{ position: "relative", flex: 1, maxWidth: "350px", minWidth: "200px" }}>
             <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input
+              <input
               type="text"
               placeholder="Search by Name, Mobile, Email..."
               value={searchTerm}
               onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
+                const nextValue = e.target.value;
+                startTransition(() => {
+                  setSearchTerm(nextValue);
+                  setCurrentPage(1);
+                });
               }}
               style={{
                 padding: "12px 14px 12px 40px",
@@ -830,8 +913,11 @@ export default function MemberListPage({ onMemberClick }) {
                 <select
                   value={retirementStatus}
                   onChange={(e) => {
-                    setRetirementStatus(e.target.value);
-                    setCurrentPage(1);
+                    const nextValue = e.target.value;
+                    startTransition(() => {
+                      setRetirementStatus(nextValue);
+                      setCurrentPage(1);
+                    });
                   }}
                   style={{
                     width: "100%",
@@ -858,8 +944,10 @@ export default function MemberListPage({ onMemberClick }) {
                   max={ageBounds.max}
                   value={ageRange}
                   onChange={(nextValue) => {
-                    setAgeRange(nextValue);
-                    setCurrentPage(1);
+                    startTransition(() => {
+                      setAgeRange(nextValue);
+                      setCurrentPage(1);
+                    });
                   }}
                   suffix=" yrs"
                   className="member-age-range"
@@ -889,9 +977,10 @@ export default function MemberListPage({ onMemberClick }) {
               <tbody>
                 {currentPageData.length > 0 ? (
                   currentPageData.map((member) => {
-                    const memberSkills = parseMemberSkills(member);
+                    const memberSkills = member.__skills || parseMemberSkills(member);
                     const visibleSkills =
                       expandedTagsMemberId === member.id ? memberSkills : memberSkills.slice(0, 2);
+                    const memberName = member.__name || getMemberName(member);
 
                     return (
                       <tr
@@ -901,7 +990,7 @@ export default function MemberListPage({ onMemberClick }) {
                       >
                         <td className="sticky-name">
                           <div className="member-name">
-                            {getMemberName(member)}
+                            {memberName}
                           </div>
                         </td>
                         <td>{getMemberPhone(member) || "-"}</td>
@@ -911,8 +1000,8 @@ export default function MemberListPage({ onMemberClick }) {
                         <td>{getMemberState(member) || "-"}</td>
                         <td>{getMemberCity(member) || "-"}</td>
                         <td>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px", overflow: "hidden" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", overflow: "hidden", maxWidth: "100%" }}>
                               {memberSkills.length > 0 ? (
                                 <>
                                   {visibleSkills.map((tag) => (
@@ -1109,7 +1198,7 @@ export default function MemberListPage({ onMemberClick }) {
               }}
             >
               <div>
-                <h3 style={{ margin: 0, fontSize: "22px", color: "#0f172a" }}>{getMemberName(tagModalMember)}</h3>
+              <h3 style={{ margin: 0, fontSize: "22px", color: "#0f172a" }}>{tagModalMember.__name || getMemberName(tagModalMember)}</h3>
               </div>
               <button
                 type="button"
@@ -1320,9 +1409,9 @@ export default function MemberListPage({ onMemberClick }) {
           >
             <div style={{ padding: "18px 20px 10px" }}>
               <h3 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>Remove tag?</h3>
-              <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#475569", lineHeight: 1.5 }}>
+                <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#475569", lineHeight: 1.5 }}>
                 Do you want to remove <strong>{removeTagTarget.tag}</strong> from{" "}
-                <strong>{getMemberName(removeTagTarget.member)}</strong>?
+                <strong>{removeTagTarget.member.__name || getMemberName(removeTagTarget.member)}</strong>?
               </p>
             </div>
 
