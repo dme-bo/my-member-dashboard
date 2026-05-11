@@ -18,7 +18,7 @@ import {
   FaTasks             // Projects
 } from "react-icons/fa";
 
-export default function Sidebar({ expandedMenu, onMenuClick }) {
+export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
   const location = useLocation();
   const isDashboardActive = location.pathname === "/";
   const isMemberListActive = location.pathname === "/memberlist";
@@ -55,7 +55,13 @@ export default function Sidebar({ expandedMenu, onMenuClick }) {
           <span>Dashboard</span>
         </NavLink>
 
-        <NavLink to="/memberlist" className={`menu-item ${isMemberListActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+        <NavLink
+          to="/memberlist"
+          className={`menu-item ${isMemberListActive ? "active" : ""}`}
+          onClick={() => onMenuClick?.(null)}
+          onMouseEnter={() => onMemberListHover?.()}
+          onFocus={() => onMemberListHover?.()}
+        >
           <MdPeople className="menu-icon" />
           <span>Members Master List</span>
         </NavLink>

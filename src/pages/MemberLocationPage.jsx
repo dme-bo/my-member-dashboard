@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, documentId, getDocs, limit, orderBy, query, startAfter } from "firebase/firestore";
 import { FaMapMarkedAlt, FaSpinner, FaDirections, FaTimes, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
 import { db } from "../firebase";
 import { getMemberName, getMemberPhone, getMemberEmail, parseMemberLatLong, pickMemberText } from "../utils/memberFields";
@@ -160,29 +160,41 @@ export default function MemberLocationPage() {
 
     const loadData = async () => {
       try {
-        const snapshot = await getDocs(collection(db, "users"));
-        if (cancelled) return;
+        const rows = [];
+        let lastDoc = null;
+        const pageSize = 500;
 
-        const rows = snapshot.docs
-          .map((doc) => {
-            const raw = doc.data();
-            const location_point = parseMemberLatLong(raw);
-            if (!location_point) return null;
+        while (!cancelled) {
+          const baseQuery = query(collection(db, "users"), orderBy(documentId()), limit(pageSize));
+          const pageQuery = lastDoc ? query(collection(db, "users"), orderBy(documentId()), startAfter(lastDoc), limit(pageSize)) : baseQuery;
+          const snapshot = await getDocs(pageQuery);
+          if (cancelled) return;
 
-            return {
-              id: doc.id,
-              name: getMemberName(raw),
-              phone: getMemberPhone(raw),
-              email: getMemberEmail(raw),
-              city: pickMemberText(raw, ["city", "City"]),
-              state: pickMemberText(raw, ["state", "State"]),
-              organization: pickMemberText(raw, ["organization", "Organization", "category", "Category"]),
-              location_point,
-            };
-          })
-          .filter(Boolean);
+          const chunk = snapshot.docs
+            .map((doc) => {
+              const raw = doc.data();
+              const location_point = parseMemberLatLong(raw);
+              if (!location_point) return null;
 
-        setMembers(rows);
+              return {
+                id: doc.id,
+                name: getMemberName(raw),
+                phone: getMemberPhone(raw),
+                email: getMemberEmail(raw),
+                city: pickMemberText(raw, ["city", "City"]),
+                state: pickMemberText(raw, ["state", "State"]),
+                organization: pickMemberText(raw, ["organization", "Organization", "category", "Category"]),
+                location_point,
+              };
+            })
+            .filter(Boolean);
+
+          rows.push(...chunk);
+          setMembers([...rows]);
+
+          if (snapshot.docs.length < pageSize) break;
+          lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        }
       } catch (error) {
         console.error("Error loading members for map:", error);
         if (!cancelled) setMapError("Unable to load member data.");
@@ -402,6 +414,9 @@ export default function MemberLocationPage() {
         flex: 1,
         minWidth: 0,
         minHeight: "calc(100vh - 64px)",
+        alignSelf: "stretch",
+        display: "flex",
+        flexDirection: "column",
         boxSizing: "border-box",
       }}
     >
@@ -969,14 +984,42 @@ export default function MemberLocationPage() {
             </div>
           )}
 
-          {mapLoading && !mapError && (
+        {mapLoading && !mapError && (
             <div className="loading-card">
               <div className="loading-inner">
-                <FaSpinner size={38} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />
-                <div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Loading map...</div>
-                  <div style={{ fontSize: "13px" }}>Preparing clustered pins</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                  <FaSpinner size={38} color="#2563eb" style={{ animation: "spin 1s linear infinite", flex: "0 0 auto" }} />
+                  <div style={{ flex: "1 1 auto" }}>
+                    <div style={{
+                      height: "18px",
+                      width: "42%",
+                      marginBottom: "10px",
+                      borderRadius: "999px",
+                      background: "#dbeafe",
+                    }} />
+                    <div style={{
+                      height: "12px",
+                      width: "78%",
+                      marginBottom: "8px",
+                      borderRadius: "999px",
+                      background: "#e2e8f0",
+                    }} />
+                    <div style={{
+                      height: "12px",
+                      width: "64%",
+                      borderRadius: "999px",
+                      background: "#eef2f7",
+                    }} />
+                  </div>
                 </div>
+                <div style={{
+                  width: "100%",
+                  height: "min(58vh, 520px)",
+                  borderRadius: "20px",
+                  background: "linear-gradient(135deg, #eef2f7 0%, #f8fafc 45%, #e2e8f0 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
+                }} />
               </div>
             </div>
           )}

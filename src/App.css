@@ -13,7 +13,7 @@ body {
 .app-container {
   display: flex;
   min-height: 100vh;
-  width: 100vw;
+  width: 100%;
   overflow-x: hidden;
 }
 
@@ -106,7 +106,6 @@ body {
   display: flex;
   flex-direction: column;
 }
-
 /* ====================== DASHBOARD PAGE ====================== */
 .top-header {
   padding: 20px 30px;
@@ -719,6 +718,7 @@ footer {
   /* Remove background here as it's now in .table-wrapper */
   padding: 0;
   box-shadow: none;
+  scrollbar-gutter: stable;
 }
 
 .filter-sidebar {
@@ -2638,6 +2638,48 @@ body {
   .filters-grid-recruitment {
     grid-template-columns: 1fr;
   }
+}
+
+/* Force the routed pages to use the full available content width */
+.main-content .dashboard-container,
+.main-content .member-list-page,
+.main-content .member-list-page.with-filters,
+.main-content .location-page {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.main-content .dashboard-container {
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+
+.main-content .member-list-page,
+.main-content .member-list-page.with-filters {
+  padding-right: 20px !important;
+}
+
+.main-content .content-with-sidebar {
+  width: 100% !important;
+}
+
+.main-content .table-container {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.main-content .charts-grid {
+  width: 100% !important;
+}
+
+.main-content .chart-card {
+  width: 100% !important;
+}
+
+.main-content .location-body {
+  width: 100% !important;
 }
 
         

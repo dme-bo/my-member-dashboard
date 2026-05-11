@@ -1,12 +1,11 @@
 // src/pages/DashboardPage.jsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FaUsers,
   FaClock,
   FaUserPlus,
   FaCalendarAlt,
 } from 'react-icons/fa';
-import { collection, getDocs, getFirestore } from 'firebase/firestore';
 import { Pie, Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
@@ -14,14 +13,11 @@ import { Chart } from 'react-google-charts';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import DualRangeSlider from '../components/DualRangeSlider';
-import {
-  normalizeMemberRecord,
-  parseMemberDate,
-} from '../utils/memberFields';
+import { parseMemberDate } from '../utils/memberFields';
 
-export default function DashboardPage() {
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function DashboardPage({ memberRecords = [], membersLoading = false }) {
+  const [members, setMembers] = useState(memberRecords);
+  const [loading, setLoading] = useState(membersLoading);
 
   const [organizationFilter, setOrganizationFilter] = useState('All');
   const [serviceFilter, setServiceFilter] = useState('All');
@@ -49,20 +45,14 @@ export default function DashboardPage() {
 
   // ────────────────────────────────────────────────
   useEffect(() => {
-    const fetchMembers = async () => {
-      try {
-        const db = getFirestore();
-        const snapshot = await getDocs(collection(db, 'users'));
-        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...normalizeMemberRecord(doc.data()) }));
-        setMembers(data);
-      } catch (error) {
-        console.error('Error fetching members:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchMembers();
-  }, []);
+    if (Array.isArray(memberRecords)) {
+      setMembers(memberRecords);
+    }
+  }, [memberRecords]);
+
+  useEffect(() => {
+    setLoading(membersLoading);
+  }, [membersLoading]);
 
   // Filter options logic (unchanged) ────────────────────────────────────────────────
   const filterOptions = useMemo(() => {
@@ -174,107 +164,73 @@ export default function DashboardPage() {
     registrationDateTo,
   ]);
 
-  const registrationMetricsMembers = filteredMembers;
 
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
     if (loading || !filteredMembers.length) return null;
 
     const total = filteredMembers.length;
+    const genderCounts = {};
+    const organizationCounts = {};
+    const serviceCounts = {};
+    const rankCounts = {};
+    const stateCounts = {};
+    let expSum = 0;
 
-    const genderCounts = filteredMembers.reduce((acc, m) => {
-      const raw = m.gender?.trim()?.toLowerCase();
-      if (raw === 'male' || raw === 'm') acc['Male'] = (acc['Male'] || 0) + 1;
-      else if (raw === 'female' || raw === 'f') acc['Female'] = (acc['Female'] || 0) + 1;
-      return acc;
-    }, {});
+    for (const member of filteredMembers) {
+      const rawGender = member.gender?.trim()?.toLowerCase();
+      if (rawGender === 'male' || rawGender === 'm') genderCounts.Male = (genderCounts.Male || 0) + 1;
+      else if (rawGender === 'female' || rawGender === 'f') genderCounts.Female = (genderCounts.Female || 0) + 1;
 
-    const organizationCountsRaw = filteredMembers.reduce((acc, m) => {
-      const c = m.organization;
-      if (c) acc[c] = (acc[c] || 0) + 1;
-      return acc;
-    }, {});
-    const organizationCounts = Object.fromEntries(Object.entries(organizationCountsRaw).sort(([, a], [, b]) => b - a));
+      if (member.organization) organizationCounts[member.organization] = (organizationCounts[member.organization] || 0) + 1;
+      if (member.service) serviceCounts[member.service.trim()] = (serviceCounts[member.service.trim()] || 0) + 1;
+      if (member.rank) rankCounts[member.rank] = (rankCounts[member.rank] || 0) + 1;
+      if (member.state) stateCounts[member.state.trim()] = (stateCounts[member.state.trim()] || 0) + 1;
 
-    const serviceCountsRaw = filteredMembers.reduce((acc, m) => {
-      const s = m.service?.trim();
-      if (s) acc[s] = (acc[s] || 0) + 1;
-      return acc;
-    }, {});
-    const serviceCounts = Object.fromEntries(Object.entries(serviceCountsRaw).sort(([, a], [, b]) => b - a));
+      expSum += member.experience_years || parseFloat(member.total_experience) || 0;
 
-    const rankCountsRaw = filteredMembers.reduce((acc, m) => {
-      const r = m.rank;
-      if (r) acc[r] = (acc[r] || 0) + 1;
-      return acc;
-    }, {});
-    const topRanks = Object.fromEntries(
-      Object.entries(rankCountsRaw).sort(([, a], [, b]) => b - a).slice(0, 15)
-    );
+    }
 
-    const stateCountsRaw = filteredMembers.reduce((acc, m) => {
-      const s = m.state?.trim();
-      if (s) acc[s] = (acc[s] || 0) + 1;
-      return acc;
-    }, {});
-    const stateCounts = Object.fromEntries(Object.entries(stateCountsRaw).sort(([, a], [, b]) => b - a));
+    const sortCountsDesc = (counts, limit = null) => {
+      const entries = Object.entries(counts).sort(([, a], [, b]) => b - a);
+      return Object.fromEntries(limit ? entries.slice(0, limit) : entries);
+    };
 
-    const expSum = filteredMembers.reduce((sum, m) => sum + (m.experience_years || parseFloat(m.total_experience) || 0), 0);
     const avgExp = total > 0 ? (expSum / total).toFixed(1) + 'Y' : '0Y';
-
-    const parsedDates = filteredMembers
-      .map((m) => parseMemberDate(m.registration_date))
-      .filter((d) => d !== null);
-
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const registeredToday = parsedDates.filter((d) => d >= todayStart).length;
-
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - 7);
-    const registeredWeek = parsedDates.filter((d) => d >= weekStart).length;
-
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const registeredMonth = parsedDates.filter((d) => d >= monthStart).length;
-
-    const threeMonthsStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    const registered3Months = parsedDates.filter((d) => d >= threeMonthsStart).length;
-
     return {
       total,
       genderCounts,
-      organizationCounts,
-      serviceCounts,
-      rankCounts: topRanks,
-      stateCounts,
+      organizationCounts: sortCountsDesc(organizationCounts),
+      serviceCounts: sortCountsDesc(serviceCounts),
+      rankCounts: sortCountsDesc(rankCounts, 15),
+      stateCounts: sortCountsDesc(stateCounts),
       avgExp,
-      registeredToday,
-      registeredWeek,
-      registeredMonth,
-      registered3Months,
     };
   }, [filteredMembers, loading]);
 
   const registrationAnalytics = useMemo(() => {
-    if (loading || !registrationMetricsMembers.length) return null;
-
-    const parsedDates = registrationMetricsMembers
-      .map((m) => parseMemberDate(m.registration_date))
-      .filter((d) => d !== null);
+    if (loading || !members.length) return null;
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const registeredToday = parsedDates.filter((d) => d >= todayStart).length;
-
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - 7);
-    const registeredWeek = parsedDates.filter((d) => d >= weekStart).length;
-
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const registeredMonth = parsedDates.filter((d) => d >= monthStart).length;
-
     const threeMonthsStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    const registered3Months = parsedDates.filter((d) => d >= threeMonthsStart).length;
+
+    let registeredToday = 0;
+    let registeredWeek = 0;
+    let registeredMonth = 0;
+    let registered3Months = 0;
+
+    for (const member of members) {
+      const parsedDate = member.__registrationDate || parseMemberDate(member.registration_date);
+      if (!parsedDate) continue;
+      if (parsedDate >= todayStart) registeredToday += 1;
+      if (parsedDate >= weekStart) registeredWeek += 1;
+      if (parsedDate >= monthStart) registeredMonth += 1;
+      if (parsedDate >= threeMonthsStart) registered3Months += 1;
+    }
 
     return {
       registeredToday,
@@ -282,7 +238,8 @@ export default function DashboardPage() {
       registeredMonth,
       registered3Months,
     };
-  }, [registrationMetricsMembers, loading]);
+  }, [members, loading]);
+
   const hasData = Boolean(analytics);
 
   const clearAllFilters = () => {
@@ -367,8 +324,40 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "86vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
-        Loading Dashboard ...
+      <div style={{ minHeight: "100vh", width: "100%", padding: "20px", boxSizing: "border-box" }}>
+        <div style={{
+          width: "100%",
+          flex: "1 1 auto",
+          minHeight: "calc(100vh - 124px)",
+          background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+          borderRadius: "24px",
+          boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+          border: "1px solid rgba(148, 163, 184, 0.18)",
+          padding: "24px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-start",
+          alignItems: "stretch",
+          gap: "16px",
+          boxSizing: "border-box",
+        }}>
+          <div style={{
+            height: "70px",
+            borderRadius: "18px",
+            background: "linear-gradient(90deg, #e2e8f0 0%, #f8fafc 50%, #e2e8f0 100%)",
+          }} />
+          <div style={{ color: "#475569", fontWeight: 600, fontSize: "18px", textAlign: "center" }}>Loading Dashboard ...</div>
+          <div style={{ width: "100%", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "16px" }}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} style={{ height: "128px", borderRadius: "18px", background: "#eef2f7" }} />
+            ))}
+          </div>
+          <div style={{ width: "100%", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} style={{ minHeight: "260px", borderRadius: "18px", background: "#eef2f7" }} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -376,15 +365,6 @@ export default function DashboardPage() {
   return (
     <>
       <style jsx>{`
-
-      html, body, #root, .app-wrapper, main {
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow-x: hidden !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  box-sizing: border-box !important;
-}
         .dashboard-container {
           width: 100%;
           min-height: 100vh;
@@ -705,7 +685,7 @@ export default function DashboardPage() {
 
         .loading {
         height: 100vh;
-        width: 100vw;
+        width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -913,7 +893,6 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="date-range-note">
-                Pick start and end dates to filter registrations.
               </div>
             </div>
 

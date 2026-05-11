@@ -1,13 +1,12 @@
 ﻿// src/pages/MemberListPage.jsx
 import { useState, useMemo, useEffect, useRef, useTransition } from "react";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import DualRangeSlider from "../components/DualRangeSlider";
 import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import {
-  normalizeMemberRecord,
   getMemberName,
   getMemberPhone,
   getMemberOrganization,
@@ -21,23 +20,33 @@ import {
   parseMemberSkills,
 } from "../utils/memberFields";
 
-export default function MemberListPage({ onMemberClick }) {
+export default function MemberListPage({ onMemberClick, memberRecords = [], membersLoading = false }) {
+  const pageShellStyle = {
+    padding: "20px",
+    maxWidth: "100%",
+    width: "100%",
+    margin: "0 auto",
+    minHeight: "calc(100vh - 64px)",
+    boxSizing: "border-box",
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPlaced, setFilterPlaced] = useState("all");
-  const [members, setMembers] = useState([]);
-  const [isMembersLoaded, setIsMembersLoaded] = useState(false);
+  const [members, setMembers] = useState(memberRecords);
+  const [isMembersLoaded, setIsMembersLoaded] = useState(!membersLoading);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filterSearchTerms, setFilterSearchTerms] = useState({});
   const filtersRef = useRef(null);
-  const loadSequenceRef = useRef(0);
   const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
   const [ageRange, setAgeRange] = useState([0, 100]);
   const [tagModalMember, setTagModalMember] = useState(null);
   const [availableTags, setAvailableTags] = useState([]);
+  const [availableProjects, setAvailableProjects] = useState([]);
+  const [memberProjectsByPhone, setMemberProjectsByPhone] = useState({});
   const [selectedTags, setSelectedTags] = useState([]);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
@@ -58,6 +67,7 @@ export default function MemberListPage({ onMemberClick }) {
     City: "All",
     State: "All",
     Education: "All",
+    Project: "All",
     Status: "All",
     "Placement Status": "All",
     Experience: "All",
@@ -66,71 +76,69 @@ export default function MemberListPage({ onMemberClick }) {
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
 
-  // Fetch members from Firestore
+  const normalizeProjectPhone = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    return digits.startsWith("91") ? digits.slice(2) : digits;
+  };
+
+  const splitProjects = (value) =>
+    String(value || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
   useEffect(() => {
-    const loadSequence = ++loadSequenceRef.current;
-    let cancelled = false;
+    if (!membersLoading && Array.isArray(memberRecords)) {
+      setMembers(memberRecords);
+      setCurrentPage(1);
+      setIsMembersLoaded(true);
+      setLoadProgress(100);
+    } else {
+      setIsMembersLoaded(!membersLoading);
+    }
+  }, [memberRecords, membersLoading]);
 
-    const sleepFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-
-    const loadMembers = async () => {
-      setIsMembersLoaded(false);
-      setLoadProgress(0);
-
+  useEffect(() => {
+    const loadProjectLinks = async () => {
       try {
-        const snapshot = await getDocs(collection(db, "users"));
-        if (cancelled || loadSequenceRef.current !== loadSequence) return;
+        const snapshot = await getDocs(collection(db, "projectusersmaster"));
+        const phoneToProjects = {};
+        const projectSet = new Set();
 
-        const docs = snapshot.docs;
-        const nextMembers = [];
-        const chunkSize = 1000;
+        snapshot.docs.forEach((snapDoc) => {
+          const row = snapDoc.data() || {};
+          const phone = normalizeProjectPhone(
+            row.phone_number ||
+              row.phone ||
+              row.mobile ||
+              row.contact_number ||
+              row.mobile_number ||
+              ""
+          );
+          if (!phone) return;
 
-        if (docs.length === 0) {
-          setMembers([]);
-          setCurrentPage(1);
-          setIsMembersLoaded(true);
-          setLoadProgress(100);
-          return;
-        }
+          const projects = splitProjects(row.projects || row.Projects || row.project || row.Project);
+          if (!projects.length) return;
 
-        for (let index = 0; index < docs.length; index += chunkSize) {
-          if (cancelled || loadSequenceRef.current !== loadSequence) return;
+          if (!phoneToProjects[phone]) phoneToProjects[phone] = [];
+          projects.forEach((project) => {
+            phoneToProjects[phone].push(project);
+            projectSet.add(project);
+          });
+        });
 
-          const chunk = docs.slice(index, index + chunkSize).map((snapDoc) => ({
-            id: snapDoc.id,
-            ...normalizeMemberRecord(snapDoc.data()),
-          }));
+        Object.keys(phoneToProjects).forEach((phone) => {
+          phoneToProjects[phone] = Array.from(new Set(phoneToProjects[phone]));
+        });
 
-          nextMembers.push(...chunk);
-          const loadedCount = Math.min(index + chunk.length, docs.length);
-          setLoadProgress(Math.round((loadedCount / docs.length) * 100));
-
-          if (index + chunkSize < docs.length) {
-            await sleepFrame();
-          }
-        }
-
-        if (!cancelled && loadSequenceRef.current === loadSequence) {
-          setMembers(nextMembers);
-          setCurrentPage(1);
-          setIsMembersLoaded(true);
-          setLoadProgress(100);
-        }
+        setMemberProjectsByPhone(phoneToProjects);
+        setAvailableProjects(["All", ...Array.from(projectSet).sort((a, b) => a.localeCompare(b))]);
       } catch (error) {
-        console.error("Error fetching users from Firestore:", error);
-        if (!cancelled && loadSequenceRef.current === loadSequence) {
-          setIsMembersLoaded(true);
-          setLoadProgress(100);
-        }
+        console.error("Error loading project links:", error);
       }
     };
 
-    void loadMembers();
-
-    return () => {
-      cancelled = true;
-      loadSequenceRef.current += 1;
-    };
+    void loadProjectLinks();
   }, []);
 
   const memberIndex = useMemo(() => {
@@ -147,6 +155,9 @@ export default function MemberListPage({ onMemberClick }) {
       const skills = parseMemberSkills(member);
       const experienceText = getMemberExperience(member);
       const experienceValue = parseFloat(experienceText);
+      const memberPhoneDigits = normalizeProjectPhone(phone);
+      const projectLabels = memberProjectsByPhone[memberPhoneDigits] || [];
+      const projectLabelsLower = projectLabels.map((project) => String(project).toLowerCase());
 
       return {
         ...member,
@@ -161,6 +172,8 @@ export default function MemberListPage({ onMemberClick }) {
         __educationLower: String(education || "").toLowerCase(),
         __skills: skills,
         __skillsLower: skills.map((skill) => String(skill).toLowerCase()),
+        __projects: projectLabels,
+        __projectsLower: projectLabelsLower,
         __searchBlob: [
           name,
           email,
@@ -171,6 +184,7 @@ export default function MemberListPage({ onMemberClick }) {
           state,
           city,
           education,
+          ...projectLabels,
         ]
           .filter(Boolean)
           .join(" ")
@@ -179,7 +193,7 @@ export default function MemberListPage({ onMemberClick }) {
         __tagsLower: String(member.tags || member.Tags || "").toLowerCase(),
       };
     });
-  }, [members]);
+  }, [members, memberProjectsByPhone]);
   // Dynamic filter options
   const filterOptions = useMemo(() => {
     const getUniqueValues = (field) => {
@@ -230,12 +244,13 @@ export default function MemberListPage({ onMemberClick }) {
       City: getUniqueValues("city"),
       State: getUniqueValues("state"),
       Education: getUniqueValues("education"),
+      Project: availableProjects,
       Status: getUniqueValues("status"),
       Tags: ["All", ...Array.from(new Set(memberIndex.flatMap((member) => member.__skills))).sort((a, b) => a.localeCompare(b))],
       "Placement Status": ["All", "Placed", "Active"],
       Experience: buckets,
     };
-  }, [memberIndex]);
+  }, [memberIndex, availableProjects]);
 
   const ageBounds = useMemo(() => {
     const ages = memberIndex.map((member) => member.age_years).filter((age) => Number.isFinite(age));
@@ -267,18 +282,15 @@ export default function MemberListPage({ onMemberClick }) {
 
   useEffect(() => {
     const loadTags = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, "tags"));
-        const tags = snapshot.docs
-          .map((tagDoc) => normalizeTagLabel({ id: tagDoc.id, ...tagDoc.data() }))
-          .filter(Boolean);
-        setAvailableTags(Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b)));
-      } catch (error) {
-        console.error("Error loading tags:", error);
-      }
+      const snapshot = await getDocs(collection(db, "tags"));
+      const tags = snapshot.docs
+        .map((tagDoc) => normalizeTagLabel({ id: tagDoc.id, ...tagDoc.data() }))
+        .filter(Boolean);
+      const uniqueTags = Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b));
+      setAvailableTags(uniqueTags);
     };
 
-    loadTags();
+    void loadTags();
   }, []);
 
   const handleFilterChange = (key, value) => {
@@ -300,6 +312,7 @@ export default function MemberListPage({ onMemberClick }) {
         City: "All",
         State: "All",
         Education: "All",
+        Project: "All",
         Status: "All",
         "Placement Status": "All",
         Experience: "All",
@@ -323,39 +336,13 @@ export default function MemberListPage({ onMemberClick }) {
 
   // Filtered + Sorted Members (Robust Alphabetical A → Z)
   const filteredMembers = useMemo(() => {
-    let list = [...memberIndex];
+    const list = [];
+    const searchTerm = debouncedSearchTerm.trim().toLowerCase();
+    const selectedSidebarFilters = Object.entries(sidebarFilters).filter(([, value]) => value !== "All");
+    const activeAgeFilter = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
+    const activeExperienceFilter = selectedSidebarFilters.find(([key]) => key === "Experience");
+    const experienceRange = activeExperienceFilter ? parseExperienceRange(activeExperienceFilter[1]) : null;
 
-    // Search filter
-    if (debouncedSearchTerm) {
-      const term = debouncedSearchTerm.toLowerCase();
-      list = list.filter((member) => {
-        return member.__searchBlob.includes(term) ||
-          member.__phoneLower.includes(term) ||
-          member.__emailLower.includes(term);
-      });
-    }
-
-    // Placed filter
-    if (filterPlaced === "placed") {
-      list = list.filter((m) => m.isPlaced === true);
-    } else if (filterPlaced === "active") {
-      list = list.filter((m) => m.isPlaced !== true);
-    }
-
-    if (retirementStatus !== "All") {
-      list = list.filter((member) => member.retirement_status === retirementStatus);
-    }
-
-    const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
-    if (ageFilterActive) {
-      list = list.filter((member) => {
-        const age = member.age_years;
-        if (!Number.isFinite(age)) return false;
-        return age >= ageRange[0] && age <= ageRange[1];
-      });
-    }
-
-    // Sidebar filters
     const fieldMap = {
       Gender: "gender",
       Category: "organization",
@@ -366,56 +353,90 @@ export default function MemberListPage({ onMemberClick }) {
       City: "city",
       State: "state",
       Education: "education",
+      Project: "project",
     };
 
-    Object.entries(sidebarFilters).forEach(([key, value]) => {
-      if (value !== "All") {
-        if (key === "Tags") {
-          list = list.filter((member) =>
-            member.__skillsLower.some((tag) => tag === String(value).toLowerCase())
-          );
-          return;
-        }
-        if (key === "Placement Status") {
-          const isPlacedVal = value === "Placed";
-          list = list.filter((member) => member.isPlaced === isPlacedVal);
-        } else if (key === "Experience") {
-          const range = parseExperienceRange(value);
-          if (range) {
-            list = list.filter((member) => {
-              const exp = member.__experienceValue;
-              if (!Number.isFinite(exp)) return false;
-              return exp >= range.min && (range.max === Infinity || exp <= range.max);
-            });
-          }
-        } else {
-          const dbField = fieldMap[key];
-          if (dbField) {
-            list = list.filter((member) => {
-              const target = String(value).toLowerCase();
-              if (dbField === "organization") return member.__organizationLower === target;
-              if (dbField === "service") return member.__serviceLower === target;
-              if (dbField === "rank") return member.__rankLower === target;
-              if (dbField === "state") return member.__stateLower === target;
-              if (dbField === "city") return member.__cityLower === target;
-              if (dbField === "education") return member.__educationLower === target;
-              return String(member[dbField] || "").toLowerCase() === target;
-            });
-          }
+    const lowercasedSidebarFilters = selectedSidebarFilters.map(([key, value]) => [key, String(value).toLowerCase()]);
+
+    for (const member of memberIndex) {
+      if (searchTerm) {
+        if (
+          !member.__searchBlob.includes(searchTerm) &&
+          !member.__phoneLower.includes(searchTerm) &&
+          !member.__emailLower.includes(searchTerm)
+        ) {
+          continue;
         }
       }
-    });
+
+      if (filterPlaced === "placed" && member.isPlaced !== true) continue;
+      if (filterPlaced === "active" && member.isPlaced === true) continue;
+      if (retirementStatus !== "All" && member.retirement_status !== retirementStatus) continue;
+
+      if (activeAgeFilter) {
+        const age = member.age_years;
+        if (!Number.isFinite(age) || age < ageRange[0] || age > ageRange[1]) continue;
+      }
+
+      let matchesSidebar = true;
+      for (const [key, value] of lowercasedSidebarFilters) {
+        if (key === "Tags") {
+          if (!member.__skillsLower.some((tag) => tag === value)) {
+            matchesSidebar = false;
+            break;
+          }
+          continue;
+        }
+
+        if (key === "Placement Status") {
+          const isPlacedVal = value === "placed";
+          if (member.isPlaced !== isPlacedVal) {
+            matchesSidebar = false;
+            break;
+          }
+          continue;
+        }
+
+        if (key === "Experience") {
+          if (!experienceRange) continue;
+          const exp = member.__experienceValue;
+          if (!Number.isFinite(exp) || exp < experienceRange.min || (experienceRange.max !== Infinity && exp > experienceRange.max)) {
+            matchesSidebar = false;
+            break;
+          }
+          continue;
+        }
+
+        if (key === "Project") {
+          if (!member.__projectsLower.some((project) => project === value)) {
+            matchesSidebar = false;
+          }
+          if (!matchesSidebar) break;
+          continue;
+        }
+
+        const dbField = fieldMap[key];
+        if (!dbField) continue;
+        if (dbField === "organization" && member.__organizationLower !== value) matchesSidebar = false;
+        else if (dbField === "service" && member.__serviceLower !== value) matchesSidebar = false;
+        else if (dbField === "rank" && member.__rankLower !== value) matchesSidebar = false;
+        else if (dbField === "state" && member.__stateLower !== value) matchesSidebar = false;
+        else if (dbField === "city" && member.__cityLower !== value) matchesSidebar = false;
+        else if (dbField === "education" && member.__educationLower !== value) matchesSidebar = false;
+        else if (!["organization", "service", "rank", "state", "city", "education"].includes(dbField) && String(member[dbField] || "").toLowerCase() !== value) {
+          matchesSidebar = false;
+        }
+
+        if (!matchesSidebar) break;
+      }
+
+      if (matchesSidebar) list.push(member);
+    }
 
     // Improved Alphabetical Sort (A → Z)
     list.sort((a, b) => {
-      const getName = (member) => {
-        const full = getMemberName(member);
-        if (full) return full;
-        return "ZZZ_NO_NAME"; // Push nameless to bottom
-      };
-
-      const nameA = getName(a).toLowerCase();
-      const nameB = getName(b).toLowerCase();
+      const nameA = String(a.__name || getMemberName(a) || "ZZZ_NO_NAME").toLowerCase();
+      const nameB = String(b.__name || getMemberName(b) || "ZZZ_NO_NAME").toLowerCase();
 
       return nameA.localeCompare(nameB);
     });
@@ -586,6 +607,7 @@ export default function MemberListPage({ onMemberClick }) {
     "State",
     "City",
     "Education",
+    "Project",
     "Tags",
     "Experience",
   ];
@@ -646,7 +668,7 @@ export default function MemberListPage({ onMemberClick }) {
   // Loading state
   if (!isMembersLoaded) {
     return (
-      <div className="member-list-page" style={{ padding: "20px", maxWidth: "100%", margin: "0 auto" }}>
+      <div className="member-list-page" style={pageShellStyle}>
         <style>{`
           @media (min-width: 768px) {
             .member-list-page {
@@ -654,47 +676,77 @@ export default function MemberListPage({ onMemberClick }) {
             }
           }
         `}</style>
-        {/* Header Card */}
-        <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+        <div style={{
+          width: "100%",
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          padding: "16px",
+          marginBottom: "20px",
+          boxShadow: "0 4px 6px rgba(0,0,0,0.06)",
+          boxSizing: "border-box",
+        }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
-            <div style={{ position: "relative", flex: 1, maxWidth: "350px", minWidth: "200px" }}>
-              <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-              <input
-                type="text"
-                placeholder="Search by Name, Mobile, Email..."
-                disabled
-                style={{
-                  padding: "12px 14px 12px 40px",
-                  width: "100%",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  backgroundColor: "#f3f4f6",
-                  color: "#999",
-                }}
-              />
+            <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
+              <div style={{ height: "42px", borderRadius: "8px", background: "#eef2f7" }} />
             </div>
-            <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto",}}>
-              Total Members: <strong>0</strong>
-            </span>
-            <button disabled style={{ padding: "10px 20px", backgroundColor: "white", border: "1px solid #10b981", color: "#10b981", borderRadius: "8px", cursor: "not-allowed", fontWeight: "600", fontSize: "14px", opacity: 0.5 }}>
-              🔽 Filters
-            </button>
-            <button disabled style={{ padding: "10px 20px", backgroundColor: "white", border: "1px solid #1f2937", color: "#1f2937", borderRadius: "8px", cursor: "not-allowed", fontWeight: "600", fontSize: "14px", opacity: 0.5 }}>
-              ⬇️ Export
-            </button>
+            <div style={{ width: "150px", height: "34px", borderRadius: "999px", background: "#dcfce7", marginLeft: "auto" }} />
+            <div style={{ width: "110px", height: "40px", borderRadius: "8px", background: "#eef2f7" }} />
+            <div style={{ width: "110px", height: "40px", borderRadius: "8px", background: "#eef2f7" }} />
           </div>
         </div>
 
-        {/* Loading Indicator */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "400px", backgroundColor: "#fff", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}>
-              ⏳
+        <div style={{
+          width: "100%",
+          height: "70vh",
+          minHeight: "460px",
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          boxShadow: "0 4px 6px rgba(0,0,0,0.06)",
+          display: "flex",
+          justifyContent: "flex-start",
+          alignItems: "stretch",
+          overflow: "hidden",
+          boxSizing: "border-box",
+        }}>
+          <div style={{ width: "100%", maxWidth: "none", display: "flex", flexDirection: "column", gap: "18px", height: "100%" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "40px", marginBottom: "12px", animation: "spin 1s linear infinite" }}>⏳</div>
+              <p style={{ fontSize: "16px", color: "#666", margin: "0 0 8px" }}>Loading members...</p>
+              <div style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 600 }}>
+                {loadProgress > 0 ? `Loading data ${loadProgress}%` : "Connecting..."}
+              </div>
             </div>
-            <p style={{ fontSize: "16px", color: "#666", margin: "0 0 8px" }}>Loading members...</p>
-            <div style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 600 }}>
-              {loadProgress > 0 ? `Loading data ${loadProgress}%` : "Connecting..."}
+            <div style={{
+              width: "100%",
+              display: "grid",
+              gridTemplateColumns: "1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",
+              gap: "10px",
+              marginBottom: "12px",
+            }}>
+              {Array.from({ length: 7 }).map((_, index) => (
+                <div key={index} style={{ height: "16px", borderRadius: "999px", background: "#e2e8f0" }} />
+              ))}
+            </div>
+            <div style={{ width: "100%", display: "grid", gap: "10px" }}>
+              {Array.from({ length: 8 }).map((_, rowIndex) => (
+                <div key={rowIndex} style={{
+                  width: "100%",
+                  display: "grid",
+                  gridTemplateColumns: "1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",
+                  gap: "10px",
+                }}>
+                  {Array.from({ length: 7 }).map((__, cellIndex) => (
+                    <div
+                      key={cellIndex}
+                      style={{
+                        height: "18px",
+                        borderRadius: "999px",
+                        background: cellIndex === 0 ? "#dbeafe" : "#eef2f7",
+                      }}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
             <style>{`
               @keyframes spin {
@@ -709,7 +761,7 @@ export default function MemberListPage({ onMemberClick }) {
   }
 
   return (
-    <div className="member-list-page" style={{ padding: "20px", maxWidth: "100%", margin: "0 auto" }}><style>{`
+    <div className="member-list-page" style={pageShellStyle}><style>{`
       @media (min-width: 768px) {
         .member-list-page {
           padding: 36px;
@@ -735,14 +787,13 @@ export default function MemberListPage({ onMemberClick }) {
               }}
               style={{
                 padding: "12px 14px 12px 40px",
-                width: "160%",
+                width: "100%",
                 borderRadius: "8px",
                 border: "1px solid #d1d5db",
                 fontSize: "14px",
                 backgroundColor: "white",
                 color: "black",
               }}
-              autoFocus
             />
           </div>
 
@@ -959,8 +1010,8 @@ export default function MemberListPage({ onMemberClick }) {
       </div>
 
       <div style={{ width: "100%", margin: "0", padding: "0" }}>
-        <div className="table-container" style={{ margin: "0", padding: "0", height: "70vh", minHeight: "460px", overflowY: "auto", border: "1px solid rgb(238, 238, 238)", borderRadius: "8px", background: "rgb(255, 255, 255)" }}>
-          <div className="table-wrapper responsive-table" style={{ margin: "0", padding: "0" }}>
+        <div className="table-container" style={{ margin: "0", padding: "0", height: "70vh", minHeight: "460px", overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable", border: "1px solid rgb(238, 238, 238)", borderRadius: "8px", background: "rgb(255, 255, 255)" }}>
+          <div className="table-wrapper responsive-table" style={{ margin: "0", padding: "0", width: "100%", boxSizing: "border-box", scrollbarGutter: "stable" }}>
             <table className="members-table" style={{ width: "100%",tableLayout: "fixed" }}>
               <thead>
                 <tr>

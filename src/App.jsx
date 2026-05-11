@@ -1,10 +1,12 @@
 // src/App.jsx
-import React, { Suspense, lazy, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { collection, documentId, getDocs, getFirestore, orderBy, query } from "firebase/firestore";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MemberDetailModal from "./components/MemberDetailModal";
+import { normalizeMemberRecord } from "./utils/memberFields";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const MemberListPage = lazy(() => import("./pages/MemberListPage"));
@@ -16,11 +18,11 @@ const RequirementsPage = lazy(() => import("./pages/RequirementsPage"));
 const ConfigurationPage = lazy(() => import("./pages/ConfigurationPage"));
 const NewsLetterPage = lazy(() => import("./pages/NewsLetterPage"));
 const PartnerAgentList = lazy(() => import("./pages/PartnerAgentList"));
+const preloadMemberListPage = () => import("./pages/MemberListPage");
 
 
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
-
 import "./App.css";
 
 // ------------------------------------------------------------------
@@ -30,6 +32,36 @@ function Layout() {
   const location = useLocation();
   const [selectedMember, setSelectedMember] = useState(null);
   const [expandedMenu, setExpandedMenu] = useState(null);
+  const [memberRecords, setMemberRecords] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMembers = async () => {
+      try {
+        const db = getFirestore();
+        const snapshot = await getDocs(query(collection(db, "users"), orderBy(documentId())));
+        if (cancelled) return;
+        const data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...normalizeMemberRecord(doc.data()),
+        }));
+        setMemberRecords(data);
+      } catch (error) {
+        console.error("Error loading shared members:", error);
+      } finally {
+        if (!cancelled) setMembersLoading(false);
+      }
+    };
+
+    void loadMembers();
+    void preloadMemberListPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Derive current page from pathname for Sidebar highlighting
   const currentPage = location.pathname.slice(1) || "dashboard";
@@ -48,6 +80,7 @@ function Layout() {
         currentPage={currentPage}
         expandedMenu={expandedMenu}
         onMenuClick={setExpandedMenu}
+        onMemberListHover={preloadMemberListPage}
       />
 
       <div className="main-content">
@@ -55,13 +88,14 @@ function Layout() {
         <Suspense
           fallback={
             <div style={{ padding: "24px", color: "#475569", fontWeight: 600 }}>
-              Loading page...
             </div>
           }
         >
           <Routes>
             <Route path="/" element={<DashboardPage
                   onMemberClick={setSelectedMember}
+                  memberRecords={memberRecords}
+                  membersLoading={membersLoading}
                   filterData={memberFilterData}
                   filterKeys={memberFilterKeys}
                 />} />
@@ -70,6 +104,8 @@ function Layout() {
               element={
                 <MemberListPage
                   onMemberClick={setSelectedMember}
+                  memberRecords={memberRecords}
+                  membersLoading={membersLoading}
                   filterData={memberFilterData}
                   filterKeys={memberFilterKeys}
                 />
@@ -77,7 +113,7 @@ function Layout() {
             />
             <Route
               path="/member-location"
-              element={<MemberLocationPage />}
+              element={<MemberLocationPage memberRecords={memberRecords} membersLoading={membersLoading} />}
             />
             <Route
               path="/tempstaff"
