@@ -404,6 +404,65 @@ export default function RequirementsPage() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
+  const buildAllocationEmailBody = ({ requirement, allocatedMembersList }) => {
+    const lines = [];
+    lines.push(`Hello DME Team,`);
+    lines.push("");
+    lines.push(`A member allocation has been completed in the Requirements page.`);
+    lines.push("");
+    lines.push(`Requirement Details:`);
+    lines.push(`- Type: ${requirement?.type === "project" ? "Project" : "Job"}`);
+    lines.push(`- Title: ${requirement?.title || "N/A"}`);
+    lines.push(`- Company: ${requirement?.company || "N/A"}`);
+    lines.push(`- Location: ${requirement?.location || "N/A"}`);
+    lines.push(`- Compensation: ${requirement?.salary || "N/A"}`);
+    lines.push(`- Status: ${requirement?.status === "active" ? "Open" : "Closed"}`);
+    lines.push("");
+    lines.push(`Allocated Member Details:`);
+
+    if (!allocatedMembersList.length) {
+      lines.push(`- No members were allocated.`);
+    } else {
+      allocatedMembersList.forEach((member, index) => {
+        lines.push(`Member ${index + 1}:`);
+        lines.push(`- Name: ${member?.name || "N/A"}`);
+        lines.push(`- Email: ${member?.email || "N/A"}`);
+        lines.push(`- Phone: ${member?.phone || "N/A"}`);
+        lines.push(`- Designation: ${member?.designation || "N/A"}`);
+        lines.push(`- State: ${member?.state || "N/A"}`);
+        lines.push(`- City: ${member?.city || "N/A"}`);
+        lines.push(`- Organization: ${member?.organization || "N/A"}`);
+        lines.push("");
+      });
+    }
+
+    lines.push(`Allocated On: ${new Date().toLocaleString("en-IN")}`);
+    lines.push("");
+    lines.push(`Regards,`);
+    lines.push(`Requirements System`);
+
+    return lines.join("\n");
+  };
+
+  const sendAllocationEmail = async (requirement, allocatedMembersList) => {
+    const response = await fetch("/api/send-allocation-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: "dme@briskolive.com",
+        subject: `Member Allocation - ${requirement?.title || "Requirement"}`,
+        body: buildAllocationEmailBody({ requirement, allocatedMembersList }),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to send allocation email.");
+    }
+  };
+
   const exportToCSV = () => {
     const csvData = filteredRequirements.map((req) => ({
       Type: req.type === "project" ? "Project" : "Job",
@@ -1397,6 +1456,13 @@ export default function RequirementsPage() {
                     });
 
                     await Promise.all(promises);
+                    const allocatedMemberDetails = newMembers
+                      .map((userId) => members.find((m) => m.id === userId))
+                      .filter(Boolean);
+                    sendAllocationEmail(selectedReq, allocatedMemberDetails).catch((emailError) => {
+                      console.error("Allocation email failed:", emailError);
+                      showToast("Allocation saved, but email could not be sent.", "error");
+                    });
                     showToast(`Successfully allocated ${newMembers.length} new member(s)!`, "success");
                     setSelectedMemberIds([]);
                     setShowAllocateModal(false);

@@ -164,6 +164,36 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     registrationDateTo,
   ]);
 
+  const filteredMembersNoDateRange = useMemo(() => {
+    return members.filter((member) => {
+      if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
+      if (serviceFilter !== 'All' && member.service !== serviceFilter) return false;
+      if (rankFilter !== 'All' && member.rank !== rankFilter) return false;
+      if (stateFilter !== 'All' && member.state !== stateFilter) return false;
+      if (cityFilter !== 'All' && member.city !== cityFilter) return false;
+      if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
+
+      const age = member.age_years;
+      const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
+      if (ageFilterActive) {
+        if (!Number.isFinite(age)) return false;
+        if (age < ageRange[0] || age > ageRange[1]) return false;
+      }
+      return true;
+    });
+  }, [
+    members,
+    organizationFilter,
+    serviceFilter,
+    rankFilter,
+    stateFilter,
+    cityFilter,
+    retirementFilter,
+    ageRange,
+    ageBounds.min,
+    ageBounds.max,
+  ]);
+
 
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
@@ -209,7 +239,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   }, [filteredMembers, loading]);
 
   const registrationAnalytics = useMemo(() => {
-    if (loading || !members.length) return null;
+    if (loading || !filteredMembersNoDateRange.length) return null;
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -223,7 +253,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     let registeredMonth = 0;
     let registered3Months = 0;
 
-    for (const member of members) {
+    for (const member of filteredMembersNoDateRange) {
       const parsedDate = member.__registrationDate || parseMemberDate(member.registration_date);
       if (!parsedDate) continue;
       if (parsedDate >= todayStart) registeredToday += 1;
@@ -238,7 +268,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       registeredMonth,
       registered3Months,
     };
-  }, [members, loading]);
+  }, [filteredMembersNoDateRange, loading]);
 
   const hasData = Boolean(analytics);
 

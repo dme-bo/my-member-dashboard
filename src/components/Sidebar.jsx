@@ -68,7 +68,7 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
 
         <NavLink to="/member-location" className={`menu-item ${isMemberLocationActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdLocationOn className="menu-icon" />
-          <span>Member Location</span>
+          <span>Members Location</span>
         </NavLink>
 
         {/* Expandable Members Applications */}

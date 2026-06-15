@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, documentId, getDocs, limit, orderBy, query, startAfter } from "firebase/firestore";
 import { FaMapMarkedAlt, FaSpinner, FaDirections, FaTimes, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
 import { db } from "../firebase";
@@ -8,16 +8,27 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const DEFAULT_CENTER = { lat: 22.9734, lng: 78.6569 };
 const CLUSTER_GRID_BASE_PX = 84;
+const STATE_CLUSTER_ZOOM = 7;
+const MEMBER_CLUSTER_ZOOM = 10;
 
 const createSvgDataUrl = (svg) =>
   "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg.trim());
 
+// Load Google Maps once and reuse the same script instance across renders.
 const loadGoogleMaps = (apiKey) =>
   new Promise((resolve, reject) => {
     if (window.google?.maps) {
       resolve(window.google.maps);
       return;
     }
+
+    const previousAuthFailure = window.gm_authFailure;
+    window.gm_authFailure = () => {
+      if (typeof previousAuthFailure === "function") {
+        previousAuthFailure();
+      }
+      reject(new Error("Google Maps authorization failed"));
+    };
 
     const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
     if (existingScript) {
@@ -54,34 +65,52 @@ const getClusterGridSize = (zoom) => {
 };
 
 const getClusterIcon = (count) => {
-  const size = Math.min(84, 38 + Math.log10(count + 1) * 18);
-  const radius = size / 2;
+  const width = 54;
+  const height = 72;
+  const centerX = width / 2;
   return {
     url: createSvgDataUrl(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
         <defs>
-          <radialGradient id="clusterGlow" cx="50%" cy="35%" r="70%">
-            <stop offset="0%" stop-color="#60a5fa" stop-opacity="1" />
-            <stop offset="100%" stop-color="#1d4ed8" stop-opacity="1" />
-          </radialGradient>
-          <filter id="clusterShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <linearGradient id="clusterGlow" x1="0%" x2="0%" y1="0%" y2="100%">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="1" />
+            <stop offset="100%" stop-color="#2563eb" stop-opacity="1" />
+          </linearGradient>
+          <filter id="clusterShadow" x="-20%" y="-20%" width="160%" height="160%">
             <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#1e3a8a" flood-opacity="0.22" />
           </filter>
         </defs>
-        <circle cx="${radius}" cy="${radius}" r="${radius - 2}" fill="url(#clusterGlow)" filter="url(#clusterShadow)" />
-        <circle cx="${radius}" cy="${radius}" r="${radius - 9}" fill="rgba(255,255,255,0.16)" />
-        <circle cx="${radius}" cy="${radius}" r="${radius - 14}" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2" />
+        <path
+          d="M ${centerX} 3
+             C 39 3, 51 15, 51 29
+             C 51 45, 37 56, ${centerX} 69
+             C 17 56, 3 45, 3 29
+             C 3 15, 15 3, ${centerX} 3 Z"
+          fill="url(#clusterGlow)"
+          stroke="#1d4ed8"
+          stroke-width="1.5"
+          filter="url(#clusterShadow)"
+        />
+        <circle cx="${centerX}" cy="27" r="14" fill="rgba(255,255,255,0.15)" />
+        <text
+          x="${centerX}"
+          y="32"
+          text-anchor="middle"
+          font-family="Arial, sans-serif"
+          font-size="${Math.max(12, Math.min(20, 13 + Math.log10(count + 1) * 2))}"
+          font-weight="700"
+          fill="#ffffff"
+        >${count}</text>
       </svg>
     `),
-    scaledSize: new window.google.maps.Size(size, size),
-    anchor: new window.google.maps.Point(radius, radius),
-    labelOrigin: new window.google.maps.Point(radius, radius + 1),
+    scaledSize: new window.google.maps.Size(width, height),
+    anchor: new window.google.maps.Point(centerX, height - 2),
   };
 };
 
 const getMemberIcon = () => ({
   url: createSvgDataUrl(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="46" viewBox="0 0 34 46">
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="50" viewBox="0 0 36 50">
       <defs>
         <linearGradient id="pinFill" x1="0%" x2="0%" y1="0%" y2="100%">
           <stop offset="0%" stop-color="#38bdf8" />
@@ -91,15 +120,16 @@ const getMemberIcon = () => ({
           <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.18" />
         </filter>
       </defs>
-      <path d="M17 1C9.82 1 4 6.82 4 14c0 9.5 13 31 13 31s13-21.5 13-31C30 6.82 24.18 1 17 1z" fill="url(#pinFill)" stroke="#1d4ed8" stroke-width="1.5" filter="url(#pinShadow)"/>
-      <circle cx="17" cy="14" r="6" fill="#ffffff" opacity="0.92"/>
-      <circle cx="17" cy="14" r="2.8" fill="#1d4ed8"/>
+      <path d="M18 2C10.27 2 4 8.27 4 16c0 10.25 14 32 14 32s14-21.75 14-32C32 8.27 25.73 2 18 2z" fill="url(#pinFill)" stroke="#1d4ed8" stroke-width="1.6" filter="url(#pinShadow)"/>
+      <circle cx="18" cy="16" r="6.5" fill="#ffffff" opacity="0.95"/>
+      <circle cx="18" cy="16" r="3" fill="#1d4ed8"/>
     </svg>
   `),
-  scaledSize: new window.google.maps.Size(34, 46),
-  anchor: new window.google.maps.Point(17, 46),
+  scaledSize: new window.google.maps.Size(36, 50),
+  anchor: new window.google.maps.Point(18, 50),
 });
 
+// Group nearby pins into grid-based clusters so the map stays readable at lower zoom.
 const buildClusters = (members, zoom) => {
   const scale = 256 * Math.pow(2, zoom);
   const gridSize = getClusterGridSize(zoom);
@@ -140,16 +170,104 @@ const buildClusters = (members, zoom) => {
   }));
 };
 
+const normalizeStateLabel = (value) => String(value || "").trim().replace(/\s+/g, " ");
+
+// State clusters are used when the map is zoomed out to a regional view.
+const buildStateClusters = (members) => {
+  const buckets = new Map();
+
+  members.forEach((member) => {
+    const state = normalizeStateLabel(member.state) || "Unknown state";
+    if (!buckets.has(state)) {
+      buckets.set(state, {
+        state,
+        latSum: 0,
+        lngSum: 0,
+        count: 0,
+        members: [],
+      });
+    }
+
+    const bucket = buckets.get(state);
+    bucket.latSum += member.location_point.lat;
+    bucket.lngSum += member.location_point.lng;
+    bucket.count += 1;
+    bucket.members.push(member);
+  });
+
+  return Array.from(buckets.values()).map((bucket) => ({
+    mode: "state",
+    label: bucket.state,
+    count: bucket.count,
+    members: bucket.members,
+    position: {
+      lat: bucket.latSum / bucket.count,
+      lng: bucket.lngSum / bucket.count,
+    },
+  }));
+};
+
+// Expand into individual member markers once the user zooms in far enough.
+const buildMemberMarkers = (members) =>
+  Array.from(
+    members.reduce((groups, member) => {
+      const point = member.location_point;
+      if (!point) return groups;
+
+      const key = `${point.lat.toFixed(6)}:${point.lng.toFixed(6)}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          count: 0,
+          members: [],
+          position: point,
+        });
+      }
+
+      const group = groups.get(key);
+      group.count += 1;
+      group.members.push(member);
+      return groups;
+    }, new Map()).values()
+  ).map((bucket) => ({
+    mode: "member",
+    count: bucket.count,
+    members: bucket.members,
+    position: bucket.position,
+  }));
+
+const normalizeCityLabel = (value) =>
+  String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+const isUsableLocationPoint = (point) =>
+  Boolean(point) && !(Number(point.lat) === 0 && Number(point.lng) === 0);
+
+// Use the most specific available address component when reverse-geocoding a city.
+const extractGeocodedCity = (result) => {
+  const components = result?.address_components || [];
+  const preferredTypes = ["locality", "sublocality", "administrative_area_level_2", "administrative_area_level_1"];
+
+  for (const type of preferredTypes) {
+    const match = components.find((component) => component.types?.includes(type) && component.long_name);
+    if (match?.long_name) return match.long_name;
+  }
+
+  return "";
+};
+
 export default function MemberLocationPage() {
   const [members, setMembers] = useState([]);
+  const [totalUsersCount, setTotalUsersCount] = useState(0);
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState("");
   const [mapReady, setMapReady] = useState(false);
   const [locationSearchTerm, setLocationSearchTerm] = useState("");
+  const [cityFilter, setCityFilter] = useState("All Cities");
+  const [searchStatus, setSearchStatus] = useState("");
   const [selectedMember, setSelectedMember] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState(null);
   const mapRef = useRef(null);
   const mapNodeRef = useRef(null);
+  const geocoderRef = useRef(null);
   const markersRef = useRef([]);
   const fitOnceRef = useRef(false);
   const renderFrameRef = useRef(null);
@@ -161,6 +279,7 @@ export default function MemberLocationPage() {
     const loadData = async () => {
       try {
         const rows = [];
+        let totalCount = 0;
         let lastDoc = null;
         const pageSize = 500;
 
@@ -169,6 +288,7 @@ export default function MemberLocationPage() {
           const pageQuery = lastDoc ? query(collection(db, "users"), orderBy(documentId()), startAfter(lastDoc), limit(pageSize)) : baseQuery;
           const snapshot = await getDocs(pageQuery);
           if (cancelled) return;
+          totalCount += snapshot.docs.length;
 
           const chunk = snapshot.docs
             .map((doc) => {
@@ -194,6 +314,10 @@ export default function MemberLocationPage() {
 
           if (snapshot.docs.length < pageSize) break;
           lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        }
+
+        if (!cancelled) {
+          setTotalUsersCount(totalCount);
         }
       } catch (error) {
         console.error("Error loading members for map:", error);
@@ -233,12 +357,15 @@ export default function MemberLocationPage() {
             { featureType: "water", elementType: "geometry.fill", stylers: [{ color: "#dceeff" }] },
           ],
         });
+        geocoderRef.current = new window.google.maps.Geocoder();
         setMapLoading(false);
         setMapReady(true);
       } catch (error) {
         console.error(error);
         if (!cancelled) {
-          setMapError("Google Maps failed to load.");
+          setMapError(error?.message === "Google Maps authorization failed"
+            ? "Google Maps API authorization failed. Check the key restrictions and billing settings."
+            : "Google Maps failed to load.");
           setMapLoading(false);
         }
       }
@@ -280,34 +407,75 @@ export default function MemberLocationPage() {
     };
   }, [mapReady]);
 
-  const filteredMembers = useMemo(() => {
-    const query = locationSearchTerm.trim().toLowerCase();
-    if (!query) return members;
-
-    return members.filter((member) => {
-      const haystack = [
-        member.name,
-        member.phone,
-        member.email,
-        member.city,
-        member.state,
-        member.organization,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(query);
-    });
-  }, [members, locationSearchTerm]);
-
   const membersWithLocation = useMemo(
-    () => filteredMembers.filter((member) => member.location_point),
-    [filteredMembers]
+    () => members.filter((member) => member.location_point),
+    [members]
   );
 
+  const membersWithUsableLocation = useMemo(
+    () => membersWithLocation.filter((member) => isUsableLocationPoint(member.location_point)),
+    [membersWithLocation]
+  );
+
+  const cityOptions = useMemo(() => {
+    const values = new Map();
+
+    membersWithUsableLocation.forEach((member) => {
+      const label = String(member.city || "").trim().replace(/\s+/g, " ");
+      if (!label) return;
+      const key = normalizeCityLabel(label);
+      if (!values.has(key)) {
+        values.set(key, label);
+      }
+    });
+
+    return ["All Cities", ...Array.from(values.values()).sort((a, b) => a.localeCompare(b))];
+  }, [membersWithUsableLocation]);
+
+  const filteredMembersForMap = useMemo(() => {
+    if (cityFilter === "All Cities") {
+      return membersWithUsableLocation;
+    }
+
+    const selectedKey = normalizeCityLabel(cityFilter);
+    return membersWithUsableLocation.filter((member) => normalizeCityLabel(member.city) === selectedKey);
+  }, [cityFilter, membersWithUsableLocation]);
+
+  const totalCityCount = Math.max(cityOptions.length - 1, 0);
+  const visibleMemberCount = cityFilter === "All Cities" ? totalUsersCount : filteredMembersForMap.length;
+
+  const handleCityChange = (nextCity) => {
+    setCityFilter(nextCity);
+    setSelectedCluster(null);
+    setSelectedMember(null);
+    setSearchStatus("");
+
+    if (!mapRef.current) return;
+
+    if (nextCity === "All Cities") {
+      mapRef.current.setCenter(DEFAULT_CENTER);
+      mapRef.current.setZoom(5);
+      return;
+    }
+
+    if (!window.google?.maps || !geocoderRef.current) return;
+
+    geocoderRef.current.geocode({ address: nextCity }, (results, status) => {
+      if (status === "OK" && results?.[0]?.geometry?.location && mapRef.current) {
+        const result = results[0];
+        const map = mapRef.current;
+        if (result.geometry.viewport) {
+          map.fitBounds(result.geometry.viewport);
+        } else {
+          map.setCenter(result.geometry.location);
+          map.setZoom(9);
+        }
+      }
+    });
+  };
+
   useEffect(() => {
-    if (!mapRef.current || !window.google || !membersWithLocation.length) return;
+    if (!mapRef.current || !window.google || !filteredMembersForMap.length) return;
 
     const map = mapRef.current;
     const google = window.google;
@@ -329,34 +497,42 @@ export default function MemberLocationPage() {
       clearMarkers();
 
       const zoom = Math.max(map.getZoom() || 5, 3);
-      const clusters = buildClusters(membersWithLocation, zoom);
+      const clusters =
+        zoom < STATE_CLUSTER_ZOOM
+          ? buildStateClusters(filteredMembersForMap)
+          : zoom < MEMBER_CLUSTER_ZOOM
+            ? buildClusters(filteredMembersForMap, zoom)
+            : buildMemberMarkers(filteredMembersForMap);
       const bounds = new google.maps.LatLngBounds();
 
       clusters.forEach((cluster) => {
-        const isSingle = cluster.count === 1;
+        const isSingle = cluster.count === 1 && cluster.mode === "member";
+        const isGroupedSameSpot = cluster.mode === "member" && cluster.count > 1;
         const member = cluster.members[0];
+        const title = cluster.mode === "state"
+          ? `${cluster.label}: ${cluster.count} member${cluster.count === 1 ? "" : "s"}`
+          : isSingle
+            ? member.name
+            : isGroupedSameSpot
+              ? `${cluster.count} members at the same location`
+              : `${cluster.count} members`;
 
         const marker = new google.maps.Marker({
           position: cluster.position,
           map,
-          title: isSingle ? member.name : `${cluster.count} members`,
+          title,
           zIndex: isSingle ? 10 : 20 + cluster.count,
           icon: isSingle ? getMemberIcon() : getClusterIcon(cluster.count),
-          label: isSingle
-            ? undefined
-            : {
-                text: String(cluster.count),
-                color: "#ffffff",
-                fontSize: "12px",
-                fontWeight: "700",
-              },
+          label: undefined,
         });
 
         marker.addListener("click", () => {
-          if (!isSingle) {
+          if (cluster.mode !== "member" || cluster.count > 1) {
             setSelectedCluster(cluster);
             setSelectedMember(null);
             map.panTo(cluster.position);
+            const nextZoom = cluster.mode === "state" ? Math.min((map.getZoom() || 5) + 2, MEMBER_CLUSTER_ZOOM) : Math.min((map.getZoom() || 5) + 1, 16);
+            map.setZoom(nextZoom);
             return;
           }
 
@@ -393,15 +569,66 @@ export default function MemberLocationPage() {
       }
       clearMarkers();
     };
-  }, [membersWithLocation, mapReady]);
+  }, [filteredMembersForMap, mapReady]);
 
   useEffect(() => {
     setSelectedCluster(null);
     setSelectedMember(null);
   }, [locationSearchTerm]);
 
+  const handleSearchLocation = () => {
+    const query = locationSearchTerm.trim();
+    if (!query) {
+      setSearchStatus("");
+      setCityFilter("All Cities");
+      if (mapRef.current) {
+        mapRef.current.setCenter(DEFAULT_CENTER);
+        mapRef.current.setZoom(5);
+      }
+      return;
+    }
+
+    if (!window.google?.maps || !geocoderRef.current) {
+      setSearchStatus("Maps are still loading.");
+      return;
+    }
+
+    setSearchStatus("Searching map...");
+    geocoderRef.current.geocode({ address: query }, (results, status) => {
+      if (status === "OK" && results?.[0]?.geometry?.location && mapRef.current) {
+        const result = results[0];
+        const map = mapRef.current;
+        const geocodedCity = extractGeocodedCity(result);
+        const matchedCity = cityOptions.find(
+          (option) => option !== "All Cities" && normalizeCityLabel(option) === normalizeCityLabel(geocodedCity)
+        );
+        if (matchedCity) {
+          setCityFilter(matchedCity);
+        }
+        if (result.geometry.viewport) {
+          map.fitBounds(result.geometry.viewport);
+        } else {
+          map.setCenter(result.geometry.location);
+          map.setZoom(11);
+        }
+        setSearchStatus(`Showing ${result.formatted_address || query}`);
+        setSelectedCluster(null);
+        setSelectedMember(null);
+        return;
+      }
+
+      setSearchStatus("Place not found on map.");
+    });
+  };
+
   const clearSearch = () => {
     setLocationSearchTerm("");
+    setSearchStatus("");
+    setCityFilter("All Cities");
+    if (mapRef.current) {
+      mapRef.current.setCenter(DEFAULT_CENTER);
+      mapRef.current.setZoom(5);
+    }
   };
 
   return (
@@ -449,6 +676,34 @@ export default function MemberLocationPage() {
           gap: 10px;
           min-width: 0;
           flex: 1 1 320px;
+        }
+        .location-city-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          width: 100%;
+        }
+        .location-city-label {
+          font-size: 12px;
+          font-weight: 700;
+          color: #334155;
+        }
+        .location-city-select {
+          min-width: 180px;
+          min-height: 42px;
+          border-radius: 12px;
+          border: 1px solid #cbd5e1;
+          background: #fff;
+          color: #0f172a;
+          padding: 0 12px;
+          font-size: 14px;
+          outline: none;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        .location-city-select:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
         }
         .location-header h1 {
           margin: 0;
@@ -512,14 +767,88 @@ export default function MemberLocationPage() {
           white-space: nowrap;
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
         }
+        .location-stat-group {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .location-stat-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 9px 14px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 700;
+          white-space: nowrap;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        }
         .location-search {
           width: min(100%, 520px);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .location-search-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+        }
+        .location-search-input-wrap {
+          flex: 1 1 auto;
+          min-width: 0;
           position: relative;
+        }
+        .location-search-inline-clear {
+          flex: 0 0 auto;
+          border: 1px solid rgba(37, 99, 235, 0.18);
+          background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+          color: #1d4ed8;
+          border-radius: 999px;
+          padding: 0 14px;
+          min-height: 46px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+          white-space: nowrap;
+        }
+        .location-search-inline-clear:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+          box-shadow: none;
+          filter: grayscale(0.2);
+        }
+        .location-search-inline-search {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          min-height: 36px;
+          border-radius: 12px;
+          border: 1px solid rgba(37, 99, 235, 0.18);
+          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          color: #fff;
+          padding: 0 12px;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+          z-index: 2;
         }
         .location-search input {
           width: 100%;
           min-height: 46px;
-          padding: 12px 42px 12px 14px;
+          padding: 12px 120px 12px 14px;
           border-radius: 16px;
           border: 1px solid #cbd5e1;
           background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -531,22 +860,6 @@ export default function MemberLocationPage() {
         .location-search input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
-        }
-        .location-search button {
-          position: absolute;
-          right: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 28px;
-          height: 28px;
-          border: none;
-          border-radius: 999px;
-          background: #e2e8f0;
-          color: #334155;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
         }
         .map-legend {
           position: absolute;
@@ -657,16 +970,17 @@ export default function MemberLocationPage() {
           color: #64748b;
         }
         .member-contact-close {
-          border: none;
-          background: #eff6ff;
+          border: 1px solid rgba(37, 99, 235, 0.16);
+          background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
           color: #1d4ed8;
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           border-radius: 999px;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.14);
         }
         .member-contact-card__body {
           padding: 14px 16px 16px;
@@ -840,34 +1154,83 @@ export default function MemberLocationPage() {
               <h1>Member Location</h1>
               <p>Search a place to focus the map. Click a cluster to see the members inside it.</p>
             </div>
-            <div className="location-search">
-              <input
-                type="text"
-                value={locationSearchTerm}
-                onChange={(e) => setLocationSearchTerm(e.target.value)}
-                placeholder="Search city, state, organization, name..."
-              />
-              {locationSearchTerm ? (
-                <button type="button" onClick={clearSearch} aria-label="Clear search">
-                  <FaTimes size={12} />
-                </button>
-              ) : null}
+            <div className="location-city-row">
+              <label className="location-city-label" htmlFor="location-city-filter">
+                City
+              </label>
+              <select
+                id="location-city-filter"
+                className="location-city-select"
+                value={cityFilter}
+                onChange={(e) => handleCityChange(e.target.value)}
+              >
+                {cityOptions.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
             </div>
+            <div className="location-search">
+              <div className="location-search-wrap">
+                <div className="location-search-input-wrap">
+                  <input
+                    type="text"
+                    value={locationSearchTerm}
+                    onChange={(e) => setLocationSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSearchLocation();
+                      }
+                    }}
+                  placeholder="Search a place on the map..."
+                />
+                  <button
+                    type="button"
+                    className="location-search-inline-search"
+                    onClick={handleSearchLocation}
+                    aria-label="Search map"
+                  >
+                    <FaMapMarkedAlt size={12} />
+                    <span>Search</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="location-search-inline-clear"
+                  onClick={clearSearch}
+                  disabled={!locationSearchTerm}
+                  aria-label="Clear search"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            {searchStatus ? <p style={{ margin: 0, color: "#2563eb", fontSize: "12px" }}>{searchStatus}</p> : null}
           </div>
-          <div className="map-badge">
-            <FaMapMarkedAlt />
-            <span>{membersWithLocation.length.toLocaleString()} members</span>
+          <div className="location-stat-group">
+            <div className="location-stat-badge">
+              <FaMapMarkedAlt />
+              <span>{totalCityCount.toLocaleString()} cities</span>
+            </div>
+            <div className="map-badge">
+              <FaMapMarkedAlt />
+              <span>
+                {visibleMemberCount.toLocaleString()} members
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="location-body">
           <div ref={mapNodeRef} className="map-canvas" />
 
-          <div className="map-legend">
+          {/* <div className="map-legend">
             <div className="legend-card">
               <div className="legend-title">How to read the map</div>
               <p className="legend-text">
-                Blue pins are individual members. Blue bubbles are clustered points. Zoom in to spread the clusters apart.
+                At low zoom, the map groups members by state. Zoom in to see smaller clusters and then individual member pins.
               </p>
               <div className="legend-row">
                 <span className="legend-dot single" />
@@ -878,7 +1241,7 @@ export default function MemberLocationPage() {
                 Clustered members
               </div>
             </div>
-          </div>
+          </div> */}
 
           {selectedMember && (
             <div className="member-contact-card">
@@ -893,7 +1256,7 @@ export default function MemberLocationPage() {
                   </div>
                 </div>
                 <button type="button" className="member-contact-close" onClick={() => setSelectedMember(null)} aria-label="Close member card">
-                  <FaTimes />
+                  ×
                 </button>
               </div>
               <div className="member-contact-card__body">
@@ -935,7 +1298,12 @@ export default function MemberLocationPage() {
             <div className="cluster-details-card">
               <div className="cluster-details-header">
                 <div>
-                  <h3>{selectedCluster.count.toLocaleString()} members in cluster</h3>
+                  <h3>
+                    {selectedCluster.mode === "state" && selectedCluster.label
+                      ? `${selectedCluster.label} - `
+                      : ""}
+                    {selectedCluster.count.toLocaleString()} members
+                  </h3>
                   <p>Click a member row to inspect or use the search box to narrow the map.</p>
                 </div>
                 <button
@@ -944,7 +1312,7 @@ export default function MemberLocationPage() {
                   onClick={() => setSelectedCluster(null)}
                   aria-label="Close cluster list"
                 >
-                  <FaTimes />
+                  ×
                 </button>
               </div>
               <div className="cluster-details-list">
@@ -973,7 +1341,7 @@ export default function MemberLocationPage() {
             </div>
           )}
 
-          {locationSearchTerm && membersWithLocation.length === 0 && !mapLoading && !mapError && (
+          {locationSearchTerm && membersWithUsableLocation.length === 0 && !mapLoading && !mapError && (
             <div className="empty-results-card">
               <div>
                 <h3>No locations found</h3>
@@ -1030,3 +1398,4 @@ export default function MemberLocationPage() {
     </div>
   );
 }
+

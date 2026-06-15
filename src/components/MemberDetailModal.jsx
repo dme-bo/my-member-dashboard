@@ -1,4 +1,4 @@
-// src/components/MemberDetailModal.jsx
+﻿// src/components/MemberDetailModal.jsx
 import { useState, useEffect } from "react";
 import {
   collection,
@@ -13,9 +13,45 @@ import {
 import { db } from "../firebase";
 import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberOrganization, parseMemberDate } from "../utils/memberFields";
 
+const RATING_TYPES = {
+  workRelated: "work_related",
+  boEmployee: "bo_employee",
+  referrer: "referrer",
+  notRated: "not_rated",
+};
+
+const BO_CHECKLIST_ITEMS = [
+  "Clear communication",
+  "On-time follow-up",
+  "Requirement understanding",
+  "Professional behaviour",
+  "Ownership and support",
+];
+
+const createEmptyBoChecklist = () =>
+  BO_CHECKLIST_ITEMS.reduce((acc, item) => {
+    acc[item] = false;
+    return acc;
+  }, {});
+
+const getRatingTypeLabel = (ratingType) => {
+  switch (ratingType) {
+    case RATING_TYPES.workRelated:
+      return "Work Related";
+    case RATING_TYPES.boEmployee:
+      return "BO Employee";
+    case RATING_TYPES.referrer:
+      return "Referrer";
+    default:
+      return "Not Rated Yet";
+  }
+};
+
 export default function MemberDetailModal({ member, onClose }) {
   const [activeTab, setActiveTab] = useState("personal");
   const [newNotesList, setNewNotesList] = useState([]);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingDraft, setRatingDraft] = useState(null);
   const [savedNotes, setSavedNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -50,26 +86,106 @@ export default function MemberDetailModal({ member, onClose }) {
       4: "Good - Proactive & Professional",
       5: "Excellent - Highly recommended",
     };
+    return labels[stars] || "Not rated yet";
   };
 
   const renderStars = () => {
     return (
-      <div className="star-rating" title={getRatingLabel(rating)}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: "10px",
+          padding: "8px 12px",
+          borderRadius: "14px",
+          backgroundColor: "rgba(255,255,255,0.14)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.14)",
+          flexWrap: "wrap",
+        }}
+        title={getRatingLabel(rating)}
+      >
+        <span style={{ fontSize: "11px", fontWeight: "700", letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(255,255,255,0.95)" }}>
+          Rating
+        </span>
         {[...Array(5)].map((_, i) => (
           <span
             key={i}
-            className="star"
+            aria-hidden="true"
             style={{
-              color: i < rating ? "#f59e0b" : "#e5e7eb",
+              color: i < rating ? "#fbbf24" : "rgba(255,255,255,0.35)",
               fontSize: "20px",
+              lineHeight: 1,
             }}
           >
+            ★
           </span>
         ))}
-        <span style={{ marginLeft: "8px", fontSize: "14px", fontWeight: "500" }}>
+        <span style={{ fontSize: "12px", fontWeight: "600", opacity: 0.95, color: "rgba(255,255,255,0.95)" }}>
+          {rating ? `${rating}/5` : "No rating yet"}
         </span>
       </div>
     );
+  };
+
+  const renderRatingStars = (stars, size = 18) => (
+    <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+      {[...Array(5)].map((_, index) => (
+        <span
+          key={index}
+          aria-hidden="true"
+          style={{
+            color: index < stars ? "#f59e0b" : "#d1d5db",
+            fontSize: `${size}px`,
+            lineHeight: 1,
+          }}
+        >
+          ★
+        </span>
+      ))}
+    </div>
+  );
+
+  const createNewNote = () => ({
+    id: Date.now() + Math.random(),
+    contactPerson: fullName,
+    notes: "",
+    nextAction: "",
+    followUpDate: "",
+  });
+
+  const createNewRating = () => ({
+    id: Date.now() + Math.random(),
+    contactPerson: fullName,
+    ratingType: RATING_TYPES.workRelated,
+    workRating: 0,
+    boChecklist: createEmptyBoChecklist(),
+    boRemarks: "",
+    referrerRating: 0,
+    referrerRemarks: "",
+  });
+
+  const hasBoChecklistSelection = (boChecklist = {}) =>
+    BO_CHECKLIST_ITEMS.some((item) => Boolean(boChecklist?.[item]));
+
+  const getNoteRatingSummary = (note) => {
+    const ratingType = note.ratingType || RATING_TYPES.notRated;
+
+    if (ratingType === RATING_TYPES.workRelated) {
+      return note.workRating ? `${note.workRating}/5` : "Work related";
+    }
+
+    if (ratingType === RATING_TYPES.boEmployee) {
+      const selectedCount = BO_CHECKLIST_ITEMS.filter((item) => note.boChecklist?.[item]).length;
+      return selectedCount ? `${selectedCount}/5 checklist` : "BO employee";
+    }
+
+    if (ratingType === RATING_TYPES.referrer) {
+      return note.referrerRating ? `${note.referrerRating}/5` : "Referrer";
+    }
+
+    return "Not rated yet";
   };
 
   // Helper: Format date to "27 Dec 2025"
@@ -100,6 +216,85 @@ export default function MemberDetailModal({ member, onClose }) {
     return value ? String(value) : "-";
   };
 
+  const normalizeJourneyPhone = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (!digits) return "";
+    return digits.startsWith("91") && digits.length > 10 ? digits.slice(2) : digits;
+  };
+
+  const splitProjects = (value) =>
+    String(value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const uniquePhoneCandidates = (value) => {
+    const normalized = normalizeJourneyPhone(value);
+    if (!normalized) return [];
+
+    const candidates = new Set();
+    candidates.add(normalized);
+    candidates.add(`+91${normalized}`);
+    candidates.add(`91${normalized}`);
+    candidates.add(`0${normalized}`);
+
+    const rawDigits = String(value || "").replace(/\D/g, "");
+    if (rawDigits) {
+      candidates.add(rawDigits);
+      if (rawDigits.startsWith("91") && rawDigits.length > 10) {
+        candidates.add(rawDigits.slice(2));
+      }
+    }
+
+    return Array.from(candidates).filter(Boolean);
+  };
+
+  const matchesJourneyPhone = (recordValue, targetDigits) =>
+    normalizeJourneyPhone(recordValue) === targetDigits;
+
+  const findMatchingDocByPhone = async (collectionNames, fieldNames) => {
+    const targetDigits = normalizeJourneyPhone(phoneNumber);
+    if (!targetDigits) return null;
+
+    const names = Array.isArray(collectionNames) ? collectionNames : [collectionNames];
+    const fields = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+    const phoneCandidates = uniquePhoneCandidates(phoneNumber);
+
+    for (const collectionName of names) {
+      for (const fieldName of fields) {
+        for (const candidate of phoneCandidates) {
+          const ref = collection(db, collectionName);
+          const snapshot = await getDocs(query(ref, where(fieldName, "==", candidate)));
+          if (!snapshot.empty) return snapshot.docs[0].data();
+        }
+      }
+    }
+
+    for (const collectionName of names) {
+      const fallbackSnapshot = await getDocs(collection(db, collectionName));
+      const matchedDoc = fallbackSnapshot.docs.find((snapDoc) => {
+        const data = snapDoc.data() || {};
+        return fields.some((fieldName) => {
+          const fieldVariants = [
+            fieldName,
+            fieldName.toLowerCase(),
+            fieldName.toUpperCase(),
+            fieldName.replace(/_/g, ""),
+          ];
+
+          return fieldVariants.some((fieldKey) => {
+            const recordValue = data[fieldKey];
+            return recordValue !== undefined && matchesJourneyPhone(recordValue, targetDigits);
+          });
+        });
+      });
+
+      if (matchedDoc) return matchedDoc.data();
+    }
+
+    return null;
+  };
+
   // Toast function
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -122,9 +317,9 @@ export default function MemberDetailModal({ member, onClose }) {
         const loaded = snapshot.docs.map((doc) => {
           const data = doc.data();
 
-          const followUpDateStr = data.followUpDate
-            ? formatDateDDMMMYYYY(data.followUpDate)
-            : "-";
+            const followUpDateStr = data.followUpDate
+              ? formatDateDDMMMYYYY(data.followUpDate)
+              : "-";
 
           const interactionDate = data.createdAt
             ? data.createdAt.toDate().toLocaleDateString("en-IN", {
@@ -141,6 +336,12 @@ export default function MemberDetailModal({ member, onClose }) {
             notes: data.notes || "-",
             nextAction: data.nextAction || "-",
             followUpDate: followUpDateStr,
+            ratingType: data.ratingType || RATING_TYPES.notRated,
+            workRating: Number(data.workRating) || 0,
+            boChecklist: data.boChecklist || createEmptyBoChecklist(),
+            boRemarks: data.boRemarks || "-",
+            referrerRating: Number(data.referrerRating) || 0,
+            referrerRemarks: data.referrerRemarks || "-",
           };
         });
 
@@ -166,26 +367,46 @@ export default function MemberDetailModal({ member, onClose }) {
     const checkEmploymentStatus = async () => {
       setEmploymentLoading(true);
       try {
-        // 1. Check tcsusers first
-        const tcsRef = collection(db, "tcsusersmaster");
-        const tcsQuery = query(tcsRef, where("contact_number", "==", phoneNumber));
-        const tcsSnapshot = await getDocs(tcsQuery);
-
-        if (!tcsSnapshot.empty) {
+        const tcsData = await findMatchingDocByPhone("tcsusersmaster", [
+          "contact_number",
+          "phone_number",
+          "phone",
+          "mobile",
+          "mobile_number",
+        ]);
+        if (tcsData) {
           setCurrentEmployment("TCS");
-          setEmploymentLoading(false);
           return;
         }
 
-        // 2. Check projectsusermaster
-        const projectsRef = collection(db, "projectsusersmaster");
-        const projectsQuery = query(projectsRef, where("phone_number", "==", phoneNumber));
-        const projectsSnapshot = await getDocs(projectsQuery);
-
-        if (!projectsSnapshot.empty) {
-          const docData = projectsSnapshot.docs[0].data();
-          const projectName = docData.projects || "Unknown Project";
-          setCurrentEmployment({ name: projectName });
+        const projectData = await findMatchingDocByPhone(
+          ["projectusersmaster", "projectsusersmaster"],
+          [
+            "phone_number",
+            "phone",
+            "mobile",
+            "contact_number",
+            "mobile_number",
+            "Phone Number",
+            "Mobile Number",
+          ]
+        );
+        if (projectData) {
+          const docData = projectData;
+          const projectNames = splitProjects(
+            docData.projects ||
+              docData.Projects ||
+              docData.project ||
+              docData.Project ||
+              docData.current_project ||
+              docData.Current_Project ||
+              docData.currentProject ||
+              docData.CurrentProject
+          );
+          setCurrentEmployment({
+            name: projectNames[0] || "Unknown Project",
+            projects: projectNames,
+          });
         } else {
           setCurrentEmployment(null);
         }
@@ -202,16 +423,21 @@ export default function MemberDetailModal({ member, onClose }) {
   }, [activeTab, phoneNumber]);
 
   const addNewNote = () => {
-    setNewNotesList([
-      ...newNotesList,
-      {
-        id: Date.now() + Math.random(),
-        contactPerson: fullName,
-        notes: "",
-        nextAction: "",
-        followUpDate: "",
-      },
-    ]);
+    setNewNotesList([...newNotesList, createNewNote()]);
+  };
+
+  const openRatingModal = () => {
+    setRatingDraft(createNewRating());
+    setShowRatingModal(true);
+  };
+
+  const closeRatingModal = () => {
+    setShowRatingModal(false);
+    setRatingDraft(null);
+  };
+
+  const updateRatingDraft = (field, value) => {
+    setRatingDraft((current) => ({ ...current, [field]: value }));
   };
 
   const updateNewNote = (id, field, value) => {
@@ -226,10 +452,43 @@ export default function MemberDetailModal({ member, onClose }) {
     setNewNotesList(newNotesList.filter((note) => note.id !== id));
   };
 
+  const refreshInteractionHistory = async (interactionsRef) => {
+    const snapshot = await getDocs(query(interactionsRef, orderBy("createdAt", "desc")));
+    const updated = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      const followUpDateStr = data.followUpDate
+        ? formatDateDDMMMYYYY(data.followUpDate)
+        : "-";
+
+      const interactionDate = data.createdAt
+        ? data.createdAt.toDate().toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "Unknown";
+
+      return {
+        id: doc.id,
+        date: interactionDate,
+        contactPerson: data.contactPerson || fullName,
+        notes: data.notes || "-",
+        nextAction: data.nextAction || "-",
+        followUpDate: followUpDateStr,
+        entryType: data.entryType || "note",
+        ratingType: data.ratingType || RATING_TYPES.notRated,
+        workRating: Number(data.workRating) || 0,
+        boChecklist: data.boChecklist || createEmptyBoChecklist(),
+        boRemarks: data.boRemarks || "-",
+        referrerRating: Number(data.referrerRating) || 0,
+        referrerRemarks: data.referrerRemarks || "-",
+      };
+    });
+    setSavedNotes(updated);
+  };
+
   const handleSaveAllNotes = async () => {
-    const validNotes = newNotesList.filter(
-      (note) => note.notes.trim() || note.nextAction.trim() || note.followUpDate
-    );
+    const validNotes = newNotesList.filter((note) => note.notes.trim() || note.nextAction.trim() || note.followUpDate);
 
     if (validNotes.length === 0) {
       showToast("No notes to save.", "error");
@@ -242,6 +501,7 @@ export default function MemberDetailModal({ member, onClose }) {
 
       const savePromises = validNotes.map((note) =>
         addDoc(interactionsRef, {
+          entryType: "note",
           contactPerson: note.contactPerson,
           notes: note.notes.trim(),
           nextAction: note.nextAction.trim(),
@@ -258,35 +518,55 @@ export default function MemberDetailModal({ member, onClose }) {
       showToast("All notes saved successfully!", "success");
       setNewNotesList([]);
 
-      // Refresh history
-      const snapshot = await getDocs(query(interactionsRef, orderBy("createdAt", "desc")));
-      const updated = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        const followUpDateStr = data.followUpDate
-          ? formatDateDDMMMYYYY(data.followUpDate)
-          : "-";
-
-        const interactionDate = data.createdAt
-          ? data.createdAt.toDate().toLocaleDateString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })
-          : "Unknown";
-
-        return {
-          id: doc.id,
-          date: interactionDate,
-          contactPerson: data.contactPerson || fullName,
-          notes: data.notes || "-",
-          nextAction: data.nextAction || "-",
-          followUpDate: followUpDateStr,
-        };
-      });
-      setSavedNotes(updated);
+      await refreshInteractionHistory(interactionsRef);
     } catch (error) {
       console.error("Error saving notes:", error);
       showToast("Failed to save notes.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveRating = async () => {
+    if (!ratingDraft) return;
+
+    const ratingType = ratingDraft.ratingType || RATING_TYPES.notRated;
+    const hasWorkRating = ratingType === RATING_TYPES.workRelated && Number(ratingDraft.workRating) > 0;
+    const hasBoRating = ratingType === RATING_TYPES.boEmployee && hasBoChecklistSelection(ratingDraft.boChecklist);
+    const hasReferrerRating = ratingType === RATING_TYPES.referrer && Number(ratingDraft.referrerRating) > 0;
+    const hasRemarks = String(ratingDraft.boRemarks || "").trim() || String(ratingDraft.referrerRemarks || "").trim();
+
+    if (!hasWorkRating && !hasBoRating && !hasReferrerRating && !hasRemarks) {
+      showToast("Please add a rating or remarks before saving.", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const interactionsRef = collection(db, "users", userId, "interactions");
+
+      await addDoc(interactionsRef, {
+        entryType: "rating",
+        contactPerson: ratingDraft.contactPerson,
+        notes: "-",
+        nextAction: "-",
+        followUpDate: null,
+        ratingType,
+        workRating: Number(ratingDraft.workRating) || 0,
+        boChecklist: ratingDraft.boChecklist || createEmptyBoChecklist(),
+        boRemarks: String(ratingDraft.boRemarks || "").trim() || "-",
+        referrerRating: Number(ratingDraft.referrerRating) || 0,
+        referrerRemarks: String(ratingDraft.referrerRemarks || "").trim() || "-",
+        createdAt: serverTimestamp(),
+        createdBy: "admin",
+      });
+
+      showToast("Rating saved successfully!", "success");
+      closeRatingModal();
+      await refreshInteractionHistory(interactionsRef);
+    } catch (error) {
+      console.error("Error saving rating:", error);
+      showToast("Failed to save rating.", "error");
     } finally {
       setLoading(false);
     }
@@ -340,13 +620,13 @@ export default function MemberDetailModal({ member, onClose }) {
             <div style={{ flex: 1 }}>
               <h2>{fullName}</h2>
               <p style={{ margin: "5px 0", opacity: 0.9, fontSize: "15px" }}>
-                {phoneNumber || "N/A"} • {normalizedMember.email || "N/A"}
+                {phoneNumber || "N/A"}{normalizedMember.email || "N/A"}
               </p>
             </div>
 
-            <div style={{ marginRight: "60px", marginTop: "8px" }}>
+            <div style={{ marginRight: "16px", marginTop: "2px" }}>
               {renderStars()}
-              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px", textAlign: "right" }}>
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.92)", marginTop: "4px", textAlign: "right" }}>
                 {getRatingLabel(rating)}
               </div>
             </div>
@@ -450,15 +730,23 @@ export default function MemberDetailModal({ member, onClose }) {
                     </p>
                   ) : !phoneNumber ? (
                     <p style={{ color: "#dc2626" }}>
-                      Phone number not available – cannot verify placement.
+                      Phone number not available â€“ cannot verify placement.
                     </p>
                   ) : currentEmployment === "TCS" ? (
                     <div style={{ fontSize: "22px", fontWeight: "700", color: "#0d9488" }}>
                       Currently working in TCS
                     </div>
                   ) : currentEmployment && typeof currentEmployment === "object" ? (
-                    <div style={{ fontSize: "22px", fontWeight: "700", color: "#0d9488" }}>
-                      Currently working in {currentEmployment.name}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+                      <div style={{ fontSize: "22px", fontWeight: "700", color: "#0d9488" }}>
+                        Currently working in {currentEmployment.name}
+                      </div>
+                      <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f766e" }}>
+                        Works in {currentEmployment.projects?.length || 0} project{(currentEmployment.projects?.length || 0) === 1 ? "" : "s"}
+                      </div>
+                      <div style={{ fontSize: "16px", fontWeight: "600", color: "#0f766e" }}>
+                        Projects: {formatCommaSeparatedValue(currentEmployment.projects)}
+                      </div>
                     </div>
                   ) : (
                     <p style={{ color: "#6b7280", fontStyle: "italic", fontSize: "18px" }}>
@@ -518,24 +806,44 @@ export default function MemberDetailModal({ member, onClose }) {
                     <h3 style={{ margin: 0, color: "#1f2937", fontSize: "18px" }}>
                       Add New Interaction Notes
                     </h3>
-                    <button
-                      onClick={addNewNote}
-                      disabled={loading}
-                      style={{
-                        padding: "10px 20px",
-                        backgroundColor: "#2563eb",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "6px",
-                        fontWeight: "500",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <span style={{ fontSize: "18px" }}>+</span> ADD NOTE
-                    </button>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={addNewNote}
+                        disabled={loading}
+                        style={{
+                          padding: "10px 20px",
+                          backgroundColor: "#2563eb",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          fontWeight: "500",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span style={{ fontSize: "18px" }}>+</span> ADD NOTE
+                      </button>
+                      <button
+                        onClick={openRatingModal}
+                        disabled={loading}
+                        style={{
+                          padding: "10px 20px",
+                          backgroundColor: "#0f766e",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          fontWeight: "500",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span style={{ fontSize: "18px" }}>?</span> ADD RATING
+                      </button>
+                    </div>
                   </div>
 
                   {newNotesList.length === 0 ? (
@@ -555,8 +863,8 @@ export default function MemberDetailModal({ member, onClose }) {
                             backgroundColor: "#f9fafb",
                           }}
                         >
-                          <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
-                            <div style={{ flex: 1 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "12px", alignItems: "start", marginBottom: "14px" }}>
+                            <div>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Member Name</label>
                               <input
                                 type="text"
@@ -573,8 +881,10 @@ export default function MemberDetailModal({ member, onClose }) {
                                 }}
                               />
                             </div>
+                          </div>
 
-                            <div style={{ flex: 2 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "12px", alignItems: "start" }}>
+                            <div>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Notes</label>
                               <textarea
                                 value={note.notes}
@@ -591,7 +901,7 @@ export default function MemberDetailModal({ member, onClose }) {
                               />
                             </div>
 
-                            <div style={{ flex: 1 }}>
+                            <div>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Next Action</label>
                               <input
                                 type="text"
@@ -607,7 +917,7 @@ export default function MemberDetailModal({ member, onClose }) {
                               />
                             </div>
 
-                            <div style={{ flex: 1 }}>
+                            <div>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Follow-up Date</label>
                               <input
                                 type="date"
@@ -626,24 +936,170 @@ export default function MemberDetailModal({ member, onClose }) {
                                 </div>
                               )}
                             </div>
+                          </div>
 
-                            <div style={{ alignSelf: "flex-end" }}>
-                              <button
-                                onClick={() => deleteNewNote(note.id)}
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  padding: "8px",
-                                  color: "#ef4444",
-                                }}
-                                title="Delete"
-                              >
-                                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                                  <path d="M6 4V2a2 2 0 012-2h4a2 2 0 012 2v2h5a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h5zm2 0h4V2H8v2zm1 4a1 1 0 012 0v7a1 1 0 01-2 0V8zm4 0a1 1 0 012 0v7a1 1 0 01-2 0V8z" />
-                                </svg>
-                              </button>
+                          {false && (
+                            <div style={{ marginTop: "16px", padding: "16px", backgroundColor: "#ffffff", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                                <div>
+                                  <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "8px" }}>Work Related Rating</div>
+                                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => updateNewNote(note.id, "workRating", star)}
+                                        style={{
+                                          border: "none",
+                                          background: "transparent",
+                                          cursor: "pointer",
+                                          padding: 0,
+                                          lineHeight: 1,
+                                        }}
+                                        title={`${star} star${star > 1 ? "s" : ""}`}
+                                      >
+                                        <span
+                                          aria-hidden="true"
+                                          style={{
+                                            color: star <= Number(note.workRating) ? "#f59e0b" : "#d1d5db",
+                                            fontSize: "22px",
+                                          }}
+                                        >
+                                          ★
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div style={{ minWidth: "140px", textAlign: "right", color: "#6b7280", fontSize: "13px" }}>
+                                  Selected: {note.workRating ? `${note.workRating}/5` : "Not selected"}
+                                </div>
+                              </div>
                             </div>
+                          )}
+
+                          {false && (
+                            <div style={{ marginTop: "16px", padding: "16px", backgroundColor: "#ffffff", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+                              <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "10px", fontWeight: "600" }}>
+                                BO Employee Checklist
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+                                {BO_CHECKLIST_ITEMS.map((item) => (
+                                  <label
+                                    key={item}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                      padding: "10px 12px",
+                                      border: "1px solid #e5e7eb",
+                                      borderRadius: "8px",
+                                      backgroundColor: note.boChecklist?.[item] ? "#ecfeff" : "#f9fafb",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(note.boChecklist?.[item])}
+                                      onChange={(e) =>
+                                        updateNewNote(note.id, "boChecklist", {
+                                          ...note.boChecklist,
+                                          [item]: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    <span style={{ fontSize: "14px", color: "#374151" }}>{item}</span>
+                                  </label>
+                                ))}
+                              </div>
+                              <div style={{ marginTop: "14px" }}>
+                                <label style={{ fontSize: "13px", color: "#6b7280" }}>BO Remarks</label>
+                                <textarea
+                                  value={note.boRemarks}
+                                  onChange={(e) => updateNewNote(note.id, "boRemarks", e.target.value)}
+                                  placeholder="Add remarks for BO employee rating..."
+                                  rows="3"
+                                  style={{
+                                    width: "100%",
+                                    padding: "10px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #d1d5db",
+                                    resize: "vertical",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {false && (
+                            <div style={{ marginTop: "16px", padding: "16px", backgroundColor: "#ffffff", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+                              <div style={{ marginBottom: "10px" }}>
+                                <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "8px" }}>Referrer Rating</div>
+                                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      onClick={() => updateNewNote(note.id, "referrerRating", star)}
+                                      style={{
+                                        border: "none",
+                                        background: "transparent",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                        lineHeight: 1,
+                                      }}
+                                      title={`${star} star${star > 1 ? "s" : ""}`}
+                                    >
+                                      <span
+                                        aria-hidden="true"
+                                        style={{
+                                          color: star <= Number(note.referrerRating) ? "#f59e0b" : "#d1d5db",
+                                          fontSize: "22px",
+                                        }}
+                                      >
+                                        ★
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Remarks</label>
+                                <textarea
+                                  value={note.referrerRemarks}
+                                  onChange={(e) => updateNewNote(note.id, "referrerRemarks", e.target.value)}
+                                  placeholder="Add remarks for the referrer..."
+                                  rows="3"
+                                  style={{
+                                    width: "100%",
+                                    padding: "10px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #d1d5db",
+                                    resize: "vertical",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px" }}>
+                            <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                              {getRatingTypeLabel(note.ratingType)}{getNoteRatingSummary(note)}
+                            </div>
+                            <button
+                              onClick={() => deleteNewNote(note.id)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: "8px",
+                                color: "#ef4444",
+                              }}
+                              title="Delete"
+                            >
+                              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M6 4V2a2 2 0 012-2h4a2 2 0 012 2v2h5a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h5zm2 0h4V2H8v2zm1 4a1 1 0 012 0v7a1 1 0 01-2 0V8zm4 0a1 1 0 012 0v7a1 1 0 01-2 0V8z" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -670,6 +1126,294 @@ export default function MemberDetailModal({ member, onClose }) {
                   )}
                 </div>
 
+                {showRatingModal && ratingDraft && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      inset: 0,
+                      backgroundColor: "rgba(15, 23, 42, 0.72)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      zIndex: 10050,
+                      padding: "20px",
+                    }}
+                    onClick={closeRatingModal}
+                  >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        width: "min(920px, 100%)",
+                        maxHeight: "90vh",
+                        overflowY: "auto",
+                        backgroundColor: "#ffffff",
+                        borderRadius: "18px",
+                        boxShadow: "0 30px 80px rgba(0, 0, 0, 0.28)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "18px 22px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
+                          color: "white",
+                          borderTopLeftRadius: "18px",
+                          borderTopRightRadius: "18px",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.9 }}>
+                            Add Rating
+                          </div>
+                          <h3 style={{ margin: "4px 0 0", fontSize: "22px" }}>{ratingDraft.contactPerson}</h3>
+                        </div>
+                        <button
+                          onClick={closeRatingModal}
+                          style={{
+                            background: "rgba(255,255,255,0.18)",
+                            border: "1px solid rgba(255,255,255,0.25)",
+                            color: "white",
+                            width: "38px",
+                            height: "38px",
+                            borderRadius: "999px",
+                            fontSize: "24px",
+                            cursor: "pointer",
+                          }}
+                          title="Close"
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div style={{ padding: "22px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "16px" }}>
+                          <div>
+                            <label style={{ fontSize: "13px", color: "#6b7280" }}>Member Name</label>
+                            <input
+                              type="text"
+                              value={ratingDraft.contactPerson}
+                              readOnly
+                              style={{
+                                width: "100%",
+                                padding: "11px 12px",
+                                borderRadius: "8px",
+                                border: "1px solid #bfdbfe",
+                                backgroundColor: "#eff6ff",
+                                color: "#1d4ed8",
+                                fontWeight: "600",
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: "13px", color: "#6b7280" }}>Rating Type</label>
+                            <select
+                              value={ratingDraft.ratingType}
+                              onChange={(e) => updateRatingDraft("ratingType", e.target.value)}
+                              style={{
+                                width: "100%",
+                                padding: "11px 12px",
+                                borderRadius: "8px",
+                                border: "1px solid #cbd5e1",
+                                backgroundColor: "#ffffff",
+                                color: "black",
+                              }}
+                            >
+                              <option value={RATING_TYPES.workRelated}>Work Related</option>
+                              <option value={RATING_TYPES.boEmployee}>BO Employee</option>
+                              <option value={RATING_TYPES.referrer}>Referrer</option>
+                              {/* <option value={RATING_TYPES.notRated}>Not Rated Yet</option> */}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: "18px", padding: "18px", borderRadius: "14px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          {ratingDraft.ratingType === RATING_TYPES.workRelated && (
+                            <div>
+                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                                Work Related Rating
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    key={star}
+                                    type="button"
+                                    onClick={() => updateRatingDraft("workRating", star)}
+                                    style={{
+                                      border: "1px solid #e2e8f0",
+                                      background: star <= Number(ratingDraft.workRating) ? "#fff7ed" : "#f8fafc",
+                                      borderRadius: "10px",
+                                      padding: "10px 14px",
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                      boxShadow: star <= Number(ratingDraft.workRating) ? "0 8px 18px rgba(245,158,11,0.12)" : "none",
+                                    }}
+                                  >
+                                     <span style={{ color: star <= Number(ratingDraft.workRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
+                                    <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
+                                  </button>
+                                ))}
+                              </div>
+                              <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
+                                Selected: {ratingDraft.workRating ? `${ratingDraft.workRating}/5` : "Not selected"}
+                              </div>
+                            </div>
+                          )}
+
+                          {ratingDraft.ratingType === RATING_TYPES.boEmployee && (
+                            <div>
+                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                                BO Employee Checklist
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+                                {BO_CHECKLIST_ITEMS.map((item) => (
+                                  <label
+                                    key={item}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                      padding: "12px",
+                                      borderRadius: "10px",
+                                      border: "1px solid #e2e8f0",
+                                      backgroundColor: ratingDraft.boChecklist?.[item] ? "#ecfeff" : "white",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(ratingDraft.boChecklist?.[item])}
+                                      onChange={(e) =>
+                                        updateRatingDraft("boChecklist", {
+                                          ...ratingDraft.boChecklist,
+                                          [item]: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    <span style={{ color: "#0f172a", fontSize: "14px" }}>{item}</span>
+                                  </label>
+                                ))}
+                              </div>
+                              <div style={{ marginTop: "14px" }}>
+                                <label style={{ fontSize: "13px", color: "#6b7280" }}>BO Remarks</label>
+                                <textarea
+                                  value={ratingDraft.boRemarks}
+                                  onChange={(e) => updateRatingDraft("boRemarks", e.target.value)}
+                                  placeholder="Add remarks for BO employee rating..."
+                                  rows="3"
+                                  style={{
+                                    width: "100%",
+                                    padding: "12px",
+                                    borderRadius: "8px",
+                                    border: "1px solid #cbd5e1",
+                                    resize: "vertical",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {ratingDraft.ratingType === RATING_TYPES.referrer && (
+                            <div>
+                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                                Referrer Rating
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    key={star}
+                                    type="button"
+                                    onClick={() => updateRatingDraft("referrerRating", star)}
+                                    style={{
+                                      border: "1px solid #e2e8f0",
+                                      background: star <= Number(ratingDraft.referrerRating) ? "#fff7ed" : "#f8fafc",
+                                      borderRadius: "10px",
+                                      padding: "10px 14px",
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                    }}
+                                  >
+                                     <span style={{ color: star <= Number(ratingDraft.referrerRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
+                                    <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
+                                  </button>
+                                ))}
+                              </div>
+                              <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
+                                Selected: {ratingDraft.referrerRating ? `${ratingDraft.referrerRating}/5` : "Not selected"}
+                              </div>
+                              <div style={{ marginTop: "14px" }}>
+                                <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Remarks</label>
+                                <textarea
+                                  value={ratingDraft.referrerRemarks}
+                                  onChange={(e) => updateRatingDraft("referrerRemarks", e.target.value)}
+                                  placeholder="Add remarks for the referrer..."
+                                  rows="3"
+                                  style={{
+                                    width: "100%",
+                                    padding: "12px",
+                                    borderRadius: "8px",
+                                    border: "1px solid #cbd5e1",
+                                    resize: "vertical",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {ratingDraft.ratingType === RATING_TYPES.notRated && (
+                            <div>
+                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                                Not Rated Yet
+                              </div>
+                              <p style={{ color: "#475569", margin: 0 }}>
+                                Use this when you want to log that the member is not rated yet. Add a remark below if needed.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
+                          <button
+                            onClick={closeRatingModal}
+                            style={{
+                              padding: "11px 18px",
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                              backgroundColor: "#ffffff",
+                              color: "#374151",
+                              cursor: "pointer",
+                              fontWeight: "600",
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveRating}
+                            disabled={loading}
+                            style={{
+                              padding: "11px 18px",
+                              borderRadius: "8px",
+                              border: "none",
+                              backgroundColor: "#0f766e",
+                              color: "white",
+                              cursor: loading ? "not-allowed" : "pointer",
+                              fontWeight: "700",
+                              opacity: loading ? 0.75 : 1,
+                            }}
+                          >
+                            {loading ? "Saving..." : "SAVE RATING"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* History Table */}
                 <div>
                   <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
@@ -691,6 +1435,7 @@ export default function MemberDetailModal({ member, onClose }) {
                           <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rating</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Next Action</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Follow-up Date</th>
@@ -709,6 +1454,31 @@ export default function MemberDetailModal({ member, onClose }) {
                               </td>
                               <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
                                 {note.contactPerson}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "190px" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#374151" }}>
+                                    {getRatingTypeLabel(note.ratingType)}
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                    {note.ratingType === RATING_TYPES.workRelated && renderRatingStars(Number(note.workRating), 16)}
+                                    {note.ratingType === RATING_TYPES.referrer && renderRatingStars(Number(note.referrerRating), 16)}
+                                    {note.ratingType === RATING_TYPES.boEmployee && (
+                                      <span style={{ fontSize: "13px", color: "#1f2937", fontWeight: "600" }}>
+                                        {BO_CHECKLIST_ITEMS.filter((item) => note.boChecklist?.[item]).length}/5 checklist
+                                      </span>
+                                    )}
+                                    {note.ratingType === RATING_TYPES.notRated && (
+                                      <span style={{ fontSize: "13px", color: "#6b7280" }}>Not rated yet</span>
+                                    )}
+                                  </div>
+                                  {note.ratingType === RATING_TYPES.boEmployee && (
+                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.boRemarks}</div>
+                                  )}
+                                  {note.ratingType === RATING_TYPES.referrer && (
+                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.referrerRemarks}</div>
+                                  )}
+                                </div>
                               </td>
                               <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
                                 {note.notes}
@@ -741,3 +1511,5 @@ export default function MemberDetailModal({ member, onClose }) {
     </>
   );
 }
+
+

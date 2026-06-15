@@ -76,7 +76,7 @@ export default function PartnerAgentListPage() {
     fetchAgents();
   }, []);
 
-  // Dynamic Filter Options
+  // Rebuild filter option lists from the latest agent dataset.
   const { cityOptions, districtOptions, stateOptions, ratingOptions } = useMemo(() => {
     const cities = new Set();
     const districts = new Set();
@@ -150,7 +150,7 @@ export default function PartnerAgentListPage() {
     ? filteredAgents
     : filteredAgents.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  // Load Interaction Notes
+  // Load the selected agent's interaction history when the interaction tab is open.
   useEffect(() => {
     if (!selectedAgent || activeTab !== "interaction") return;
 
@@ -214,6 +214,7 @@ export default function PartnerAgentListPage() {
     setNewNotesList(prev => prev.filter(n => n.id !== id));
   };
 
+  // Save only non-empty interaction rows to Firestore, then refresh the table.
   const handleSaveAllNotes = async () => {
     const validNotes = newNotesList.filter(n => n.notes.trim() || n.nextAction.trim() || n.followUpDate);
     if (validNotes.length === 0) {

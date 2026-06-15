@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import Select, { components } from 'react-select';
 import {
   Page,
@@ -15,6 +15,7 @@ import { collection, getDocs, query, where, doc, getDoc, updateDoc } from 'fireb
 import { db } from '../firebase';
 
 // ── PDF Styles ─────────────────────────────────────────────────────────────
+// Centralized PDF styles keep the newsletter layout consistent across pages.
 const styles = StyleSheet.create({
   page: {
     padding: 40,
@@ -88,6 +89,7 @@ const styles = StyleSheet.create({
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+// Fetch helpers normalize remote assets and Firestore content before PDF generation.
 const getBase64FromUrl = async (url) => {
   if (!url) return null;
   try {
@@ -145,6 +147,7 @@ const formatNewsletterDate = () => {
 };
 
 // ── Custom react-select components ─────────────────────────────────────────
+// These custom react-select components add checkbox-style multi-select behavior.
 const CustomCheckboxOption = (props) => (
   <components.Option {...props}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', cursor: 'pointer' }}>
@@ -226,6 +229,7 @@ const customSelectStyles = {
 };
 
 // ── PDF Document Component (full structure) ────────────────────────────────
+// The document component assembles jobs, projects, partner stats, and config content.
 const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
   const {
     companyName = 'Brisk Olive Business Solutions Pvt Ltd',
