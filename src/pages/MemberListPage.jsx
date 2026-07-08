@@ -1131,14 +1131,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
           {/* Pagination footer — always visible */}
           <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-            <div style={{ fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
+            {/* <div style={{ fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
               {totalItems.toLocaleString()} member{totalItems !== 1 ? "s" : ""} found
               {totalItems > 0 && (
                 <span style={{ marginLeft: "8px", fontWeight: 400 }}>
                   (showing {pageStart + 1}–{Math.min(pageStart + rowsPerPage, totalItems).toLocaleString()})
                 </span>
               )}
-            </div>
+            </div> */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ fontSize: "12.5px", color: "#64748b" }}>Rows per page:</span>
               <select

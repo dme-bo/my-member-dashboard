@@ -20,14 +20,8 @@ import { normalizeMemberRecord } from "./utils/memberFields";
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
 import { getSession, setSession } from "./utils/session";
+import { AUTH_EMAIL_PARAM, goToLogin } from "./utils/auth";
 import "./App.css";
-
-const OPERATIONS_LOGIN_URL = "https://operations.briskolive.com/";
-const AUTH_EMAIL_PARAM = "authEmail";
-
-const goToLogin = () => {
-  window.location.href = `${OPERATIONS_LOGIN_URL}?returnTo=${encodeURIComponent(window.location.href)}`;
-};
 
 const DashboardPage       = lazy(() => import("./pages/DashboardPage"));
 const MemberListPage      = lazy(() => import("./pages/MemberListPage"));
