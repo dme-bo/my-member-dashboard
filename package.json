@@ -50,6 +50,10 @@
     "vite": "npm:rolldown-vite@7.2.5"
   },
   "overrides": {
-    "vite": "npm:rolldown-vite@7.2.5"
+    "vite": "npm:rolldown-vite@7.2.5",
+    "react-window": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    }
   }
 }
