@@ -440,7 +440,7 @@ export default function TempStaffPage() {
 
           {/* Total Badge */}
           <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto" }}>
-            Total Applications:- <strong>{viewMode === "applications" ? membersData.length : coordinatorsData.length}</strong>
+            Total Applications:- <strong>{filteredAndSortedMembers.length}</strong>
           </span>
 
           {/* Filters Button */}

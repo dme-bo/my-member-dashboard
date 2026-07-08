@@ -11,7 +11,6 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import * as XLSX from "xlsx";
-import { FaSearch } from "react-icons/fa";
 
 export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState([]);
@@ -382,20 +381,12 @@ export default function RecruitmentPage() {
 
   return (
     <div className="member-list-page">
-      {/* Header with Title, Search, and Right Actions */}
-      <div className="recruitment-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
-          <div style={{ position: "relative", width: "300px" }}>
-            <FaSearch
-              style={{
-                position: "absolute",
-                left: "14px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "#9ca3af",
-                fontSize: "16px",
-              }}
-            />
+      {/* Header Card with Search, Total Badge, Filters, Export */}
+      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: isFiltersOpen ? "16px" : "0" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
+            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
             <input
               type="text"
               placeholder="Search by name, phone, email..."
@@ -406,34 +397,23 @@ export default function RecruitmentPage() {
               }}
               style={{
                 padding: "12px 14px 12px 40px",
-                width: "203%",
+                width: "100%",
                 borderRadius: "8px",
                 border: "1px solid #d1d5db",
                 fontSize: "14px",
                 backgroundColor: "white",
                 color: "black",
               }}
+              autoFocus
             />
           </div>
-          <span
-            style={{
-              backgroundColor: "#dcfce7",
-              color: "#166534",
-              padding: "4px 12px",
-              borderRadius: "20px",
-              fontSize: "13px",
-              fontWeight: "600",
-              marginLeft: "auto",
-            }}
-          >
-           Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
+
+          {/* Total Applications Badge */}
+          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "auto" }}>
+            Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
           </span>
-        </div>
 
-        {/* Right side: Search, Filters, Export */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          
-
+          {/* Filters Button */}
           <button
             onClick={() => setIsFiltersOpen(!isFiltersOpen)}
             style={{
@@ -445,14 +425,12 @@ export default function RecruitmentPage() {
               cursor: "pointer",
               fontWeight: "600",
               fontSize: "14px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
             }}
           >
-            🔽 Filters 
+            🔽 Filters
           </button>
 
+          {/* Export Button */}
           <button
             onClick={handleExportXLSX}
             style={{
@@ -464,110 +442,66 @@ export default function RecruitmentPage() {
               cursor: "pointer",
               fontWeight: "600",
               fontSize: "14px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
             }}
           >
             ⬇️ Export
           </button>
         </div>
-      </div>
 
-      {/* Expandable Filters Section */}
-      {isFiltersOpen && (
-        <div className="recruitment-filters" ref={filtersRef}>
-          <div className="filters-grid-recruitment">
-            {["City", "Client", "Profile", "Source", "Status"].map((filterType) => {
-              const filterKey = filterType.toLowerCase();
-              const filterOptions = options[filterKey] || [];
-              const searchTerm = filterSearchTerms[filterKey] || "";
-              const filteredOptions = filterOptions.filter((opt) =>
-                opt.toLowerCase().includes(searchTerm.toLowerCase())
-              );
-              const isDropdownOpen = openDropdown === filterKey;
-              // Handle multi-select: filters[filterKey] can be an array
-              const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
+        {/* Inline Filters */}
+        {isFiltersOpen && (
+          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
+              <button onClick={() => { setFilters({}); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+              {filterKeys.map(filterKey => {
+                const filterOptions = options[filterKey] || [];
+                const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
+                const searchTerm = filterSearchTerms[filterKey] || "";
+                const filteredOptions = filterOptions.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
+                const isDropdownOpen = openDropdown === filterKey;
 
-              return (
-                <div key={filterKey} className="filter-dropdown-recruitment">
-                  <label className="filter-label-recruitment">{filterType}</label>
-                  <div className="dropdown-wrapper-recruitment">
-                    <input
-                      type="text"
-                      placeholder={`Select ${filterType.toLowerCase()}...`}
-                      value={isDropdownOpen ? searchTerm : selectedValues.join(", ")}
-                      onChange={(e) => {
-                        if (isDropdownOpen) {
-                          setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value });
-                        }
-                      }}
-                      onFocus={() => {
-                        setOpenDropdown(filterKey);
-                        setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: "" });
-                      }}
-                      readOnly={!isDropdownOpen}
-                      className="searchable-dropdown-input"
-                    />
-                    {isDropdownOpen && (
-                      <div className="dropdown-options-recruitment">
-                        {filteredOptions.length > 0 ? (
-                          filteredOptions.map((option) => (
-                            <div
-                              key={option}
-                              className={`dropdown-option-recruitment ${
-                                selectedValues.includes(option) ? "selected" : ""
-                              }`}
-                              onClick={() => {
-                                // Multi-select: toggle the option
-                                if (selectedValues.includes(option)) {
-                                  const newValues = selectedValues.filter(v => v !== option);
-                                  setFilters({ 
-                                    ...filters, 
-                                    [filterKey]: newValues.length === 0 ? "All" : newValues 
-                                  });
-                                } else {
-                                  setFilters({ 
-                                    ...filters, 
-                                    [filterKey]: [...selectedValues, option] 
-                                  });
-                                }
-                              }}
-                            >
-                              <span>{option}</span>
-                              {selectedValues.includes(option) && <span className="check-mark">✓</span>}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="dropdown-option-recruitment no-results">
-                            No results found
-                          </div>
-                        )}
+                return (
+                  <div key={filterKey} style={{ marginBottom: "8px" }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey}</label>
+                    <div style={{ position: "relative" }}>
+                      <div
+                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
+                        style={{
+                          padding: "10px 12px",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "6px",
+                          background: "#fff",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <span>{selectedValues.length > 0 ? selectedValues.join(", ") : "All"}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
                       </div>
-                    )}
+                      {isDropdownOpen && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
+                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                            {filteredOptions.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOptions.map(o => (
+                              <div key={o} onClick={() => { if (selectedValues.includes(o)) { setFilters(prev => ({ ...prev, [filterKey]: selectedValues.filter(v => v !== o).length === 0 ? undefined : selectedValues.filter(v => v !== o) })); } else { setFilters(prev => ({ ...prev, [filterKey]: [...selectedValues, o] })); } setCurrentPage(1); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValues.includes(o) ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValues.includes(o) && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-          <button
-            onClick={() => setFilters({ city: "All", client: "All", profile: "All", source: "All", status: "All" })}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "#ef4444",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "13px",
-              marginTop: "12px",
-            }}
-          >
-            Clear All Filters
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="content-with-sidebar">
         <div className="table-container">

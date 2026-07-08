@@ -540,10 +540,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
 
   const totalItems = filteredMembers.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / rowsPerPage));
+  const totalPages = rowsPerPage === Infinity ? 1 : Math.max(1, Math.ceil(totalItems / rowsPerPage));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const pageStart = (safeCurrentPage - 1) * rowsPerPage;
-  const pageMembers = filteredMembers.slice(pageStart, pageStart + rowsPerPage);
+  const pageStart = rowsPerPage === Infinity ? 0 : (safeCurrentPage - 1) * rowsPerPage;
+  const pageMembers = rowsPerPage === Infinity ? filteredMembers : filteredMembers.slice(pageStart, pageStart + rowsPerPage);
 
   useEffect(() => { setCurrentPage(1); }, [filteredMembers]);
 
@@ -1142,11 +1142,16 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ fontSize: "12.5px", color: "#64748b" }}>Rows per page:</span>
               <select
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                value={rowsPerPage === Infinity ? "all" : rowsPerPage}
+                onChange={(e) => {
+                  const value = e.target.value === "all" ? Infinity : Number(e.target.value);
+                  setRowsPerPage(value);
+                  setCurrentPage(1);
+                }}
                 style={{ padding: "4px 8px", borderRadius: "8px", border: "1.5px solid #e2e8f0", fontSize: "13px", background: "#fff", cursor: "pointer" }}
               >
-                {[100, 250, 500, 1000, 2000].map((n) => (
+                <option value="all">All</option>
+                {[100, 500, 1000, 5000].map((n) => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>

@@ -1,291 +1,251 @@
 // src/pages/RegimentalCenterPage.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FaPlus, FaTimes, FaDatabase, FaSearch, FaFilter } from "react-icons/fa";
-import { collection, addDoc, deleteField, doc, getDocs, updateDoc, writeBatch, serverTimestamp } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { FaPlus, FaTimes, FaDatabase, FaSearch, FaTag } from "react-icons/fa";
+import { collection, addDoc, doc, getDocs, updateDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
+import { getMemberName, getMemberPhone, parseMemberSkills } from "../utils/memberFields";
 
-const COLLECTION_NAME = "regimentalcentermaster";
-
-// Location stripped out of "center" and kept only in "city".
-const DEFAULT_REGIMENTAL_CENTERS = [
-  { branch: "Armd", center: "President's Body Guard", city: "Delhi Cantt" },
-  { branch: "Inf", center: "Dogra Regimental Centre", city: "Faizabad" },
-  { branch: "Engrs", center: "Bengal Engineering Group Centre", city: "Roorkee" },
-  { branch: "EME", center: "1 EME Centre", city: "Secunderabad" },
-  { branch: "EME", center: "Military College of Electronic and Mechanical Engineering (MCEME)", city: "Secunderabad" },
-  { branch: "AOC", center: "AOC Centre", city: "Secunderabad" },
-  { branch: "Arty", center: "Artillery Centre", city: "Hyderabad" },
-  { branch: "Engrs", center: "Bombay Engineering Group Centre", city: "Pune" },
-  { branch: "Inf", center: "Garhwal Rifles Regimental Centre", city: "Lansdowne" },
-  { branch: "Inf", center: "JAT Regimental Centre", city: "Barielly" },
-  { branch: "Inf", center: "Kumaon Regimental Centre", city: "Ranikhet" },
-  { branch: "Engrs", center: "Madras Engineering Group", city: "Bangalore" },
-  { branch: "-", center: "Madras Engineer Group & Centre", city: "Bangalore" },
-  { branch: "ASC", center: "ASC (North)", city: "Bangalore" },
-  { branch: "-", center: "Army Service Centre(North)", city: "Bangalore" },
-  { branch: "ASC", center: "ASC (South)", city: "Bangalore" },
-  { branch: "-", center: "CMP Centre & School", city: "Bangalore" },
-  { branch: "CMP", center: "Corp of Military Police Centre", city: "Bangalore" },
-  { branch: "Para", center: "PARA Regimental Centre", city: "Bangalore" },
-  { branch: "-", center: "Parachute Regimental Centre", city: "Bangalore" },
-  { branch: "Pnr", center: "Pioneer Corps Centre", city: "Bangalore" },
-  { branch: "Inf", center: "11 GRRC", city: "Lucknow" },
-  { branch: "AMD", center: "AMC Centre", city: "Lucknow" },
-  { branch: "Inf", center: "Dogra Regimental Centre", city: "Faizabad" },
-  { branch: "Inf", center: "39 GTC", city: "Varanasi Cantt" },
-  { branch: "Inf", center: "14 GTC", city: "Subathu (Shimla Hills)" },
-  { branch: "Inf", center: "58 GTC", city: "Happy Valley, Shillong" },
-  { branch: "Inf", center: "Assam Regimental Centre", city: "Shillong" },
-  { branch: "EME", center: "3 EME", city: "Centre Bhopal" },
-  { branch: "Sig", center: "1 STC", city: "Jabalpur" },
-  { branch: "Inf", center: "Grenadiers Regimental Centre", city: "Jabalpur" },
-  { branch: "Inf", center: "Brigade of the Guards Regimental Centre", city: "Kamptee" },
-  { branch: "APS", center: "APS Centre", city: "Kamptee" },
-  { branch: "-", center: "Army Postal Service Centre", city: "Kamptee" },
-  { branch: "Inf", center: "MAHAR Regimental Centre", city: "Saugor (MP)" },
-  { branch: "Armd", center: "Armoured Corps Centre and School", city: "Ahmednagar" },
-  { branch: "Mech Inf", center: "Mechanised Infantry Regimental Centre", city: "Ahmednagar" },
-  { branch: "Arty", center: "Artillery Centre", city: "Nasik Road Camp" },
-  { branch: "Inf", center: "RAJPUT Regt Centre", city: "Fatehgarh" },
-  { branch: "Inf", center: "SIKH LI Regimental Centre", city: "Fatehgarh" },
-  { branch: "Inf", center: "SIKH Regimental Centre", city: "Ramgarh" },
-  { branch: "-", center: "Sikh Regimental Centre", city: "Ramgarh" },
-  { branch: "Inf", center: "MADRAS Regimental Centre", city: "Wellington (NILGIRI)" },
-  { branch: "Inf", center: "Ladakh Scouts Regimental Centre", city: "Leh" },
-  { branch: "Inf", center: "Bihar Regt Centre", city: "Danapur" },
-  { branch: "Inf", center: "Maratha Light Infantry Regimental Centre", city: "Belgaum" },
-  { branch: "RVC", center: "RVC Centre & School", city: "Meerut Cantt." },
-  { branch: "-", center: "Remount Training School and Depot", city: "Saharanpur" },
+const REGIMENTAL_CENTRES_SEED = [
+  { center: "Grenadiers Regimental Centre", city: "Jabalpur, Madhya Pradesh", regiment: "The Grenadiers" },
+  { center: "Rajput Regimental Centre", city: "Fatehgarh, Uttar Pradesh", regiment: "Rajput Regiment" },
+  { center: "Rajputana Rifles Regimental Centre", city: "Delhi Cantonment", regiment: "Rajputana Rifles" },
+  { center: "Jat Regimental Centre", city: "Bareilly, Uttar Pradesh", regiment: "Jat Regiment" },
+  { center: "Sikh Regimental Centre", city: "Ramgarh, Jharkhand", regiment: "Sikh Regiment" },
+  { center: "Sikh Light Infantry Regimental Centre", city: "Fatehgarh, Uttar Pradesh", regiment: "Sikh Light Infantry" },
+  { center: "Punjab Regimental Centre", city: "Ramgarh, Jharkhand", regiment: "Punjab Regiment" },
+  { center: "Bihar Regimental Centre", city: "Danapur, Bihar", regiment: "Bihar Regiment" },
+  { center: "Madras Regimental Centre", city: "Wellington, Tamil Nadu", regiment: "Madras Regiment" },
+  { center: "Maratha LI Regimental Centre", city: "Belagavi, Karnataka", regiment: "Maratha Light Infantry" },
+  { center: "Kumaon Regimental Centre", city: "Ranikhet, Uttarakhand", regiment: "Kumaon Regiment" },
+  { center: "Garhwal Rifles Regimental Centre", city: "Lansdowne, Uttarakhand", regiment: "Garhwal Rifles" },
+  { center: "Dogra Regimental Centre", city: "Ayodhya (Faizabad), Uttar Pradesh", regiment: "Dogra Regiment" },
+  { center: "Assam Regimental Centre", city: "Shillong, Meghalaya", regiment: "Assam Regiment" },
+  { center: "Mahar Regimental Centre", city: "Sagar, Madhya Pradesh", regiment: "Mahar Regiment" },
+  { center: "Mechanised Infantry Regimental Centre", city: "Ahmednagar, Maharashtra", regiment: "Mechanised Infantry" },
+  { center: "JAK Rifles Regimental Centre", city: "Jabalpur, Madhya Pradesh", regiment: "Jammu & Kashmir Rifles" },
+  { center: "JAK LI Regimental Centre", city: "Srinagar", regiment: "Jammu & Kashmir Light Infantry" },
+  { center: "Parachute Regimental Centre", city: "Bengaluru", regiment: "Parachute Regiment" },
+  { center: "Guards Regimental Centre", city: "Kamptee, Maharashtra", regiment: "Brigade of the Guards" },
+  { center: "Headquarters & Regimental Centre", city: "Leh, Ladakh", regiment: "Ladakh Scouts" },
+  { center: "11 Gorkha Training Centre", city: "Lucknow", regiment: "-" },
+  { center: "14 Gorkha Training Centre", city: "Subathu", regiment: "-" },
+  { center: "39 Gorkha Training Centre", city: "Varanasi", regiment: "-" },
+  { center: "58 Gorkha Training Centre", city: "Shillong", regiment: "-" },
 ];
 
-const createEmptyForm = () => ({ branch: "", center: "", city: "" });
+const CORPS_CENTRE_SEED = [
+  { name: "Armoured Corps Centre & School", location: "Ahmednagar", state: "Maharashtra" },
+  { name: "Army Air Defence Centre & College", location: "Gopalpur", state: "Odisha" },
+  { name: "Army Service Corps Centre (North)", location: "Bengaluru", state: "Karnataka" },
+  { name: "Army Service Corps Centre (South)", location: "Bengaluru", state: "Karnataka" },
+  { name: "Corps of Military Police Centre & School", location: "Bengaluru", state: "Karnataka" },
+  { name: "Army Medical Corps Centre & College", location: "Lucknow", state: "Uttar Pradesh" },
+  { name: "Army Ordnance Corps Centre", location: "Secunderabad", state: "Telangana" },
+  { name: "Army Education Corps Training College & Centre", location: "Pachmarhi", state: "Madhya Pradesh" },
+  { name: "Corps of Electronics & Mechanical Engineers (1 EME Centre)", location: "Secunderabad", state: "Telangana" },
+  { name: "3 EME Centre", location: "Bhopal", state: "Madhya Pradesh" },
+  { name: "Army Postal Service Centre", location: "Kamptee", state: "Maharashtra" },
+  { name: "Pioneer Corps Centre", location: "Bengaluru", state: "Karnataka" },
+  { name: "Remount Veterinary Corps Centre & School", location: "Meerut", state: "Uttar Pradesh" },
+  { name: "Intelligence Corps Training Centre & School", location: "Pune", state: "Maharashtra" },
+  { name: "Bengal Engineer Group & Centre", location: "Roorkee", state: "Uttarakhand" },
+  { name: "Bombay Engineer Group & Centre (Kirkee)", location: "Pune", state: "Maharashtra" },
+  { name: "Madras Engineer Group & Centre", location: "Bengaluru", state: "Karnataka" },
+  { name: "Defence Security Corps Centre", location: "Kannur", state: "Kerala" },
+];
 
-// Fixes previously-imported docs whose "center" still has ", <location>" trailing off it.
-const stripCenterLocation = (rawCenter, rawCity) => {
-  const center = String(rawCenter || "").trim();
-  const city = String(rawCity || "").trim();
+const SCHOOL_INSTRUCTION_SEED = [
+  { name: "Infantry School", location: "Mhow" },
+  { name: "Army War College", location: "Mhow" },
+  { name: "College of Military Engineering (CME)", location: "Pune" },
+  { name: "Military College of Telecommunication Engineering (MCTE)", location: "Mhow" },
+  { name: "Military College of Electronics & Mechanical Engineering (MCEME)", location: "Secunderabad" },
+  { name: "College of Materials Management (CMM)", location: "Jabalpur" },
+  { name: "School of Artillery", location: "Deolali" },
+  { name: "High Altitude Warfare School (HAWS)", location: "Gulmarg" },
+  { name: "Counter Insurgency & Jungle Warfare School (CIJWS)", location: "Vairengte" },
+  { name: "Army School of Physical Training", location: "Pune" },
+  { name: "Army Airborne Training School", location: "Agra" },
+  { name: "Combat Army Aviation Training School", location: "Nashik" },
+  { name: "Junior Leaders Wing", location: "Belagavi" },
+  { name: "Junior Leaders Academy", location: "Bareilly" },
+  { name: "Institute of Military Law", location: "Kamptee" },
+  { name: "Army Sports Institute", location: "Pune" },
+];
 
-  if (city && city !== "-" && center.endsWith(`, ${city}`)) {
-    return { center: center.slice(0, center.length - city.length - 2).trim(), city };
-  }
+const ACADEMY_SEED = [
+  { name: "National Defence Academy", city: "Pune", state: "Maharashtra" },
+  { name: "Indian Military Academy", city: "Dehradun", state: "Uttarakhand" },
+  { name: "Officers Training Academy", city: "Chennai", state: "Tamil Nadu" },
+  { name: "Officers Training Academy", city: "Gaya", state: "Bihar" },
+  { name: "Rashtriya Indian Military College", city: "Dehradun", state: "Uttarakhand" },
+  { name: "Army Cadet College", city: "Dehradun", state: "Uttarakhand" },
+];
 
-  if (!city || city === "-") {
-    const lastComma = center.lastIndexOf(",");
-    if (lastComma !== -1) {
-      const extractedCity = center.slice(lastComma + 1).trim();
-      const cleanedCenter = center.slice(0, lastComma).trim();
-      if (extractedCity) {
-        return { center: cleanedCenter, city: extractedCity };
-      }
-    }
-  }
+const CATEGORIES = [
+  {
+    key: "regimental",
+    label: "Regimental Centres",
+    collectionName: "regimentalcentermaster",
+    nameField: "center",
+    columns: [
+      { key: "center", label: "Centre" },
+      { key: "city", label: "Location" },
+      // { key: "regiment", label: "Regiment" },
+    ],
+    seed: REGIMENTAL_CENTRES_SEED,
+  },
+  {
+    key: "corps",
+    label: "Corps Centre / Institution",
+    collectionName: "corpscentermaster",
+    nameField: "name",
+    columns: [
+      { key: "name", label: "Corps Centre / Institution" },
+      { key: "location", label: "Location" },
+      { key: "state", label: "State" },
+    ],
+    seed: CORPS_CENTRE_SEED,
+  },
+  {
+    key: "school",
+    label: "School of Instruction",
+    collectionName: "schoolinstructionmaster",
+    nameField: "name",
+    columns: [
+      { key: "name", label: "School of Instruction" },
+      { key: "location", label: "Location" },
+    ],
+    seed: SCHOOL_INSTRUCTION_SEED,
+  },
+  {
+    key: "academy",
+    label: "Academy",
+    collectionName: "academymaster",
+    nameField: "name",
+    columns: [
+      { key: "name", label: "Academy" },
+      { key: "city", label: "City" },
+      { key: "state", label: "State" },
+    ],
+    seed: ACADEMY_SEED,
+  },
+];
 
-  return { center, city: city || "-" };
-};
-
-// Type-to-filter dropdown used for the Branch/City filters below.
-function SearchableSelect({ value, options, onChange, allLabel, placeholder }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setOpen(false);
-        setQuery("");
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOptions = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (!term) return options;
-    return options.filter((option) => option.toLowerCase().includes(term));
-  }, [query, options]);
-
-  const handleSelect = (option) => {
-    onChange(option);
-    setQuery("");
-    setOpen(false);
-  };
-
-  const displayValue = value === "All" ? allLabel : value;
-
-  return (
-    <div className="regimental-searchable-select" ref={containerRef}>
-      <FaSearch className="regimental-searchable-icon" size={12} />
-      <input
-        type="text"
-        value={open ? query : displayValue}
-        onFocus={() => {
-          setOpen(true);
-          setQuery("");
-        }}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={placeholder}
-      />
-      {open && (
-        <div className="regimental-searchable-options">
-          <button type="button" className="regimental-searchable-option" onClick={() => handleSelect("All")}>
-            {allLabel}
-          </button>
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
-              <button type="button" key={option} className="regimental-searchable-option" onClick={() => handleSelect(option)}>
-                {option}
-              </button>
-            ))
-          ) : (
-            <div className="regimental-searchable-empty">No matches</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+const createEmptyForm = (category) =>
+  category.columns.reduce((acc, col) => ({ ...acc, [col.key]: "" }), {});
 
 export default function RegimentalCenterPage() {
-  const [centers, setCenters] = useState([]);
+  const [activeCategoryKey, setActiveCategoryKey] = useState(CATEGORIES[0].key);
+  const activeCategory = CATEGORIES.find((c) => c.key === activeCategoryKey);
+
+  const [itemsByCategory, setItemsByCategory] = useState({});
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
   const [showAddModal, setShowAddModal] = useState(false);
-  const [form, setForm] = useState(createEmptyForm());
+  const [form, setForm] = useState(createEmptyForm(CATEGORIES[0]));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [branchFilter, setBranchFilter] = useState("All");
-  const [cityFilter, setCityFilter] = useState("All");
-  const [showFilters, setShowFilters] = useState(false);
-  const [seeding, setSeeding] = useState(false);
+
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+  // Tag-members modal
+  const [tagModalItem, setTagModalItem] = useState(null);
+  const [allMembers, setAllMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [memberSearchTerm, setMemberSearchTerm] = useState("");
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+  const [tagSaving, setTagSaving] = useState(false);
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  const loadCenters = async () => {
+  const loadCategoryItems = async (category) => {
     setLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, COLLECTION_NAME));
-      const rows = snapshot.docs.map((docSnap) => {
-        const { locSer, ...data } = docSnap.data();
-        const updates = {};
-
-        // Strip any leftover locSer field from previously-imported docs.
-        if (locSer !== undefined) {
-          updates.locSer = deleteField();
-        }
-
-        // Strip the location out of "center" for docs imported before that cleanup existed.
-        const cleaned = stripCenterLocation(data.center, data.city);
-        if (cleaned.center !== data.center) updates.center = cleaned.center;
-        if (cleaned.city !== data.city) updates.city = cleaned.city;
-
-        if (Object.keys(updates).length > 0) {
-          void updateDoc(doc(db, COLLECTION_NAME, docSnap.id), updates).catch((error) =>
-            console.error("Error cleaning up regimental center doc:", error)
-          );
-        }
-
-        return { id: docSnap.id, ...data, center: cleaned.center, city: cleaned.city };
-      });
-      setCenters(rows);
+      const snapshot = await getDocs(collection(db, category.collectionName));
+      const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      setItemsByCategory((prev) => ({ ...prev, [category.key]: rows }));
     } catch (error) {
-      console.error("Error loading regimental centers:", error);
-      showToast("Failed to load regimental centers.", "error");
+      console.error(`Error loading ${category.label}:`, error);
+      showToast(`Failed to load ${category.label}.`, "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCenters();
-  }, []);
+    if (itemsByCategory[activeCategoryKey]) return;
+    loadCategoryItems(activeCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategoryKey]);
 
-  const sortedCenters = useMemo(
-    () =>
-      [...centers].sort((a, b) => {
-        const branchDiff = String(a.branch || "").localeCompare(String(b.branch || ""));
-        if (branchDiff !== 0) return branchDiff;
-        return String(a.center || "").localeCompare(String(b.center || ""));
-      }),
-    [centers]
+  useEffect(() => {
+    setSearchTerm("");
+  }, [activeCategoryKey]);
+
+  const items = itemsByCategory[activeCategoryKey] || [];
+
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => String(a[activeCategory.nameField] || "").localeCompare(String(b[activeCategory.nameField] || ""))),
+    [items, activeCategory]
   );
 
-  const branchOptions = useMemo(() => {
-    const values = new Set();
-    centers.forEach((item) => {
-      if (item.branch && item.branch !== "-") values.add(item.branch);
-    });
-    return ["All", ...Array.from(values).sort((a, b) => a.localeCompare(b))];
-  }, [centers]);
-
-  const cityOptions = useMemo(() => {
-    const values = new Set();
-    centers.forEach((item) => {
-      if (item.city && item.city !== "-") values.add(item.city);
-    });
-    return ["All", ...Array.from(values).sort((a, b) => a.localeCompare(b))];
-  }, [centers]);
-
-  const filteredCenters = useMemo(
-    () =>
-      sortedCenters.filter((item) => {
-        if (branchFilter !== "All" && item.branch !== branchFilter) return false;
-        if (cityFilter !== "All" && item.city !== cityFilter) return false;
-        return true;
-      }),
-    [sortedCenters, branchFilter, cityFilter]
-  );
-
-  const hasActiveFilters = branchFilter !== "All" || cityFilter !== "All";
-
-  const clearFilters = () => {
-    setBranchFilter("All");
-    setCityFilter("All");
-  };
+  const filteredItems = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return sortedItems;
+    return sortedItems.filter((row) =>
+      activeCategory.columns.some((col) => String(row[col.key] || "").toLowerCase().includes(term))
+    );
+  }, [sortedItems, searchTerm, activeCategory]);
 
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const openAddModal = () => {
-    setForm(createEmptyForm());
+    setForm(createEmptyForm(activeCategory));
     setFormError("");
     setShowAddModal(true);
   };
 
   const closeAddModal = () => {
     setShowAddModal(false);
-    setForm(createEmptyForm());
+    setForm(createEmptyForm(activeCategory));
     setFormError("");
   };
 
-  const handleAddCenter = async (e) => {
+  const handleAddItem = async (e) => {
     e.preventDefault();
 
-    if (!form.center.trim()) {
-      setFormError("Please enter the center name.");
+    if (!String(form[activeCategory.nameField] || "").trim()) {
+      setFormError(`Please enter the ${activeCategory.columns[0].label.toLowerCase()}.`);
       return;
     }
 
     setFormError("");
     setSaving(true);
     try {
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-        branch: form.branch.trim() || "-",
-        center: form.center.trim(),
-        city: form.city.trim() || "-",
+      const payload = {};
+      activeCategory.columns.forEach((col) => {
+        payload[col.key] = String(form[col.key] || "").trim() || "-";
+      });
+
+      const docRef = await addDoc(collection(db, activeCategory.collectionName), {
+        ...payload,
         createdAt: serverTimestamp(),
       });
-      setCenters((prev) => [
+
+      setItemsByCategory((prev) => ({
         ...prev,
-        { id: docRef.id, branch: form.branch.trim() || "-", center: form.center.trim(), city: form.city.trim() || "-" },
-      ]);
-      showToast("Regimental center added successfully!");
+        [activeCategoryKey]: [...(prev[activeCategoryKey] || []), { id: docRef.id, ...payload }],
+      }));
+      showToast(`${activeCategory.label} entry added successfully!`);
       closeAddModal();
     } catch (error) {
-      console.error("Error adding regimental center:", error);
+      console.error(`Error adding ${activeCategory.label}:`, error);
       setFormError("Failed to save. Please try again.");
     } finally {
       setSaving(false);
@@ -296,23 +256,105 @@ export default function RegimentalCenterPage() {
     setSeeding(true);
     try {
       const batch = writeBatch(db);
-      const centersRef = collection(db, COLLECTION_NAME);
+      const ref = collection(db, activeCategory.collectionName);
       const newRows = [];
 
-      DEFAULT_REGIMENTAL_CENTERS.forEach((row) => {
-        const newDocRef = doc(centersRef);
+      activeCategory.seed.forEach((row) => {
+        const newDocRef = doc(ref);
         batch.set(newDocRef, { ...row, createdAt: serverTimestamp() });
         newRows.push({ id: newDocRef.id, ...row });
       });
 
       await batch.commit();
-      setCenters((prev) => [...prev, ...newRows]);
-      showToast(`Imported ${DEFAULT_REGIMENTAL_CENTERS.length} regimental centers.`);
+      setItemsByCategory((prev) => ({
+        ...prev,
+        [activeCategoryKey]: [...(prev[activeCategoryKey] || []), ...newRows],
+      }));
+      showToast(`Imported ${activeCategory.seed.length} ${activeCategory.label} entries.`);
     } catch (error) {
-      console.error("Error importing default regimental centers:", error);
+      console.error(`Error importing ${activeCategory.label} defaults:`, error);
       showToast("Failed to import default list. Please try again.", "error");
     } finally {
       setSeeding(false);
+    }
+  };
+
+  // ------------------- Tag members to a centre/institution -------------------
+  const openTagModal = async (item) => {
+    setTagModalItem(item);
+    setSelectedMemberIds(item.taggedMemberIds || []);
+    setMemberSearchTerm("");
+
+    if (allMembers.length === 0) {
+      setMembersLoading(true);
+      try {
+        const snapshot = await getDocs(collection(db, "users"));
+        const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        setAllMembers(rows);
+      } catch (error) {
+        console.error("Error loading members:", error);
+        showToast("Failed to load members list.", "error");
+      } finally {
+        setMembersLoading(false);
+      }
+    }
+  };
+
+  const closeTagModal = () => {
+    setTagModalItem(null);
+    setSelectedMemberIds([]);
+    setMemberSearchTerm("");
+  };
+
+  const filteredMembersForTagging = useMemo(() => {
+    const term = memberSearchTerm.trim().toLowerCase();
+    if (!term) return allMembers;
+    return allMembers.filter((m) => {
+      const name = getMemberName(m).toLowerCase();
+      const phone = getMemberPhone(m).toLowerCase();
+      return name.includes(term) || phone.includes(term);
+    });
+  }, [allMembers, memberSearchTerm]);
+
+  const toggleMemberSelection = (id) => {
+    setSelectedMemberIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleSaveTaggedMembers = async () => {
+    if (!tagModalItem) return;
+    const label = tagModalItem[activeCategory.nameField];
+
+    setTagSaving(true);
+    try {
+      await updateDoc(doc(db, activeCategory.collectionName, tagModalItem.id), {
+        taggedMemberIds: selectedMemberIds,
+      });
+
+      await Promise.all(
+        selectedMemberIds.map(async (memberId) => {
+          const member = allMembers.find((m) => m.id === memberId);
+          if (!member) return;
+          const existingSkills = parseMemberSkills(member);
+          if (existingSkills.includes(label)) return;
+          const nextSkills = [...existingSkills, label];
+          await updateDoc(doc(db, "users", memberId), { skills: nextSkills, Skills: nextSkills.join(", ") });
+        })
+      );
+
+      setItemsByCategory((prev) => ({
+        ...prev,
+        [activeCategoryKey]: (prev[activeCategoryKey] || []).map((row) =>
+          row.id === tagModalItem.id ? { ...row, taggedMemberIds: selectedMemberIds } : row
+        ),
+      }));
+
+      showToast(`Tagged ${selectedMemberIds.length} member(s) to ${label}.`);
+      closeTagModal();
+    } catch (error) {
+      console.error("Error tagging members:", error);
+      showToast("Failed to save tags.", "error");
+    } finally {
+      setTagSaving(false);
     }
   };
 
@@ -348,34 +390,6 @@ export default function RegimentalCenterPage() {
           gap: 12px;
           flex-wrap: wrap;
         }
-        .regimental-filter-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-bottom: 20px;
-          padding: 14px 16px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 14px;
-        }
-        .regimental-clear-filters-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 16px;
-          border-radius: 10px;
-          border: 1px solid #cbd5e1;
-          background: #fff;
-          color: #374151;
-          font-weight: 700;
-          font-size: 13px;
-          cursor: pointer;
-        }
-        .regimental-clear-filters-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
         .regimental-btn {
           display: inline-flex;
           align-items: center;
@@ -400,63 +414,70 @@ export default function RegimentalCenterPage() {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        .regimental-searchable-select {
-          position: relative;
-          min-width: 190px;
+        .regimental-layout {
+          display: flex;
+          gap: 20px;
+          align-items: flex-start;
         }
-        .regimental-searchable-icon {
+        .regimental-sidebar {
+          flex: 0 0 240px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 12px;
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+        }
+        .regimental-sidebar-btn {
+          text-align: left;
+          padding: 12px 14px;
+          border-radius: 10px;
+          border: none;
+          background: transparent;
+          color: #374151;
+          font-weight: 600;
+          font-size: 13px;
+          cursor: pointer;
+        }
+        .regimental-sidebar-btn.active {
+          background: #eff6ff;
+          color: #1976d2;
+        }
+        .regimental-sidebar-btn:hover:not(.active) {
+          background: #f8fafc;
+        }
+        .regimental-content {
+          flex: 1;
+          min-width: 0;
+        }
+        .regimental-search-row {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+        }
+        .regimental-search-box {
+          position: relative;
+          flex: 1;
+          max-width: 350px;
+        }
+        .regimental-search-box input {
+          width: 100%;
+          padding: 12px 14px 12px 40px;
+          border-radius: 8px;
+          border: 1px solid #d1d5db;
+          font-size: 14px;
+          box-sizing: border-box;
+        }
+        .regimental-search-box svg {
           position: absolute;
           left: 12px;
           top: 50%;
           transform: translateY(-50%);
-          color: #94a3b8;
-          pointer-events: none;
-        }
-        .regimental-searchable-select input {
-          width: 100%;
-          padding: 10px 14px 10px 32px;
-          border-radius: 10px;
-          border: 1px solid #cbd5e1;
-          font-size: 13px;
-          color: #0f172a;
-          background: #fff;
-          outline: none;
-          box-sizing: border-box;
-        }
-        .regimental-searchable-select input:focus {
-          border-color: #1976d2;
-        }
-        .regimental-searchable-options {
-          position: absolute;
-          top: calc(100% + 4px);
-          left: 0;
-          right: 0;
-          background: #fff;
-          border: 1px solid #dbe3ee;
-          border-radius: 10px;
-          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
-          max-height: 240px;
-          overflow-y: auto;
-          z-index: 20;
-        }
-        .regimental-searchable-option {
-          width: 100%;
-          text-align: left;
-          padding: 9px 14px;
-          border: none;
-          background: #fff;
-          cursor: pointer;
-          font-size: 13px;
-          color: #0f172a;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        .regimental-searchable-option:hover {
-          background: #eff6ff;
-        }
-        .regimental-searchable-empty {
-          padding: 10px 14px;
-          font-size: 13px;
-          color: #94a3b8;
+          color: #9ca3af;
         }
         .regimental-table-card {
           background: #fff;
@@ -475,7 +496,7 @@ export default function RegimentalCenterPage() {
           width: 100%;
           border-collapse: collapse;
           font-size: 13px;
-          min-width: 700px;
+          min-width: 500px;
         }
         .regimental-table th {
           background: #2563eb;
@@ -492,6 +513,24 @@ export default function RegimentalCenterPage() {
         }
         .regimental-table tr:nth-child(even) td {
           background: #f9fafb;
+        }
+        .regimental-table tbody tr {
+          cursor: pointer;
+        }
+        .regimental-table tbody tr:hover td {
+          background: #eff6ff;
+        }
+        .regimental-tag-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 3px 10px;
+          border-radius: 999px;
+          background: #ecfdf5;
+          color: #047857;
+          font-weight: 700;
+          font-size: 11px;
+          white-space: nowrap;
         }
         .regimental-empty {
           text-align: center;
@@ -514,6 +553,9 @@ export default function RegimentalCenterPage() {
           background: #fff;
           border-radius: 16px;
           box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+        }
+        .modal-panel.wide {
+          width: min(600px, 100%);
         }
         .modal-panel-header {
           padding: 18px 22px;
@@ -594,6 +636,35 @@ export default function RegimentalCenterPage() {
           z-index: 5000;
           box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
         }
+        .regimental-member-list {
+          max-height: 320px;
+          overflow-y: auto;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+        }
+        .regimental-member-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 14px;
+          border-bottom: 1px solid #f1f5f9;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        .regimental-member-row:hover {
+          background: #f8fafc;
+        }
+        .regimental-member-row.selected {
+          background: #eff6ff;
+        }
+        .regimental-member-name {
+          font-weight: 600;
+          color: #0f172a;
+        }
+        .regimental-member-phone {
+          color: #64748b;
+          font-size: 12px;
+        }
       `}</style>
 
       {toast.show && (
@@ -604,108 +675,113 @@ export default function RegimentalCenterPage() {
 
       <div className="regimental-header">
         <div>
-          <h2>Regimental Centers</h2>
-          <p>Master list of regimental centers by branch and location.</p>
+          <h2>Regimental & Training Centres</h2>
+          {/* <p>Browse by category, and click any entry to tag members to it.</p> */}
         </div>
         <div className="regimental-header-actions">
-          <button
-            type="button"
-            className={`regimental-btn ${hasActiveFilters ? "regimental-btn-primary" : "regimental-btn-secondary"}`}
-            onClick={() => setShowFilters((prev) => !prev)}
-          >
-            <FaFilter size={12} />
-            Filters{hasActiveFilters ? ` (${[branchFilter !== "All", cityFilter !== "All"].filter(Boolean).length})` : ""}
-          </button>
-          {!loading && centers.length === 0 && (
+          {!loading && items.length === 0 && (
             <button type="button" className="regimental-btn regimental-btn-secondary" onClick={handleSeedDefaults} disabled={seeding}>
               <FaDatabase size={12} />
-              {seeding ? "Importing..." : `Import Default List (${DEFAULT_REGIMENTAL_CENTERS.length})`}
+              {seeding ? "Importing..." : `Import Default List (${activeCategory.seed.length})`}
             </button>
           )}
           <button type="button" className="regimental-btn regimental-btn-primary" onClick={openAddModal}>
             <FaPlus size={12} />
-            Add Regimental Center
+            Add {activeCategory.label} Entry
           </button>
         </div>
       </div>
 
-      {showFilters && (
-        <div className="regimental-filter-row">
-          <SearchableSelect
-            value={branchFilter}
-            options={branchOptions.filter((option) => option !== "All")}
-            onChange={setBranchFilter}
-            allLabel="All Branches"
-            placeholder="Search branch..."
-          />
-          <SearchableSelect
-            value={cityFilter}
-            options={cityOptions.filter((option) => option !== "All")}
-            onChange={setCityFilter}
-            allLabel="All Cities"
-            placeholder="Search city..."
-          />
-          <button type="button" className="regimental-clear-filters-btn" onClick={clearFilters} disabled={!hasActiveFilters}>
-            <FaTimes size={11} />
-            Clear All
-          </button>
+      <div className="regimental-layout">
+        <div className="regimental-sidebar">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              type="button"
+              className={`regimental-sidebar-btn ${cat.key === activeCategoryKey ? "active" : ""}`}
+              onClick={() => setActiveCategoryKey(cat.key)}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
-      )}
 
-      <div className="regimental-table-card">
-        <h3>Regimental Centers ({filteredCenters.length})</h3>
+        <div className="regimental-content">
+          <div className="regimental-search-row">
+            <div className="regimental-search-box">
+              <FaSearch size={14} />
+              <input
+                type="text"
+                placeholder={`Search ${activeCategory.label.toLowerCase()}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
 
-        {loading ? (
-          <div className="regimental-empty">Loading regimental centers...</div>
-        ) : centers.length === 0 ? (
-          <div className="regimental-empty">No regimental centers added yet.</div>
-        ) : filteredCenters.length === 0 ? (
-          <div className="regimental-empty">No regimental centers match these filters.</div>
-        ) : (
-          <table className="regimental-table">
-            <thead>
-              <tr>
-                <th>Branch</th>
-                <th>Center</th>
-                <th>City</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCenters.map((center) => (
-                <tr key={center.id}>
-                  <td>{center.branch || "-"}</td>
-                  <td>{center.center || "-"}</td>
-                  <td>{center.city || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+          <div className="regimental-table-card">
+            <h3>{activeCategory.label} ({filteredItems.length})</h3>
+
+            {loading ? (
+              <div className="regimental-empty">Loading {activeCategory.label.toLowerCase()}...</div>
+            ) : items.length === 0 ? (
+              <div className="regimental-empty">No {activeCategory.label.toLowerCase()} added yet.</div>
+            ) : filteredItems.length === 0 ? (
+              <div className="regimental-empty">No entries match your search.</div>
+            ) : (
+              <table className="regimental-table">
+                <thead>
+                  <tr>
+                    {activeCategory.columns.map((col) => (
+                      <th key={col.key}>{col.label}</th>
+                    ))}
+                    <th>Tagged Members</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map((row) => (
+                    <tr key={row.id} onClick={() => openTagModal(row)} title="Click to tag members">
+                      {activeCategory.columns.map((col) => (
+                        <td key={col.key}>{row[col.key] || "-"}</td>
+                      ))}
+                      <td>
+                        <span className="regimental-tag-badge">
+                          <FaTag size={10} />
+                          {(row.taggedMemberIds || []).length}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </div>
 
       {showAddModal && (
         <div className="modal-overlay" onClick={closeAddModal}>
           <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
             <div className="modal-panel-header">
-              <h3>Add Regimental Center</h3>
+              <h3>Add {activeCategory.label} Entry</h3>
               <button type="button" className="modal-close-btn" onClick={closeAddModal} title="Close">
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleAddCenter}>
+            <form onSubmit={handleAddItem}>
               <div className="modal-panel-body">
-                <div className="regimental-field">
-                  <label htmlFor="branch">Branch</label>
-                  <input id="branch" type="text" value={form.branch} onChange={(e) => updateForm("branch", e.target.value)} placeholder="e.g. Inf, Armd, EME" />
-                </div>
-                <div className="regimental-field">
-                  <label htmlFor="center">Center</label>
-                  <input id="center" type="text" value={form.center} onChange={(e) => updateForm("center", e.target.value)} placeholder="e.g. Kumaon Regimental Centre, Ranikhet" />
-                </div>
-                <div className="regimental-field">
-                  <label htmlFor="city">City</label>
-                  <input id="city" type="text" value={form.city} onChange={(e) => updateForm("city", e.target.value)} placeholder="e.g. Ranikhet" />
-                </div>
+                {activeCategory.columns.map((col) => (
+                  <div className="regimental-field" key={col.key}>
+                    <label htmlFor={col.key}>{col.label}</label>
+                    <input
+                      id={col.key}
+                      type="text"
+                      value={form[col.key] || ""}
+                      onChange={(e) => updateForm(col.key, e.target.value)}
+                      placeholder={`e.g. ${col.label}`}
+                    />
+                  </div>
+                ))}
 
                 {formError && <div className="regimental-error">{formError}</div>}
 
@@ -714,11 +790,74 @@ export default function RegimentalCenterPage() {
                     Cancel
                   </button>
                   <button type="submit" className="regimental-btn regimental-btn-primary" disabled={saving}>
-                    {saving ? "Saving..." : "Save Center"}
+                    {saving ? "Saving..." : "Save Entry"}
                   </button>
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {tagModalItem && (
+        <div className="modal-overlay" onClick={closeTagModal}>
+          <div className="modal-panel wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-panel-header">
+              <h3>Tag Members — {tagModalItem[activeCategory.nameField]}</h3>
+              <button type="button" className="modal-close-btn" onClick={closeTagModal} title="Close">
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-panel-body">
+              <div className="regimental-field">
+                <label htmlFor="member-search">Search Members</label>
+                <input
+                  id="member-search"
+                  type="text"
+                  value={memberSearchTerm}
+                  onChange={(e) => setMemberSearchTerm(e.target.value)}
+                  placeholder="Search by name or mobile..."
+                />
+              </div>
+
+              <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>
+                {selectedMemberIds.length} member(s) selected
+              </div>
+
+              <div className="regimental-member-list">
+                {membersLoading ? (
+                  <div className="regimental-empty">Loading members...</div>
+                ) : filteredMembersForTagging.length === 0 ? (
+                  <div className="regimental-empty">No members match your search.</div>
+                ) : (
+                  filteredMembersForTagging.map((member) => {
+                    const selected = selectedMemberIds.includes(member.id);
+                    return (
+                      <div
+                        key={member.id}
+                        className={`regimental-member-row ${selected ? "selected" : ""}`}
+                        onClick={() => toggleMemberSelection(member.id)}
+                      >
+                        <input type="checkbox" checked={selected} onChange={() => toggleMemberSelection(member.id)} onClick={(e) => e.stopPropagation()} />
+                        <div>
+                          <div className="regimental-member-name">{getMemberName(member)}</div>
+                          <div className="regimental-member-phone">{getMemberPhone(member) || "-"}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="modal-footer-actions" style={{ marginTop: "18px" }}>
+                <button type="button" className="regimental-cancel-btn" onClick={closeTagModal}>
+                  Cancel
+                </button>
+                <button type="button" className="regimental-btn regimental-btn-primary" onClick={handleSaveTaggedMembers} disabled={tagSaving}>
+                  {tagSaving ? "Saving..." : "Save Tags"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
