@@ -13,6 +13,41 @@ import {
 import { db } from "../firebase";
 import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberOrganization, parseMemberDate } from "../utils/memberFields";
 
+function SkeletonLoader({ rows = 4, compact = false }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: compact ? "10px" : "14px", padding: compact ? "8px 0" : "16px 0" }}>
+      <style>{`
+        @keyframes skeletonPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
+        }
+      `}</style>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{
+            height: compact ? "12px" : "14px",
+            width: `${60 + (i % 3) * 15}%`,
+            borderRadius: "6px",
+            background: "#e2e8f0",
+            animation: "skeletonPulse 1.4s ease-in-out infinite",
+            animationDelay: `${i * 0.1}s`,
+          }} />
+          {!compact && (
+            <div style={{
+              height: "10px",
+              width: `${40 + (i % 4) * 10}%`,
+              borderRadius: "6px",
+              background: "#eef2f7",
+              animation: "skeletonPulse 1.4s ease-in-out infinite",
+              animationDelay: `${i * 0.1 + 0.07}s`,
+            }} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const RATING_TYPES = {
   workRelated: "work_related",
   boEmployee: "bo_employee",
@@ -76,18 +111,15 @@ export default function MemberDetailModal({ member, onClose }) {
     { id: "interaction", label: "Interaction & Notes" },
   ];
 
-  const rating = parseInt(normalizedMember.rating) || 0;
-
-  const getRatingLabel = (stars) => {
-    const labels = {
-      1: "Poor - Unresponsive / Unprofessional",
-      2: "Below Average - Slow response / Low interest",
-      3: "Average - Decent communication",
-      4: "Good - Proactive & Professional",
-      5: "Excellent - Highly recommended",
-    };
-    return labels[stars] || "Not rated yet";
-  };
+  // Base rating starts at 3 stars for every member. A BO employee rating adds
+  // +1, a referrer rating adds +1 (work-related ratings don't affect this score).
+  const hasBoRating = savedNotes.some(
+    (note) => note.ratingType === RATING_TYPES.boEmployee && Number(note.boRating) > 0
+  );
+  const hasReferrerRating = savedNotes.some(
+    (note) => note.ratingType === RATING_TYPES.referrer && Number(note.referrerRating) > 0
+  );
+  const rating = 3 + (hasBoRating ? 1 : 0) + (hasReferrerRating ? 1 : 0);
 
   const renderStars = () => {
     return (
@@ -104,7 +136,6 @@ export default function MemberDetailModal({ member, onClose }) {
           boxShadow: "0 10px 24px rgba(15, 23, 42, 0.14)",
           flexWrap: "wrap",
         }}
-        title={getRatingLabel(rating)}
       >
         <span style={{ fontSize: "11px", fontWeight: "700", letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(255,255,255,0.95)" }}>
           Rating
@@ -160,14 +191,11 @@ export default function MemberDetailModal({ member, onClose }) {
     contactPerson: fullName,
     ratingType: RATING_TYPES.workRelated,
     workRating: 0,
-    boChecklist: createEmptyBoChecklist(),
+    boRating: 0,
     boRemarks: "",
     referrerRating: 0,
     referrerRemarks: "",
   });
-
-  const hasBoChecklistSelection = (boChecklist = {}) =>
-    BO_CHECKLIST_ITEMS.some((item) => Boolean(boChecklist?.[item]));
 
   const getNoteRatingSummary = (note) => {
     const ratingType = note.ratingType || RATING_TYPES.notRated;
@@ -177,8 +205,7 @@ export default function MemberDetailModal({ member, onClose }) {
     }
 
     if (ratingType === RATING_TYPES.boEmployee) {
-      const selectedCount = BO_CHECKLIST_ITEMS.filter((item) => note.boChecklist?.[item]).length;
-      return selectedCount ? `${selectedCount}/5 checklist` : "BO employee";
+      return note.boRating ? `${note.boRating}/5` : "BO employee";
     }
 
     if (ratingType === RATING_TYPES.referrer) {
@@ -303,9 +330,9 @@ export default function MemberDetailModal({ member, onClose }) {
     }, 4000);
   };
 
-  // Load saved interactions (Interaction tab)
+  // Load saved interactions (also drives the header rating badge, so fetch regardless of tab)
   useEffect(() => {
-    if (activeTab !== "interaction" || !userId) return;
+    if (!userId) return;
 
     const fetchSavedNotes = async () => {
       setLoading(true);
@@ -338,7 +365,7 @@ export default function MemberDetailModal({ member, onClose }) {
             followUpDate: followUpDateStr,
             ratingType: data.ratingType || RATING_TYPES.notRated,
             workRating: Number(data.workRating) || 0,
-            boChecklist: data.boChecklist || createEmptyBoChecklist(),
+            boRating: Number(data.boRating) || 0,
             boRemarks: data.boRemarks || "-",
             referrerRating: Number(data.referrerRating) || 0,
             referrerRemarks: data.referrerRemarks || "-",
@@ -355,7 +382,7 @@ export default function MemberDetailModal({ member, onClose }) {
     };
 
     fetchSavedNotes();
-  }, [activeTab, userId, fullName]);
+  }, [userId, fullName]);
 
   // Check employment status when BO Journey tab is active
   useEffect(() => {
@@ -478,7 +505,7 @@ export default function MemberDetailModal({ member, onClose }) {
         entryType: data.entryType || "note",
         ratingType: data.ratingType || RATING_TYPES.notRated,
         workRating: Number(data.workRating) || 0,
-        boChecklist: data.boChecklist || createEmptyBoChecklist(),
+        boRating: Number(data.boRating) || 0,
         boRemarks: data.boRemarks || "-",
         referrerRating: Number(data.referrerRating) || 0,
         referrerRemarks: data.referrerRemarks || "-",
@@ -532,7 +559,7 @@ export default function MemberDetailModal({ member, onClose }) {
 
     const ratingType = ratingDraft.ratingType || RATING_TYPES.notRated;
     const hasWorkRating = ratingType === RATING_TYPES.workRelated && Number(ratingDraft.workRating) > 0;
-    const hasBoRating = ratingType === RATING_TYPES.boEmployee && hasBoChecklistSelection(ratingDraft.boChecklist);
+    const hasBoRating = ratingType === RATING_TYPES.boEmployee && Number(ratingDraft.boRating) > 0;
     const hasReferrerRating = ratingType === RATING_TYPES.referrer && Number(ratingDraft.referrerRating) > 0;
     const hasRemarks = String(ratingDraft.boRemarks || "").trim() || String(ratingDraft.referrerRemarks || "").trim();
 
@@ -553,7 +580,7 @@ export default function MemberDetailModal({ member, onClose }) {
         followUpDate: null,
         ratingType,
         workRating: Number(ratingDraft.workRating) || 0,
-        boChecklist: ratingDraft.boChecklist || createEmptyBoChecklist(),
+        boRating: Number(ratingDraft.boRating) || 0,
         boRemarks: String(ratingDraft.boRemarks || "").trim() || "-",
         referrerRating: Number(ratingDraft.referrerRating) || 0,
         referrerRemarks: String(ratingDraft.referrerRemarks || "").trim() || "-",
@@ -619,16 +646,16 @@ export default function MemberDetailModal({ member, onClose }) {
           <div className="modal-header">
             <div style={{ flex: 1 }}>
               <h2>{fullName}</h2>
-              <p style={{ margin: "5px 0", opacity: 0.9, fontSize: "15px" }}>
-                {phoneNumber || "N/A"}{normalizedMember.email || "N/A"}
+              {/* <p style={{ margin: "5px 0", opacity: 0.9, fontSize: "15px" }}>
+                {phoneNumber || "N/A"}
               </p>
+              <p style={{ margin: "5px 0", opacity: 0.9, fontSize: "15px" }}>
+                {normalizedMember.email || "N/A"}
+              </p> */}
             </div>
 
             <div style={{ marginRight: "16px", marginTop: "2px" }}>
               {renderStars()}
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.92)", marginTop: "4px", textAlign: "right" }}>
-                {getRatingLabel(rating)}
-              </div>
             </div>
 
             <button className="close-btn" onClick={onClose}>
@@ -725,9 +752,7 @@ export default function MemberDetailModal({ member, onClose }) {
                   </strong>
 
                   {employmentLoading ? (
-                    <p style={{ color: "#0d9488", fontStyle: "italic" }}>
-                      Checking placement status...
-                    </p>
+                    <SkeletonLoader rows={3} compact />
                   ) : !phoneNumber ? (
                     <p style={{ color: "#dc2626" }}>
                       Phone number not available â€“ cannot verify placement.
@@ -1267,35 +1292,33 @@ export default function MemberDetailModal({ member, onClose }) {
                           {ratingDraft.ratingType === RATING_TYPES.boEmployee && (
                             <div>
                               <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
-                                BO Employee Checklist
+                                BO Employee Rating
                               </div>
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
-                                {BO_CHECKLIST_ITEMS.map((item) => (
-                                  <label
-                                    key={item}
+                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    key={star}
+                                    type="button"
+                                    onClick={() => updateRatingDraft("boRating", star)}
                                     style={{
+                                      border: "1px solid #e2e8f0",
+                                      background: star <= Number(ratingDraft.boRating) ? "#fff7ed" : "#f8fafc",
+                                      borderRadius: "10px",
+                                      padding: "10px 14px",
+                                      cursor: "pointer",
                                       display: "flex",
                                       alignItems: "center",
-                                      gap: "10px",
-                                      padding: "12px",
-                                      borderRadius: "10px",
-                                      border: "1px solid #e2e8f0",
-                                      backgroundColor: ratingDraft.boChecklist?.[item] ? "#ecfeff" : "white",
+                                      gap: "8px",
+                                      boxShadow: star <= Number(ratingDraft.boRating) ? "0 8px 18px rgba(245,158,11,0.12)" : "none",
                                     }}
                                   >
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(ratingDraft.boChecklist?.[item])}
-                                      onChange={(e) =>
-                                        updateRatingDraft("boChecklist", {
-                                          ...ratingDraft.boChecklist,
-                                          [item]: e.target.checked,
-                                        })
-                                      }
-                                    />
-                                    <span style={{ color: "#0f172a", fontSize: "14px" }}>{item}</span>
-                                  </label>
+                                     <span style={{ color: star <= Number(ratingDraft.boRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
+                                    <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
+                                  </button>
                                 ))}
+                              </div>
+                              <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
+                                Selected: {ratingDraft.boRating ? `${ratingDraft.boRating}/5` : "Not selected"}
                               </div>
                               <div style={{ marginTop: "14px" }}>
                                 <label style={{ fontSize: "13px", color: "#6b7280" }}>BO Remarks</label>
@@ -1420,7 +1443,7 @@ export default function MemberDetailModal({ member, onClose }) {
                     Interaction History ({savedNotes.length})
                   </h3>
 
-                  {loading && <p style={{ textAlign: "center", color: "#6b7280" }}>Loading history...</p>}
+                  {loading && <SkeletonLoader rows={5} />}
 
                   {!loading && savedNotes.length === 0 && (
                     <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
@@ -1463,11 +1486,7 @@ export default function MemberDetailModal({ member, onClose }) {
                                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                                     {note.ratingType === RATING_TYPES.workRelated && renderRatingStars(Number(note.workRating), 16)}
                                     {note.ratingType === RATING_TYPES.referrer && renderRatingStars(Number(note.referrerRating), 16)}
-                                    {note.ratingType === RATING_TYPES.boEmployee && (
-                                      <span style={{ fontSize: "13px", color: "#1f2937", fontWeight: "600" }}>
-                                        {BO_CHECKLIST_ITEMS.filter((item) => note.boChecklist?.[item]).length}/5 checklist
-                                      </span>
-                                    )}
+                                    {note.ratingType === RATING_TYPES.boEmployee && renderRatingStars(Number(note.boRating), 16)}
                                     {note.ratingType === RATING_TYPES.notRated && (
                                       <span style={{ fontSize: "13px", color: "#6b7280" }}>Not rated yet</span>
                                     )}

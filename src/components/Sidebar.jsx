@@ -2,20 +2,23 @@
 import { NavLink, useLocation } from "react-router-dom";
 
 // Icons from react-icons (feel free to choose different ones)
-import { 
-  MdDashboard, 
+import {
+  MdDashboard,
   MdPeople,           // Members Master List
   MdLocationOn,       // Member Location
   MdAssignment,       // Applications
   MdWork,             // Requirements
+  MdForum,            // Interactions
   MdEmail,            // Newsletter
   MdSettings          // Configuration
 } from "react-icons/md";
 
-import { 
+import {
   FaUserTie,          // TCS / Temp Staffing
   FaBriefcase,        // Recruitment
-  FaTasks             // Projects
+  FaTasks,            // Projects
+  FaLandmark,         // Regimental Centers
+  FaChalkboardTeacher // Training
 } from "react-icons/fa";
 
 export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
@@ -24,6 +27,9 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
   const isMemberListActive = location.pathname === "/memberlist";
   const isMemberLocationActive = location.pathname === "/member-location";
   const isRequirementsActive = location.pathname === "/requirements";
+  const isInteractionsActive = location.pathname === "/interactions";
+  const isRegimentalCentersActive = location.pathname === "/regimental-centers";
+  const isTrainingActive = location.pathname === "/training";
   const isNewsletterActive = location.pathname === "/newsletter";
   const isConfigurationActive = location.pathname === "/configuration";
 
@@ -113,6 +119,21 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
         <NavLink to="/requirements" className={`menu-item ${isRequirementsActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdWork className="menu-icon" />
           <span>Requirements</span>
+        </NavLink>
+
+        <NavLink to="/interactions" className={`menu-item ${isInteractionsActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+          <MdForum className="menu-icon" />
+          <span>Escalations</span>
+        </NavLink>
+
+        <NavLink to="/regimental-centers" className={`menu-item ${isRegimentalCentersActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+          <FaLandmark className="menu-icon" />
+          <span>Regimental Centers</span>
+        </NavLink>
+
+        <NavLink to="/training" className={`menu-item ${isTrainingActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+          <FaChalkboardTeacher className="menu-icon" />
+          <span>Training</span>
         </NavLink>
 
         <NavLink to="/newsletter" className={`menu-item ${isNewsletterActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>

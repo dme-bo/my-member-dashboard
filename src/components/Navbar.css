@@ -1,12 +1,13 @@
 /* ====================== NAVBAR ====================== */
 .navbar {
   background: #1976d2;
-  color: white;
-  border-bottom: 1px solid #0d47a1;
-  padding: 16px 20px;
+  color: #ffffff;
+  border-bottom: none;
+  padding: 0 28px;
+  height: 56px;
   display: flex;
   align-items: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
   position: sticky;
   top: 0;
   z-index: 99;
@@ -20,74 +21,60 @@
 }
 
 .navbar-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
   margin: 0;
-  margin-left: 30px;
+  letter-spacing: -0.01em;
 }
 
 .navbar-right {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 
 .navbar-button {
-  padding: 8px 16px;
-  border-radius: 4px;
+  padding: 7px 16px;
+  border-radius: 6px;
   border: none;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: all 0.3s ease;
+  gap: 6px;
+  transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .navbar-button.btn-primary {
-  background: #e91e63;
+  background: #1976d2;
   color: white;
 }
-
 .navbar-button.btn-primary:hover {
-  background: #c2185b;
-  box-shadow: 0 2px 8px rgba(233, 30, 99, 0.3);
+  background: #1565c0;
 }
 
 .navbar-button.btn-success {
-  background: #4caf50;
+  background: #43a047;
   color: white;
 }
-
 .navbar-button.btn-success:hover {
   background: #388e3c;
-  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
 .navbar-button.btn-info {
-  background: #2196f3;
+  background: #1976d2;
   color: white;
 }
-
 .navbar-button.btn-info:hover {
   background: #1565c0;
-  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
 }
 
 @media (max-width: 768px) {
-  .navbar-title {
-    font-size: 20px;
-  }
-
-  .navbar-button {
-    padding: 6px 12px;
-    font-size: 13px;
-  }
-
-  .navbar-right {
-    gap: 8px;
-  }
+  .navbar { padding: 0 16px; }
+  .navbar-title { font-size: 15px; }
+  .navbar-button { padding: 6px 12px; font-size: 12px; }
+  .navbar-right { gap: 6px; }
 }

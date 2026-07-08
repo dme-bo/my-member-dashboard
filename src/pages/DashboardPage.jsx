@@ -122,48 +122,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return Number.isNaN(boundary.getTime()) ? null : boundary;
   };
 
-  const filteredMembers = useMemo(() => {
-    const fromBoundary = parseDateBoundary(registrationDateFrom, false);
-    const toBoundary = parseDateBoundary(registrationDateTo, true);
-
-    return members.filter((member) => {
-      if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
-      if (serviceFilter !== 'All' && member.service !== serviceFilter) return false;
-      if (rankFilter !== 'All' && member.rank !== rankFilter) return false;
-      if (stateFilter !== 'All' && member.state !== stateFilter) return false;
-      if (cityFilter !== 'All' && member.city !== cityFilter) return false;
-      if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
-
-      const registrationDate = parseMemberDate(member.registration_date);
-      if (fromBoundary || toBoundary) {
-        if (!registrationDate) return false;
-        if (fromBoundary && registrationDate < fromBoundary) return false;
-        if (toBoundary && registrationDate > toBoundary) return false;
-      }
-
-      const age = member.age_years;
-      const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
-      if (ageFilterActive) {
-        if (!Number.isFinite(age)) return false;
-        if (age < ageRange[0] || age > ageRange[1]) return false;
-      }
-      return true;
-    });
-  }, [
-    members,
-    organizationFilter,
-    serviceFilter,
-    rankFilter,
-    stateFilter,
-    cityFilter,
-    retirementFilter,
-    ageRange,
-    ageBounds.min,
-    ageBounds.max,
-    registrationDateFrom,
-    registrationDateTo,
-  ]);
-
+  // Pass 1: filter by everything EXCEPT date range (used by registration analytics)
   const filteredMembersNoDateRange = useMemo(() => {
     return members.filter((member) => {
       if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
@@ -172,7 +131,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       if (stateFilter !== 'All' && member.state !== stateFilter) return false;
       if (cityFilter !== 'All' && member.city !== cityFilter) return false;
       if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
-
       const age = member.age_years;
       const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
       if (ageFilterActive) {
@@ -182,17 +140,23 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       return true;
     });
   }, [
-    members,
-    organizationFilter,
-    serviceFilter,
-    rankFilter,
-    stateFilter,
-    cityFilter,
-    retirementFilter,
-    ageRange,
-    ageBounds.min,
-    ageBounds.max,
+    members, organizationFilter, serviceFilter, rankFilter,
+    stateFilter, cityFilter, retirementFilter, ageRange, ageBounds.min, ageBounds.max,
   ]);
+
+  // Pass 2: apply date range on top of already-filtered set — avoids rescanning all 15k on date change
+  const filteredMembers = useMemo(() => {
+    const fromBoundary = parseDateBoundary(registrationDateFrom, false);
+    const toBoundary = parseDateBoundary(registrationDateTo, true);
+    if (!fromBoundary && !toBoundary) return filteredMembersNoDateRange;
+    return filteredMembersNoDateRange.filter((member) => {
+      const registrationDate = member.__registrationDate || parseMemberDate(member.registration_date);
+      if (!registrationDate) return false;
+      if (fromBoundary && registrationDate < fromBoundary) return false;
+      if (toBoundary && registrationDate > toBoundary) return false;
+      return true;
+    });
+  }, [filteredMembersNoDateRange, registrationDateFrom, registrationDateTo]);
 
 
   // Analytics (unchanged logic) ────────────────────────────────────────────────
@@ -285,8 +249,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   };
 
   const createChartData = (counts, colors = [
-    '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF',
-    '#FF9F40', '#66BB6A', '#FFA726', '#AB47BC', '#26A69A',
+    '#1976d2', '#43a047', '#e53935', '#fb8c00', '#7e57c2',
+    '#00897b', '#0288d1', '#f4511e', '#3949ab', '#546e7a',
   ]) => ({
     labels: Object.keys(counts),
     datasets: [{
@@ -403,12 +367,12 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .top-header {
-          margin-bottom: 24px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%);
-          border-radius: 24px;
-          padding: 22px;
-          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-          border: 1px solid rgba(148, 163, 184, 0.18);
+          margin-bottom: 22px;
+          background: #ffffff;
+          border-radius: 12px;
+          padding: 20px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
+          border: 1px solid #f1f5f9;
         }
 
         .top-header-inner {
@@ -478,8 +442,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .filter-group select:focus {
-          border-color: #2563eb;
-          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+          border-color: #1976d2;
+          box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.12);
         }
 
         .filter-group select option {
@@ -581,23 +545,22 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .clear-btn {
-          min-height: 46px;
-          padding: 0 20px;
-          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          min-height: 40px;
+          padding: 0 18px;
+          background: #1976d2;
           color: white;
           border: none;
-          border-radius: 16px;
+          border-radius: 8px;
           font-weight: 600;
+          font-size: 13px;
           cursor: pointer;
           white-space: nowrap;
-          transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
-          box-shadow: 0 10px 20px rgba(220, 38, 38, 0.16);
+          transition: background 0.15s ease;
           margin-left: auto;
         }
 
         .clear-btn:hover {
-          filter: brightness(1.02);
-          transform: translateY(-1px);
+          background: #1565c0;
         }
 
         .stats-grid {
@@ -608,19 +571,21 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .stat-card {
-          background: var(--card-bg);
+          background: #ffffff;
           border-radius: 10px;
-          padding: 20px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+          padding: 22px 18px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
+          border: 1px solid #f1f5f9;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          transition: transform 0.15s;
+          transition: transform 0.15s, box-shadow 0.15s;
         }
 
         .stat-card:hover {
-          transform: translateY(-3px);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.09), 0 8px 20px rgba(0,0,0,0.07);
         }
 
         .card-icon {
@@ -635,10 +600,10 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           font-size: 1.4rem;
         }
 
-        .card-icon.blue { background: #0d6efd; }
-        .card-icon.red { background: #dc3545; }
-        .card-icon.new { background: #198754; }
-        .card-icon.quarter { background: #fd7e14; }
+        .card-icon.blue { background: #1976d2; }
+        .card-icon.red { background: #475569; }
+        .card-icon.new { background: #43a047; }
+        .card-icon.quarter { background: #fb8c00; }
 
         .card-label {
           font-size: 1rem;
@@ -659,17 +624,21 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .chart-card {
-          background: var(--card-bg);
+          background: #ffffff;
           border-radius: 10px;
           padding: 20px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
+          border: 1px solid #f1f5f9;
         }
 
         .chart-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 1.3rem;
+          margin: 0 0 18px 0;
+          font-size: 1rem;
+          font-weight: 700;
           text-align: center;
-          color: var(--text-color);
+          color: #1a2332;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #e3f2fd;
         }
 
         .chart-container {

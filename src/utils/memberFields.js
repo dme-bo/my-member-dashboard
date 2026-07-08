@@ -3,6 +3,9 @@ const toText = (value) => {
   return String(value).trim();
 };
 
+const toTitleCase = (text) =>
+  text.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase());
+
 const normalizeLookupKey = (key) => String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 const getRecordValue = (record, key) => {
@@ -93,23 +96,25 @@ export const getMemberOrganization = (record) =>
   pickMemberText(record, ["organization", "Organization", "category", "Category"]);
 
 export const getMemberName = (record) =>
-  pickMemberText(
-    record,
-    [
-      "full_name",
-      "display_name",
-      "displayName",
-      "name",
-      "Full Name",
-    ],
-    ""
-  ) ||
-  (() => {
-    const first = toText(record?.first_name);
-    const last = toText(record?.last_name);
-    const combined = `${first} ${last}`.trim();
-    return combined || "No Name";
-  })();
+  toTitleCase(
+    pickMemberText(
+      record,
+      [
+        "full_name",
+        "display_name",
+        "displayName",
+        "name",
+        "Full Name",
+      ],
+      ""
+    ) ||
+      (() => {
+        const first = toText(record?.first_name);
+        const last = toText(record?.last_name);
+        const combined = `${first} ${last}`.trim();
+        return combined || "No Name";
+      })()
+  );
 
 export const getMemberPhone = (record) =>
   pickMemberText(record, ["phone_number", "phone", "mobile", "contact_number", "mobile_number", "Mobile Number", "Phone Number"]);

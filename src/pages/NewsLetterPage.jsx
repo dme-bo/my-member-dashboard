@@ -962,9 +962,11 @@ export default function BriskOliveNewsletterApp() {
 }
         .newsletter-app {
           font-family: 'Segoe UI', system-ui, sans-serif;
-          max-width: 1400px;
-          margin: 0 auto;
+          width: 100%;
+          max-width: 100%;
+          margin: 0;
           padding: 2rem 1.5rem;
+          box-sizing: border-box;
         }
 
         .app-header {

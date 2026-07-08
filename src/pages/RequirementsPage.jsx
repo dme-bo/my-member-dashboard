@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import {
   collection,
+  collectionGroup,
   getDocs,
   query,
   onSnapshot,
@@ -28,7 +29,7 @@ import { db } from "../firebase";
 import Papa from "papaparse";
 import { normalizeMemberRecord, getMemberOrganization } from "../utils/memberFields";
 
-export default function RequirementsPage() {
+export default function RequirementsPage({ memberRecords: propMembers = [], membersLoading: propLoading = false }) {
   const [requirementsData, setRequirementsData] = useState([]);
   const [members, setMembers] = useState([]);
   const [filteredMembers, setFilteredMembers] = useState([]);
@@ -51,6 +52,14 @@ export default function RequirementsPage() {
   const [showAllAllocationsModal, setShowAllAllocationsModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [allocationToDelete, setAllocationToDelete] = useState(null);
+
+  // Applicants modal state
+  const [showApplicantsModal, setShowApplicantsModal] = useState(false);
+  const [applicantsReq, setApplicantsReq] = useState(null);
+  const [applicants, setApplicants] = useState([]);
+  const [applicantsLoading, setApplicantsLoading] = useState(false);
+  const [selectedApplicant, setSelectedApplicant] = useState(null);
+  const [applicantCounts, setApplicantCounts] = useState({});
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
   const [allocatedMembers, setAllocatedMembers] = useState([]);
@@ -85,7 +94,8 @@ export default function RequirementsPage() {
       showMemberDetailModal ||
       showAllocatedMembersModal ||
       showAllAllocationsModal ||
-      showDeleteConfirmModal;
+      showDeleteConfirmModal ||
+      showApplicantsModal;
 
     if (isAnyModalOpen) {
       document.body.style.overflow = "hidden";
@@ -107,6 +117,7 @@ export default function RequirementsPage() {
     showAllocatedMembersModal,
     showAllAllocationsModal,
     showDeleteConfirmModal,
+    showApplicantsModal,
   ]);
 
   /* FETCH REQUIREMENTS */
@@ -239,8 +250,16 @@ export default function RequirementsPage() {
     return () => unsubscribe();
   }, [selectedReq]);
 
-  /* FETCH MEMBERS */
+  /* FETCH MEMBERS — use pre-loaded data from App.jsx if available, otherwise fetch own copy */
   useEffect(() => {
+    if (propMembers.length > 0) {
+      // Re-use already-loaded records: no extra Firebase read needed
+      setMembers(propMembers);
+      setFilteredMembers(propMembers);
+      return;
+    }
+    if (propLoading) return; // parent is still loading, wait for the effect below
+
     const fetchMembers = async () => {
       try {
         const q = query(collection(db, "users"));
@@ -268,6 +287,14 @@ export default function RequirementsPage() {
     };
     fetchMembers();
   }, []);
+
+  // Sync when parent's progressive load brings in more members
+  useEffect(() => {
+    if (propMembers.length > members.length) {
+      setMembers(propMembers);
+      // Don't reset filteredMembers here to preserve any active filters
+    }
+  }, [propMembers.length]);
 
   /* UNIQUE FILTER VALUES */
   const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
@@ -373,6 +400,68 @@ export default function RequirementsPage() {
   }, [filteredRequirements, requirementsSearchTerm, sortConfig, requirementsCurrentPage, requirementsPageSize]);
 
   const requirementsTotalPages = Math.ceil(filteredRequirements.length / requirementsPageSize);
+
+  /* FETCH APPLICANT COUNTS — 2 collection-group reads total, runs once on mount */
+  useEffect(() => {
+    const loadCounts = async () => {
+      try {
+        const counts = {};
+
+        // jobs_applied: document ID = job ID (e.g. users/{uid}/jobs_applied/JzFVwQp)
+        const jobSnap = await getDocs(collectionGroup(db, "jobs_applied"));
+        jobSnap.docs.forEach((d) => {
+          const id = d.id; // document ID is the job ID
+          counts[id] = (counts[id] || 0) + 1;
+        });
+
+        // projects_applied: document ID = project ID (same pattern)
+        const projSnap = await getDocs(collectionGroup(db, "projects_applied"));
+        projSnap.docs.forEach((d) => {
+          const id = d.id;
+          counts[id] = (counts[id] || 0) + 1;
+        });
+        setApplicantCounts(counts);
+      } catch (err) {
+        console.error("Error loading applicant counts:", err);
+      }
+    };
+
+    void loadCounts();
+  }, []);
+
+  const fetchApplicants = async (req) => {
+    setApplicantsReq(req);
+    setApplicants([]);
+    setSelectedApplicant(null);
+    setApplicantsLoading(true);
+    setShowApplicantsModal(true);
+    try {
+      // Structure: users/{uid}/job_applied/{jobId} or users/{uid}/projects_applied/{projectId}
+      // The document ID itself is the job/project ID
+      const subcol = req.type === "project" ? "projects_applied" : "jobs_applied";
+
+      const snap = await getDocs(collectionGroup(db, subcol));
+      const results = snap.docs.filter((d) => d.id === req.id).map((d) => {
+        let parsedForm = {};
+        try { parsedForm = JSON.parse(d.data().application_form_json || "{}"); } catch {}
+        const userId = d.ref.parent?.parent?.id ?? null;
+        return {
+          id: userId ?? d.ref.path,  // unique per applicant: user's document ID
+          _key: d.ref.path,
+          userId,
+          applied_at: d.data().applied_at,
+          ...d.data(),
+          parsedForm,
+        };
+      });
+      results.sort((a, b) => (b.applied_at?.seconds ?? 0) - (a.applied_at?.seconds ?? 0));
+      setApplicants(results);
+    } catch (err) {
+      console.error("Error fetching applicants:", err);
+    } finally {
+      setApplicantsLoading(false);
+    }
+  };
 
   const handleSort = (key) => {
     let direction = "asc";
@@ -760,6 +849,7 @@ export default function RequirementsPage() {
                     Compensation {sortConfig.key === "salary" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
                   </th>
                   <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Allocated</th>
+                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Applicants</th>
                   <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Status</th>
                   <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
                     Actions
@@ -816,6 +906,31 @@ export default function RequirementsPage() {
                       <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
                       <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
                         {liveCount}
+                      </td>
+                      <td style={{ padding: "16px", textAlign: "center" }}>
+                        {(() => {
+                          const appCount = applicantCounts[req.id] || 0;
+                          return (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); fetchApplicants(req); }}
+                              title={appCount > 0 ? `View ${appCount} applicant${appCount !== 1 ? "s" : ""}` : "No applicants yet"}
+                              style={{
+                                background: appCount > 0 ? "#eff6ff" : "transparent",
+                                border: appCount > 0 ? "1.5px solid #1976d2" : "1.5px solid #e2e8f0",
+                                borderRadius: "20px",
+                                color: appCount > 0 ? "#1976d2" : "#94a3b8",
+                                fontWeight: 700,
+                                fontSize: "15px",
+                                minWidth: "44px",
+                                padding: "4px 14px",
+                                cursor: "pointer",
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {appCount}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "16px", textAlign: "center" }}>
                         <span
@@ -2160,6 +2275,212 @@ export default function RequirementsPage() {
           </div>
         </div>
       )}
+
+      {/* ──────────── APPLICANTS MODAL ──────────── */}
+      {showApplicantsModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1200, padding: "16px" }}
+          onClick={() => { setShowApplicantsModal(false); setSelectedApplicant(null); }}
+        >
+          <div
+            style={{ background: "#fff", borderRadius: "18px", width: "min(1100px,96vw)", height: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ background: "#1976d2", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexShrink: 0 }}>
+              <div>
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>
+                  {applicantsReq?.type === "project" ? "Project" : "Job"} Applicants
+                </div>
+                <h2 style={{ margin: 0, color: "#fff", fontSize: "18px", fontWeight: 700 }}>
+                  {applicantsReq?.title}
+                  {!applicantsLoading && (
+                    <span style={{ marginLeft: "10px", fontSize: "14px", background: "rgba(255,255,255,0.2)", padding: "2px 10px", borderRadius: "20px" }}>
+                      {applicants.length} applicant{applicants.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </h2>
+              </div>
+              <button onClick={() => { setShowApplicantsModal(false); setSelectedApplicant(null); }}
+                style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: "50%", width: "36px", height: "36px", color: "#fff", fontSize: "20px", cursor: "pointer", flexShrink: 0 }}>
+                ×
+              </button>
+            </div>
+
+            {/* Body: two-panel layout */}
+            <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+
+              {/* Left: Applicant list */}
+              <div style={{ width: selectedApplicant ? "340px" : "100%", flexShrink: 0, borderRight: selectedApplicant ? "1px solid #e5e7eb" : "none", overflowY: "auto", background: "#f8fafc" }}>
+                {applicantsLoading ? (
+                  <div style={{ padding: "48px", textAlign: "center", color: "#64748b" }}>
+                    <div style={{ width: "32px", height: "32px", border: "3px solid #e3f2fd", borderTopColor: "#1976d2", borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 12px" }} />
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    Loading applicants…
+                  </div>
+                ) : applicants.length === 0 ? (
+                  <div style={{ padding: "48px", textAlign: "center", color: "#9ca3af" }}>
+                    <FaUsers style={{ fontSize: "40px", marginBottom: "12px", opacity: 0.4 }} />
+                    <p style={{ margin: 0, fontSize: "15px" }}>No applicants yet</p>
+                  </div>
+                ) : (
+                  applicants.map((app, idx) => {
+                    const form = app.parsedForm ?? {};
+                    const memberMatch = members.find((m) => m.id === app.userId);
+                    const name = form.personalInfo?.fullName ?? memberMatch?.name ?? app.userId ?? `Applicant #${idx + 1}`;
+                    const email = form.personalInfo?.email ?? memberMatch?.email ?? "—";
+                    const phone = form.personalInfo?.phone ?? memberMatch?.phone ?? "—";
+                    const role = form.jobInsights?.targetRole ?? form.personalInfo?.location ?? "";
+                    const exp = form.totalYearsExperience ?? "";
+                    const appliedAt = app.applied_at?.toDate
+                      ? app.applied_at.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—";
+                    const isSelected = selectedApplicant?._key === app._key;
+
+                    return (
+                      <div
+                        key={app._key}
+                        onClick={() => setSelectedApplicant(isSelected ? null : app)}
+                        style={{
+                          padding: "14px 18px",
+                          borderBottom: "1px solid #e9ecef",
+                          cursor: "pointer",
+                          background: isSelected ? "#eff6ff" : "#fff",
+                          borderLeft: isSelected ? "3px solid #1976d2" : "3px solid transparent",
+                          transition: "background 0.15s",
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: "14px", color: "#1a2332", marginBottom: "2px" }}>{name}</div>
+                        <div style={{ fontSize: "12.5px", color: "#475569", marginBottom: "4px" }}>{email}</div>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                          {phone !== "—" && <span style={{ fontSize: "12px", color: "#64748b" }}>{phone}</span>}
+                          {exp && <span style={{ fontSize: "11px", background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "999px", fontWeight: 600 }}>{exp}</span>}
+                          <span style={{ fontSize: "11px", color: "#9ca3af", marginLeft: "auto" }}>Applied {appliedAt}</span>
+                        </div>
+                        {role && <div style={{ fontSize: "11.5px", color: "#1976d2", marginTop: "4px", fontWeight: 600 }}>{role}</div>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Right: Applicant detail — selectedApplicant matched by _key (unique Firestore path) */}
+              {selectedApplicant && (() => {
+                const form = selectedApplicant.parsedForm ?? {};
+                const pi = form.personalInfo ?? {};
+                const skills = form.skills ?? {};
+                const exp = form.experience ?? [];
+                const edu = form.education ?? [];
+                const projs = form.projects ?? [];
+                const insights = form.jobInsights ?? {};
+                const appliedAt = selectedApplicant.applied_at?.toDate
+                  ? selectedApplicant.applied_at.toDate().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                  : "—";
+
+                const Section = ({ title, children }) => (
+                  <div style={{ marginBottom: "20px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#1976d2", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", borderBottom: "1.5px solid #e3f2fd", paddingBottom: "4px" }}>{title}</div>
+                    {children}
+                  </div>
+                );
+
+                const TagList = ({ items }) => (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {(items || []).filter(Boolean).map((item, i) => (
+                      <span key={i} style={{ background: "#f1f5f9", color: "#334155", padding: "3px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: 600 }}>{item}</span>
+                    ))}
+                  </div>
+                );
+
+                return (
+                  <div style={{ flex: 1, overflowY: "auto", padding: "22px 24px" }}>
+                    {/* Profile header */}
+                    <div style={{ background: "linear-gradient(135deg,#1976d2,#1565c0)", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px", color: "#fff" }}>
+                      <div style={{ fontSize: "20px", fontWeight: 700, marginBottom: "4px" }}>{pi.fullName || "—"}</div>
+                      <div style={{ fontSize: "13px", opacity: 0.9, marginBottom: "8px" }}>{pi.location || ""}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", fontSize: "12.5px" }}>
+                        {pi.email && <span>✉ {pi.email}</span>}
+                        {pi.phone && <span>📞 {pi.phone}</span>}
+                        {pi.linkedin && <span>🔗 {pi.linkedin}</span>}
+                      </div>
+                      <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        {insights.targetRole && <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: "999px", padding: "3px 12px", fontSize: "12px", fontWeight: 700 }}>{insights.targetRole}</span>}
+                        {insights.seniorityLevel && <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: "999px", padding: "3px 12px", fontSize: "12px" }}>{insights.seniorityLevel}</span>}
+                        {form.totalYearsExperience && <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: "999px", padding: "3px 12px", fontSize: "12px" }}>{form.totalYearsExperience} experience</span>}
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: "11.5px", color: "#64748b", marginBottom: "16px" }}>Applied on: <strong>{appliedAt}</strong></div>
+
+                    {form.summary && (
+                      <Section title="Summary">
+                        <p style={{ fontSize: "13px", color: "#374151", lineHeight: 1.65, margin: 0 }}>{form.summary}</p>
+                      </Section>
+                    )}
+
+                    {(skills.technical?.length || skills.tools?.length || skills.soft?.length) ? (
+                      <Section title="Skills">
+                        {skills.technical?.length > 0 && <div style={{ marginBottom: "8px" }}><div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "4px" }}>Technical</div><TagList items={skills.technical} /></div>}
+                        {skills.tools?.length > 0 && <div style={{ marginBottom: "8px" }}><div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "4px" }}>Tools</div><TagList items={skills.tools} /></div>}
+                        {skills.soft?.length > 0 && <div><div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "4px" }}>Soft Skills</div><TagList items={skills.soft} /></div>}
+                      </Section>
+                    ) : null}
+
+                    {exp.length > 0 && (
+                      <Section title="Experience">
+                        {exp.map((e, i) => (
+                          <div key={i} style={{ marginBottom: "12px", paddingLeft: "12px", borderLeft: "2px solid #e3f2fd" }}>
+                            <div style={{ fontWeight: 700, fontSize: "13.5px", color: "#1a2332" }}>{e.jobTitle} <span style={{ fontWeight: 400, color: "#6b7280" }}>@ {e.company}</span></div>
+                            <div style={{ fontSize: "12px", color: "#9ca3af", margin: "2px 0 4px" }}>{e.startDate} – {e.endDate || "Present"} · {e.location || ""}</div>
+                            {e.achievements?.length > 0 && (
+                              <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "12.5px", color: "#374151" }}>
+                                {e.achievements.map((a, j) => <li key={j} style={{ marginBottom: "2px" }}>{a}</li>)}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </Section>
+                    )}
+
+                    {edu.length > 0 && (
+                      <Section title="Education">
+                        {edu.map((e, i) => (
+                          <div key={i} style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: "13px", color: "#1a2332" }}>{e.degree} in {e.fieldOfStudy}</div>
+                              <div style={{ fontSize: "12px", color: "#6b7280" }}>{e.institution}</div>
+                            </div>
+                            {e.endYear && <span style={{ fontSize: "12px", color: "#9ca3af", whiteSpace: "nowrap" }}>{e.endYear}</span>}
+                          </div>
+                        ))}
+                      </Section>
+                    )}
+
+                    {projs.length > 0 && (
+                      <Section title="Projects">
+                        {projs.map((p, i) => (
+                          <div key={i} style={{ marginBottom: "10px" }}>
+                            <div style={{ fontWeight: 600, fontSize: "13px", color: "#1a2332" }}>{p.title}</div>
+                            {p.description && <p style={{ margin: "3px 0 4px", fontSize: "12.5px", color: "#374151", lineHeight: 1.55 }}>{p.description}</p>}
+                            {p.technologies?.length > 0 && <TagList items={p.technologies} />}
+                          </div>
+                        ))}
+                      </Section>
+                    )}
+
+                    {insights.primaryTechStack?.length > 0 && (
+                      <Section title="Recommended Job Titles">
+                        <TagList items={insights.recommendedJobTitles} />
+                      </Section>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

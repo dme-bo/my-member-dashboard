@@ -56,6 +56,65 @@ const getWorldPoint = ({ lat, lng }) => {
   return { x, y };
 };
 
+// Inverse of getWorldPoint - turns a normalized world pixel back into lat/lng.
+const getLatLngFromWorldPixel = (pixelX, pixelY, scale) => {
+  const worldX = pixelX / scale;
+  const worldY = pixelY / scale;
+  const lng = worldX * 360 - 180;
+  const lat = (Math.asin(Math.tanh((0.5 - worldY) * 2 * Math.PI)) * 180) / Math.PI;
+  return { lat, lng };
+};
+
+// Minimum on-screen distance (px) between cluster pin centers before they're combined.
+// Keeps neighboring bubbles from visually overlapping regardless of zoom/grouping mode.
+const MIN_CLUSTER_SEPARATION_PX = 70;
+
+// Collapse clusters that would still render close enough to overlap on screen.
+const mergeCloseClusters = (clusters, zoom) => {
+  const scale = 256 * Math.pow(2, zoom);
+  let list = clusters.map((cluster) => {
+    const world = getWorldPoint(cluster.position);
+    return { ...cluster, _x: world.x * scale, _y: world.y * scale };
+  });
+
+  let mergedAny = true;
+  while (mergedAny) {
+    mergedAny = false;
+
+    for (let i = 0; i < list.length && !mergedAny; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const dx = list[i]._x - list[j]._x;
+        const dy = list[i]._y - list[j]._y;
+        if (Math.sqrt(dx * dx + dy * dy) >= MIN_CLUSTER_SEPARATION_PX) continue;
+
+        const a = list[i];
+        const b = list[j];
+        const totalCount = a.count + b.count;
+        const sameGroup = a.mode === b.mode && a.label === b.label;
+
+        const merged = {
+          mode: sameGroup ? a.mode : undefined,
+          label: sameGroup ? a.label : undefined,
+          count: totalCount,
+          members: [...a.members, ...b.members],
+          _x: (a._x * a.count + b._x * b.count) / totalCount,
+          _y: (a._y * a.count + b._y * b.count) / totalCount,
+        };
+
+        list = list.filter((_, index) => index !== i && index !== j);
+        list.push(merged);
+        mergedAny = true;
+        break;
+      }
+    }
+  }
+
+  return list.map(({ _x, _y, ...cluster }) => ({
+    ...cluster,
+    position: getLatLngFromWorldPixel(_x, _y, scale),
+  }));
+};
+
 const getClusterGridSize = (zoom) => {
   if (zoom >= 15) return 36;
   if (zoom >= 13) return 48;
@@ -497,12 +556,13 @@ export default function MemberLocationPage() {
       clearMarkers();
 
       const zoom = Math.max(map.getZoom() || 5, 3);
-      const clusters =
+      const rawClusters =
         zoom < STATE_CLUSTER_ZOOM
           ? buildStateClusters(filteredMembersForMap)
           : zoom < MEMBER_CLUSTER_ZOOM
             ? buildClusters(filteredMembersForMap, zoom)
             : buildMemberMarkers(filteredMembersForMap);
+      const clusters = zoom < MEMBER_CLUSTER_ZOOM ? mergeCloseClusters(rawClusters, zoom) : rawClusters;
       const bounds = new google.maps.LatLngBounds();
 
       clusters.forEach((cluster) => {

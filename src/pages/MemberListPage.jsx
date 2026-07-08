@@ -1,5 +1,7 @@
 ﻿// src/pages/MemberListPage.jsx
-import { useState, useMemo, useEffect, useRef, useTransition } from "react";
+import React, { useState, useMemo, useEffect, useRef, useTransition } from "react";
+import * as ReactWindow from "react-window";
+const List = ReactWindow.FixedSizeList;
 import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import DualRangeSlider from "../components/DualRangeSlider";
@@ -20,6 +22,82 @@ import {
   parseMemberSkills,
 } from "../utils/memberFields";
 
+// ─── Virtual list constants ───────────────────────────────────────────────────
+const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 170px";
+const ROW_HEIGHT = 68;
+const COL_HEADERS = ["Name", "Mobile", "Category", "Service", "Rank", "State", "City", "Tags"];
+
+const cellStyle = {
+  padding: "0 14px",
+  fontSize: "13px",
+  color: "#475569",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  display: "flex",
+  alignItems: "center",
+};
+
+const VirtualRow = React.memo(({ index, style, data }) => {
+  const { items, onMemberClick, openTagModal, openRemoveTagConfirm } = data;
+  const member = items[index];
+  const memberSkills = member.__skills || [];
+  const visibleTags = memberSkills.slice(0, 2);
+
+  return (
+    <div
+      style={{
+        ...style,
+        display: "grid",
+        gridTemplateColumns: GRID_TEMPLATE,
+        borderBottom: "1px solid #f1f5f9",
+        cursor: "pointer",
+        backgroundColor: index % 2 === 0 ? "#fff" : "#fafbfc",
+        alignItems: "center",
+        boxSizing: "border-box",
+      }}
+      onClick={() => onMemberClick(member)}
+    >
+      <div style={{ ...cellStyle, fontWeight: 600, color: "#0f172a" }}>
+        {member.__name || "—"}
+      </div>
+      <div style={cellStyle}>{getMemberPhone(member) || "—"}</div>
+      <div style={cellStyle}>{getMemberOrganization(member) || "—"}</div>
+      <div style={cellStyle}>{getMemberService(member) || "—"}</div>
+      <div style={cellStyle}>{getMemberRank(member) || "—"}</div>
+      <div style={cellStyle}>{getMemberState(member) || "—"}</div>
+      <div style={cellStyle}>{getMemberCity(member) || "—"}</div>
+      <div style={{ padding: "0 10px", display: "flex", flexWrap: "nowrap", gap: "4px", alignItems: "center", overflow: "hidden", height: "100%" }}>
+        {visibleTags.map((tag) => (
+          <span
+            key={tag}
+            style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "3px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "11px", fontWeight: 600, flexShrink: 0 }}
+          >
+            {tag}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openRemoveTagConfirm(member, tag); }}
+              style={{ width: "14px", height: "14px", borderRadius: "50%", border: "none", background: "#cbd5e1", color: "#0f172a", fontSize: "10px", cursor: "pointer", padding: 0, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {memberSkills.length > 2 && (
+          <span style={{ fontSize: "11px", color: "#1976d2", fontWeight: 700, flexShrink: 0 }}>+{memberSkills.length - 2}</span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); openTagModal(member); }}
+          style={{ padding: "3px 8px", borderRadius: "999px", border: "1px solid #1976d2", background: "#e3f2fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap", flexShrink: 0 }}
+        >
+          + Tag
+        </button>
+      </div>
+    </div>
+  );
+});
+
 export default function MemberListPage({ onMemberClick, memberRecords = [], membersLoading = false }) {
   const pageShellStyle = {
     padding: "20px",
@@ -34,8 +112,9 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [filterPlaced, setFilterPlaced] = useState("all");
   const [members, setMembers] = useState(memberRecords);
   const [isMembersLoaded, setIsMembersLoaded] = useState(!membersLoading);
+  const [listHeight, setListHeight] = useState(() => Math.max(460, Math.floor(window.innerHeight * 0.65)));
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [rowsPerPage, setRowsPerPage] = useState(500);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filterSearchTerms, setFilterSearchTerms] = useState({});
@@ -50,7 +129,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [selectedTags, setSelectedTags] = useState([]);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
-  const [expandedTagsMemberId, setExpandedTagsMemberId] = useState(null);
   const [tagModalSaving, setTagModalSaving] = useState(false);
   const [tagModalError, setTagModalError] = useState("");
   const [tagSuccessPopup, setTagSuccessPopup] = useState({ show: false, message: "", type: "success" });
@@ -76,6 +154,12 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
 
+  useEffect(() => {
+    const onResize = () => setListHeight(Math.max(460, Math.floor(window.innerHeight * 0.65)));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const normalizeProjectPhone = (value) => {
     const digits = String(value || "").replace(/\D/g, "");
     return digits.startsWith("91") ? digits.slice(2) : digits;
@@ -90,7 +174,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   useEffect(() => {
     if (!membersLoading && Array.isArray(memberRecords)) {
       setMembers(memberRecords);
-      setCurrentPage(1);
       setIsMembersLoaded(true);
       setLoadProgress(100);
     } else {
@@ -194,27 +277,42 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       };
     });
   }, [members, memberProjectsByPhone]);
-  // Dynamic filter options
+  // Dynamic filter options — single pass over memberIndex (was 12 passes before)
   const filterOptions = useMemo(() => {
-    const getUniqueValues = (field) => {
-      const set = new Set();
-      memberIndex.forEach((member) => {
-        let value = member[field];
-        if (value) {
-          value = String(value).trim();
-          if (field === "gender") {
-            if (value.toLowerCase() === "male") value = "Male";
-            else if (value.toLowerCase() === "female") value = "Female";
-          }
-          set.add(value);
-        }
-      });
-      return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-    };
+    const genderSet = new Set();
+    const orgSet = new Set();
+    const serviceSet = new Set();
+    const rankSet = new Set();
+    const levelSet = new Set();
+    const tradeSet = new Set();
+    const citySet = new Set();
+    const stateSet = new Set();
+    const educationSet = new Set();
+    const statusSet = new Set();
+    const skillsSet = new Set();
+    const experiences = [];
 
-    const experiences = memberIndex
-      .map((m) => m.__experienceValue)
-      .filter((exp) => !isNaN(exp) && exp >= 0);
+    for (const member of memberIndex) {
+      if (member.gender) {
+        const g = String(member.gender).trim();
+        genderSet.add(g.toLowerCase() === "male" ? "Male" : g.toLowerCase() === "female" ? "Female" : g);
+      }
+      if (member.organization) orgSet.add(String(member.organization).trim());
+      if (member.service)      serviceSet.add(String(member.service).trim());
+      if (member.rank)         rankSet.add(String(member.rank).trim());
+      if (member.level)        levelSet.add(String(member.level).trim());
+      if (member.trade)        tradeSet.add(String(member.trade).trim());
+      if (member.city)         citySet.add(String(member.city).trim());
+      if (member.state)        stateSet.add(String(member.state).trim());
+      if (member.education)    educationSet.add(String(member.education).trim());
+      if (member.status)       statusSet.add(String(member.status).trim());
+      for (const s of member.__skills) skillsSet.add(s);
+      if (!isNaN(member.__experienceValue) && member.__experienceValue >= 0) {
+        experiences.push(member.__experienceValue);
+      }
+    }
+
+    const toSorted = (set) => ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
 
     let buckets = ["All"];
     if (experiences.length === 0) {
@@ -222,33 +320,33 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     } else {
       const maxExp = Math.max(...experiences);
       const ceiling = Math.ceil(maxExp / 5) * 5;
-      if (ceiling >= 1) buckets.push("0-1 yr");
-      if (ceiling >= 3) buckets.push("1-3 yrs");
-      if (ceiling >= 5) buckets.push("3-5 yrs");
+      if (ceiling >= 1)  buckets.push("0-1 yr");
+      if (ceiling >= 3)  buckets.push("1-3 yrs");
+      if (ceiling >= 5)  buckets.push("3-5 yrs");
       if (ceiling >= 10) buckets.push("5-10 yrs");
       if (ceiling >= 15) buckets.push("10-15 yrs");
       if (ceiling >= 20) buckets.push("15-20 yrs");
       if (ceiling >= 25) buckets.push("20-25 yrs");
       if (ceiling >= 30) buckets.push("25-30 yrs");
-      if (ceiling > 30) buckets.push("30+ yrs");
+      if (ceiling > 30)  buckets.push("30+ yrs");
       else if (ceiling >= 10) buckets.push(`${Math.max(10, ceiling - 5)}+ yrs`);
     }
 
     return {
-      Gender: getUniqueValues("gender"),
-      Category: getUniqueValues("organization"),
-      Service: getUniqueValues("service"),
-      Rank: getUniqueValues("rank"),
-      Level: getUniqueValues("level"),
-      Trade: getUniqueValues("trade"),
-      City: getUniqueValues("city"),
-      State: getUniqueValues("state"),
-      Education: getUniqueValues("education"),
-      Project: availableProjects,
-      Status: getUniqueValues("status"),
-      Tags: ["All", ...Array.from(new Set(memberIndex.flatMap((member) => member.__skills))).sort((a, b) => a.localeCompare(b))],
+      Gender:           toSorted(genderSet),
+      Category:         toSorted(orgSet),
+      Service:          toSorted(serviceSet),
+      Rank:             toSorted(rankSet),
+      Level:            toSorted(levelSet),
+      Trade:            toSorted(tradeSet),
+      City:             toSorted(citySet),
+      State:            toSorted(stateSet),
+      Education:        toSorted(educationSet),
+      Project:          availableProjects,
+      Status:           toSorted(statusSet),
+      Tags:             ["All", ...Array.from(skillsSet).sort((a, b) => a.localeCompare(b))],
       "Placement Status": ["All", "Placed", "Active"],
-      Experience: buckets,
+      Experience:       buckets,
     };
   }, [memberIndex, availableProjects]);
 
@@ -296,7 +394,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const handleFilterChange = (key, value) => {
     startTransition(() => {
       setSidebarFilters((prev) => ({ ...prev, [key]: value }));
-      setCurrentPage(1);
     });
   };
 
@@ -320,7 +417,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       });
       setRetirementStatus("All");
       setAgeRange([ageBounds.min, ageBounds.max]);
-      setCurrentPage(1);
     });
   };
 
@@ -433,35 +529,24 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       if (matchesSidebar) list.push(member);
     }
 
-    // Improved Alphabetical Sort (A → Z)
+    // Fast sort — localeCompare is ~10x slower than direct comparison at 15k rows
     list.sort((a, b) => {
-      const nameA = String(a.__name || getMemberName(a) || "ZZZ_NO_NAME").toLowerCase();
-      const nameB = String(b.__name || getMemberName(b) || "ZZZ_NO_NAME").toLowerCase();
-
-      return nameA.localeCompare(nameB);
+      const nameA = (a.__name || "ZZZ_NO_NAME").toLowerCase();
+      const nameB = (b.__name || "ZZZ_NO_NAME").toLowerCase();
+      return nameA < nameB ? -1 : nameA > nameB ? 1 : 0;
     });
 
     return list;
   }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
 
-  // Pagination logic with "All" support
   const totalItems = filteredMembers.length;
-  const isAllRows = rowsPerPage === 999999;
-  const totalPages = isAllRows ? 1 : Math.ceil(totalItems / rowsPerPage);
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const endIndex = isAllRows ? totalItems : Math.min(startIndex + rowsPerPage, totalItems);
-  const currentPageData = filteredMembers.slice(startIndex, endIndex);
+  const totalPages = Math.max(1, Math.ceil(totalItems / rowsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * rowsPerPage;
+  const pageMembers = filteredMembers.slice(pageStart, pageStart + rowsPerPage);
 
-  const handleRowsPerPageChange = (e) => {
-    const value = Number(e.target.value);
-    startTransition(() => {
-      setRowsPerPage(value);
-      setCurrentPage(1);
-    });
-  };
+  useEffect(() => { setCurrentPage(1); }, [filteredMembers]);
 
-  const goToPrevious = () => currentPage > 1 && setCurrentPage(currentPage - 1);
-  const goToNext = () => currentPage < totalPages && setCurrentPage(currentPage + 1);
   const toggleFilter = () => setIsFilterOpen(!isFilterOpen);
 
   const openTagModal = (member) => {
@@ -498,9 +583,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     });
   };
 
-  const toggleExpandedTags = (memberId) => {
-    setExpandedTagsMemberId((prev) => (prev === memberId ? null : memberId));
-  };
 
   const handleSaveTags = async () => {
     if (!tagModalMember?.id) return;
@@ -776,64 +858,75 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
             <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
               <input
               type="text"
-              placeholder="Search by Name, Mobile, Email..."
+              placeholder="Search name, mobile, email..."
               value={searchTerm}
               onChange={(e) => {
                 const nextValue = e.target.value;
                 startTransition(() => {
                   setSearchTerm(nextValue);
-                  setCurrentPage(1);
                 });
               }}
               style={{
-                padding: "12px 14px 12px 40px",
+                padding: "10px 14px 10px 38px",
                 width: "100%",
                 borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                fontSize: "14px",
+                border: "1px solid #e2e8f0",
+                fontSize: "13.5px",
                 backgroundColor: "white",
-                color: "black",
+                color: "#1a2332",
+                outline: "none",
+                transition: "border-color 0.15s",
               }}
+              onFocus={(e) => { e.target.style.borderColor = "#1976d2"; e.target.style.boxShadow = "0 0 0 3px rgba(25,118,210,0.1)"; }}
+              onBlur={(e) => { e.target.style.borderColor = "#e2e8f0"; e.target.style.boxShadow = "none"; }}
             />
           </div>
 
           {/* Total Members Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "auto" }}>
-            Total Members: <strong>{totalItems}</strong>
+          <span style={{ backgroundColor: "#e3f2fd", color: "#1565c0", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "700", whiteSpace: "nowrap", marginLeft: "auto", border: "1px solid #bbdefb" }}>
+            {totalItems.toLocaleString()} Members
           </span>
 
           {/* Filters Button */}
           <button
             onClick={() => setIsFilterOpen(!isFilterOpen)}
             style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #10b981",
-              color: "#10b981",
+              padding: "9px 18px",
+              backgroundColor: isFilterOpen ? "#1976d2" : "white",
+              border: "1px solid #1976d2",
+              color: isFilterOpen ? "white" : "#1976d2",
               borderRadius: "8px",
               cursor: "pointer",
               fontWeight: "600",
-              fontSize: "14px",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
-            🔽 Filters
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filters
           </button>
 
           {/* Export Button */}
           <button
             onClick={handleExportXLSX}
             style={{
-              padding: "10px 20px",
+              padding: "9px 18px",
               backgroundColor: "white",
-              border: "1px solid #1f2937",
-              color: "#1f2937",
+              border: "1px solid #e2e8f0",
+              color: "#475569",
               borderRadius: "8px",
               cursor: "pointer",
               fontWeight: "600",
-              fontSize: "14px",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
-            ⬇️ Export
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
           </button>
         </div>
 
@@ -867,16 +960,16 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   setOpenDropdown(null);
                 }}
                 style={{
-                  padding: "9px 15px",
-                  background: "linear-gradient(180deg, #f97316 0%, #ef4444 100%)",
+                  padding: "8px 16px",
+                  background: "#1976d2",
                   color: "white",
                   border: "none",
-                  borderRadius: "10px",
-                  fontSize: "12px",
+                  borderRadius: "8px",
+                  fontSize: "12.5px",
                   cursor: "pointer",
                   fontWeight: "700",
-                  boxShadow: "0 8px 18px rgba(239, 68, 68, 0.18)",
                   whiteSpace: "nowrap",
+                  transition: "background 0.15s",
                 }}
               >
                 Clear All
@@ -967,7 +1060,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                     const nextValue = e.target.value;
                     startTransition(() => {
                       setRetirementStatus(nextValue);
-                      setCurrentPage(1);
                     });
                   }}
                   style={{
@@ -997,7 +1089,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   onChange={(nextValue) => {
                     startTransition(() => {
                       setAgeRange(nextValue);
-                      setCurrentPage(1);
                     });
                   }}
                   suffix=" yrs"
@@ -1010,203 +1101,71 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       </div>
 
       <div style={{ width: "100%", margin: "0", padding: "0" }}>
-        <div className="table-container" style={{ margin: "0", padding: "0", height: "70vh", minHeight: "460px", overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable", border: "1px solid rgb(238, 238, 238)", borderRadius: "8px", background: "rgb(255, 255, 255)" }}>
-          <div className="table-wrapper responsive-table" style={{ margin: "0", padding: "0", width: "100%", boxSizing: "border-box", scrollbarGutter: "stable" }}>
-            <table className="members-table" style={{ width: "100%",tableLayout: "fixed" }}>
-              <thead>
-                <tr>
-                  <th className="sticky-name">Name</th>
-                  <th>Mobile</th>
-                  <th>Category</th>
-                  <th>Service</th>
-                  <th>Rank</th>
-                  <th>State</th>
-                  <th>City</th>
-                  <th>Tags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentPageData.length > 0 ? (
-                  currentPageData.map((member) => {
-                    const memberSkills = member.__skills || parseMemberSkills(member);
-                    const visibleSkills =
-                      expandedTagsMemberId === member.id ? memberSkills : memberSkills.slice(0, 2);
-                    const memberName = member.__name || getMemberName(member);
-
-                    return (
-                      <tr
-                        key={member.id}
-                        onClick={() => onMemberClick(member)}
-                        className="member-row clickable"
-                      >
-                        <td className="sticky-name">
-                          <div className="member-name">
-                            {memberName}
-                          </div>
-                        </td>
-                        <td>{getMemberPhone(member) || "-"}</td>
-                        <td>{getMemberOrganization(member) || "-"}</td>
-                        <td>{getMemberService(member) || "-"}</td>
-                        <td>{getMemberRank(member) || "-"}</td>
-                        <td>{getMemberState(member) || "-"}</td>
-                        <td>{getMemberCity(member) || "-"}</td>
-                        <td>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "6px", overflow: "hidden" }}>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", overflow: "hidden", maxWidth: "100%" }}>
-                              {memberSkills.length > 0 ? (
-                                <>
-                                  {visibleSkills.map((tag) => (
-                                    <span
-                                      key={tag}
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "6px",
-                                        padding: "4px 8px 4px 10px",
-                                        borderRadius: "999px",
-                                        background: "#f1f5f9",
-                                        color: "#475569",
-                                        fontSize: "11px",
-                                        fontWeight: "600",
-                                      }}
-                                    >
-                                      <span>{tag}</span>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          openRemoveTagConfirm(member, tag);
-                                        }}
-                                        aria-label={`Remove tag ${tag}`}
-                                        style={{
-                                          width: "16px",
-                                          height: "16px",
-                                          borderRadius: "999px",
-                                          border: "none",
-                                          background: "#cbd5e1",
-                                          color: "#0f172a",
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          cursor: "pointer",
-                                          fontSize: "11px",
-                                          lineHeight: 1,
-                                          padding: 0,
-                                        }}
-                                      >
-                                        ×
-                                      </button>
-                                    </span>
-                                  ))}
-                                  {memberSkills.length > 2 && expandedTagsMemberId !== member.id ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleExpandedTags(member.id);
-                                      }}
-                                      style={{
-                                        border: "none",
-                                        background: "#e2e8f0",
-                                        color: "#334155",
-                                        borderRadius: "999px",
-                                        padding: "4px 8px",
-                                        fontSize: "11px",
-                                        fontWeight: "700",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      +{memberSkills.length - 2}
-                                    </button>
-                                  ) : null}
-                                  {expandedTagsMemberId === member.id && memberSkills.length > 2 ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleExpandedTags(member.id);
-                                      }}
-                                      style={{
-                                        border: "none",
-                                        background: "transparent",
-                                        color: "#2563eb",
-                                        fontSize: "11px",
-                                        fontWeight: "700",
-                                        cursor: "pointer",
-                                        padding: 0,
-                                      }}
-                                    >
-                                      Show less
-                                    </button>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <span style={{ fontSize: "12px", color: "#94a3b8" }}>-</span>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openTagModal(member);
-                              }}
-                              style={{
-                                alignSelf: "flex-start",
-                                padding: "6px 10px",
-                                borderRadius: "999px",
-                                border: "1px solid #2563eb",
-                                background: "#eff6ff",
-                                color: "#1d4ed8",
-                                fontWeight: "700",
-                                cursor: "pointer",
-                                fontSize: "11px",
-                              }}
-                            >
-                              Add Tag
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="empty-message">
-                      No members match your filters
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <div style={{ border: "1px solid #eee", borderRadius: "8px", background: "#fff", overflow: "hidden" }}>
+          {/* Virtual table header */}
+          <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, background: "#1976d2", position: "sticky", top: 0, zIndex: 1 }}>
+            {COL_HEADERS.map((col) => (
+              <div key={col} style={{ padding: "12px 14px", color: "#fff", fontWeight: 700, fontSize: "12.5px", letterSpacing: "0.01em" }}>
+                {col}
+              </div>
+            ))}
           </div>
 
-          <div className="custom-pagination">
-            <div className="rows-per-page">
-              <span>Rows per page</span>
-              <select value={rowsPerPage} onChange={handleRowsPerPageChange}>
-                <option value={999999}>All</option>
-                <option value={100}>100</option>
-                <option value={500}>500</option>
-                <option value={1000}>1000</option>
-                <option value={5000}>5000</option>
-                
-              </select>
+          {/* Virtual rows */}
+          {filteredMembers.length === 0 ? (
+            <div style={{ padding: "48px 20px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
+              No members match your filters
             </div>
+          ) : (
+            <List
+              height={listHeight}
+              width="100%"
+              itemCount={pageMembers.length}
+              itemSize={ROW_HEIGHT}
+              itemData={{ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm }}
+              overscanCount={6}
+            >
+              {VirtualRow}
+            </List>
+          )}
 
-            <div className="page-info">
-              {startIndex + 1}–{endIndex} of {totalItems}
+          {/* Pagination footer — always visible */}
+          <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
+              {totalItems.toLocaleString()} member{totalItems !== 1 ? "s" : ""} found
+              {totalItems > 0 && (
+                <span style={{ marginLeft: "8px", fontWeight: 400 }}>
+                  (showing {pageStart + 1}–{Math.min(pageStart + rowsPerPage, totalItems).toLocaleString()})
+                </span>
+              )}
             </div>
-
-            <div className="page-navigation">
-              <button onClick={goToPrevious} disabled={currentPage === 1} className="nav-btn">
-                ‹
-              </button>
-              <button
-                onClick={goToNext}
-                disabled={currentPage === totalPages || totalItems === 0}
-                className="nav-btn"
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "12.5px", color: "#64748b" }}>Rows per page:</span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                style={{ padding: "4px 8px", borderRadius: "8px", border: "1.5px solid #e2e8f0", fontSize: "13px", background: "#fff", cursor: "pointer" }}
               >
-                ›
+                {[100, 250, 500, 1000, 2000].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <button
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage <= 1 ? "#f1f5f9" : "#1976d2", color: safeCurrentPage <= 1 ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage <= 1 ? "not-allowed" : "pointer" }}
+              >
+                ‹ Prev
+              </button>
+              <span style={{ fontSize: "13px", color: "#475569", fontWeight: 600, minWidth: "80px", textAlign: "center" }}>
+                Page {safeCurrentPage} / {totalPages}
+              </span>
+              <button
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage >= totalPages ? "#f1f5f9" : "#1976d2", color: safeCurrentPage >= totalPages ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage >= totalPages ? "not-allowed" : "pointer" }}
+              >
+                Next ›
               </button>
             </div>
           </div>
@@ -1415,13 +1374,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   disabled={tagModalSaving}
                   style={{
                     padding: "10px 16px",
-                    borderRadius: "10px",
+                    borderRadius: "8px",
                     border: "none",
-                    background: tagModalSaving ? "#93c5fd" : "#2563eb",
+                    background: tagModalSaving ? "#90caf9" : "#1976d2",
                     color: "#fff",
                     cursor: tagModalSaving ? "not-allowed" : "pointer",
                     fontWeight: "700",
                     fontSize: "13px",
+                    transition: "background 0.15s",
                   }}
                 >
                   {tagModalSaving ? "Saving..." : "Save Tags"}
