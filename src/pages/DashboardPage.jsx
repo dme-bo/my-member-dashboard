@@ -15,6 +15,60 @@ import 'react-datepicker/dist/react-datepicker.css';
 import DualRangeSlider from '../components/DualRangeSlider';
 import { parseMemberDate } from '../utils/memberFields';
 
+const PIE_CHART_OPTIONS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'right', labels: { font: { size: 14 } } },
+    tooltip: {
+      callbacks: {
+        label: (context) => {
+          const value = context.raw || 0;
+          const total = context.dataset.data.reduce((a, b) => a + b, 0);
+          const percentage = total ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+          return `${context.label}: ${value} (${percentage})`;
+        },
+      },
+    },
+    datalabels: {
+      color: '#fff',
+      font: { weight: 'bold', size: 16 },
+      formatter: (value, context) => {
+        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+        const percentage = Math.round((value / total) * 100);
+        return percentage >= 8 ? `${percentage}%` : '';
+      },
+    },
+  },
+};
+
+const BAR_CHART_OPTIONS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (context) => `${context.label}: ${context.raw} members`,
+      },
+    },
+    datalabels: {
+      color: '#000',
+      anchor: 'end',
+      align: 'top',
+      font: { weight: 'bold', size: 13 },
+      formatter: (value) => (value > 0 ? value : ''),
+    },
+  },
+  scales: {
+    y: { beginAtZero: true, ticks: { stepSize: 1 } },
+    x: { ticks: { maxRotation: 45, minRotation: 45, autoSkip: false } },
+  },
+  layout: { padding: { top: 30 } },
+};
+
+const CHART_DATALABELS_PLUGINS = [ChartDataLabels];
+
 export default function DashboardPage({ memberRecords = [], membersLoading = false }) {
   const [members, setMembers] = useState(memberRecords);
   const [loading, setLoading] = useState(membersLoading);
@@ -264,57 +318,23 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     }],
   });
 
-  const pieOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'right', labels: { font: { size: 14 } } },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            const value = context.raw || 0;
-            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-            const percentage = total ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-            return `${context.label}: ${value} (${percentage})`;
-          },
-        },
-      },
-      datalabels: {
-        color: '#fff',
-        font: { weight: 'bold', size: 16 },
-        formatter: (value, context) => {
-          const total = context.dataset.data.reduce((a, b) => a + b, 0);
-          const percentage = Math.round((value / total) * 100);
-          return percentage >= 8 ? `${percentage}%` : '';
-        },
-      },
-    },
-  };
+  const genderChartData = useMemo(() => (analytics ? createChartData(analytics.genderCounts) : null), [analytics]);
+  const organizationChartData = useMemo(() => (analytics ? createChartData(analytics.organizationCounts) : null), [analytics]);
+  const serviceChartData = useMemo(() => (analytics ? createChartData(analytics.serviceCounts) : null), [analytics]);
+  const rankChartData = useMemo(() => (analytics ? createChartData(analytics.rankCounts) : null), [analytics]);
+  const registrationChartData = useMemo(
+    () =>
+      createChartData({
+        Today: registrationAnalytics?.registeredToday ?? 0,
+        'Last 7 Days': registrationAnalytics?.registeredWeek ?? 0,
+        'This Month': registrationAnalytics?.registeredMonth ?? 0,
+        'Last 3 Months': registrationAnalytics?.registered3Months ?? 0,
+      }),
+    [registrationAnalytics]
+  );
 
-  const barOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (context) => `${context.label}: ${context.raw} members`,
-        },
-      },
-      datalabels: {
-        color: '#000',
-        anchor: 'end',
-        align: 'top',
-        font: { weight: 'bold', size: 13 },
-        formatter: (value) => (value > 0 ? value : ''),
-      },
-    },
-    scales: {
-      y: { beginAtZero: true, ticks: { stepSize: 1 } },
-      x: { ticks: { maxRotation: 45, minRotation: 45, autoSkip: false } },
-    },
-    layout: { padding: { top: 30 } },
-  };
+  const pieOptions = PIE_CHART_OPTIONS;
+  const barOptions = BAR_CHART_OPTIONS;
 
   if (loading) {
     return (
@@ -948,28 +968,28 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
               <div className="chart-card">
                 <h3>Gender Wise Distribution</h3>
                 <div className="chart-container">
-                  <Pie data={createChartData(analytics.genderCounts)} options={pieOptions} plugins={[ChartDataLabels]} />
+                  <Pie data={genderChartData} options={pieOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <div className="chart-card">
                 <h3>Category Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={createChartData(analytics.organizationCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+                  <Bar data={organizationChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <div className="chart-card">
                 <h3>Service Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={createChartData(analytics.serviceCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+                  <Bar data={serviceChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <div className="chart-card">
                 <h3>Ranks Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={createChartData(analytics.rankCounts)} options={barOptions} plugins={[ChartDataLabels]} />
+                  <Bar data={rankChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
@@ -977,14 +997,9 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                 <h3>Registration Trends</h3>
                 <div className="chart-container">
                   <Bar
-                    data={createChartData({
-                      Today: registrationAnalytics?.registeredToday ?? 0,
-                      'Last 7 Days': registrationAnalytics?.registeredWeek ?? 0,
-                      'This Month': registrationAnalytics?.registeredMonth ?? 0,
-                      'Last 3 Months': registrationAnalytics?.registered3Months ?? 0,
-                    })}
+                    data={registrationChartData}
                     options={barOptions}
-                    plugins={[ChartDataLabels]}
+                    plugins={CHART_DATALABELS_PLUGINS}
                   />
                 </div>
               </div>

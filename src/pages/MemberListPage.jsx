@@ -1,5 +1,5 @@
 ﻿// src/pages/MemberListPage.jsx
-import React, { useState, useMemo, useEffect, useRef, useTransition } from "react";
+import React, { useState, useMemo, useEffect, useRef, useTransition, useCallback } from "react";
 import * as ReactWindow from "react-window";
 const List = ReactWindow.FixedSizeList;
 import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
@@ -586,13 +586,13 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
   const toggleFilter = () => setIsFilterOpen(!isFilterOpen);
 
-  const openTagModal = (member) => {
+  const openTagModal = useCallback((member) => {
     setTagModalMember(member);
     setSelectedTags(parseMemberSkills(member));
     setTagSearchTerm("");
     setTagPickerOpen(false);
     setTagModalError("");
-  };
+  }, []);
 
   const closeTagModal = () => {
     setTagModalMember(null);
@@ -664,9 +664,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     });
   };
 
-  const openRemoveTagConfirm = (member, tag) => {
+  const openRemoveTagConfirm = useCallback((member, tag) => {
     setRemoveTagTarget({ member, tag });
-  };
+  }, []);
+
+  const virtualRowItemData = useMemo(
+    () => ({ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm }),
+    [pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm]
+  );
 
   const closeRemoveTagConfirm = () => {
     setRemoveTagTarget(null);
@@ -1221,7 +1226,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
               width="100%"
               itemCount={pageMembers.length}
               itemSize={ROW_HEIGHT}
-              itemData={{ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm }}
+              itemData={virtualRowItemData}
               overscanCount={6}
             >
               {VirtualRow}

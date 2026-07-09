@@ -1,7 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, documentId, getDocs, limit, orderBy, query, startAfter } from "firebase/firestore";
 import { FaMapMarkedAlt, FaSpinner, FaDirections, FaTimes, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
-import { db } from "../firebase";
 import { getMemberName, getMemberPhone, getMemberEmail, parseMemberLatLong, pickMemberText } from "../utils/memberFields";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -313,9 +311,7 @@ const extractGeocodedCity = (result) => {
   return "";
 };
 
-export default function MemberLocationPage() {
-  const [members, setMembers] = useState([]);
-  const [totalUsersCount, setTotalUsersCount] = useState(0);
+export default function MemberLocationPage({ memberRecords = [] }) {
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState("");
   const [mapReady, setMapReady] = useState(false);
@@ -332,57 +328,34 @@ export default function MemberLocationPage() {
   const renderFrameRef = useRef(null);
   const resizeObserverRef = useRef(null);
 
+  // Members already come fully normalized (including location_point) from the
+  // shared fetch in App.jsx's Layout — reuse it instead of re-fetching the same
+  // ~15k-doc "users" collection a second time just for this page.
+  const members = useMemo(() => {
+    if (!Array.isArray(memberRecords)) return [];
+    return memberRecords
+      .map((raw) => {
+        const location_point = raw.location_point || parseMemberLatLong(raw);
+        if (!location_point) return null;
+
+        return {
+          id: raw.id,
+          name: getMemberName(raw),
+          phone: getMemberPhone(raw),
+          email: getMemberEmail(raw),
+          city: pickMemberText(raw, ["city", "City"]),
+          state: pickMemberText(raw, ["state", "State"]),
+          organization: pickMemberText(raw, ["organization", "Organization", "category", "Category"]),
+          location_point,
+        };
+      })
+      .filter(Boolean);
+  }, [memberRecords]);
+
+  const totalUsersCount = memberRecords.length;
+
   useEffect(() => {
     let cancelled = false;
-
-    const loadData = async () => {
-      try {
-        const rows = [];
-        let totalCount = 0;
-        let lastDoc = null;
-        const pageSize = 500;
-
-        while (!cancelled) {
-          const baseQuery = query(collection(db, "users"), orderBy(documentId()), limit(pageSize));
-          const pageQuery = lastDoc ? query(collection(db, "users"), orderBy(documentId()), startAfter(lastDoc), limit(pageSize)) : baseQuery;
-          const snapshot = await getDocs(pageQuery);
-          if (cancelled) return;
-          totalCount += snapshot.docs.length;
-
-          const chunk = snapshot.docs
-            .map((doc) => {
-              const raw = doc.data();
-              const location_point = parseMemberLatLong(raw);
-              if (!location_point) return null;
-
-              return {
-                id: doc.id,
-                name: getMemberName(raw),
-                phone: getMemberPhone(raw),
-                email: getMemberEmail(raw),
-                city: pickMemberText(raw, ["city", "City"]),
-                state: pickMemberText(raw, ["state", "State"]),
-                organization: pickMemberText(raw, ["organization", "Organization", "category", "Category"]),
-                location_point,
-              };
-            })
-            .filter(Boolean);
-
-          rows.push(...chunk);
-          setMembers([...rows]);
-
-          if (snapshot.docs.length < pageSize) break;
-          lastDoc = snapshot.docs[snapshot.docs.length - 1];
-        }
-
-        if (!cancelled) {
-          setTotalUsersCount(totalCount);
-        }
-      } catch (error) {
-        console.error("Error loading members for map:", error);
-        if (!cancelled) setMapError("Unable to load member data.");
-      }
-    };
 
     const initMap = async () => {
       if (!GOOGLE_MAPS_API_KEY) {
@@ -430,7 +403,6 @@ export default function MemberLocationPage() {
       }
     };
 
-    loadData();
     initMap();
 
     return () => {

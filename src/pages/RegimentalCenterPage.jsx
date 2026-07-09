@@ -414,42 +414,29 @@ export default function RegimentalCenterPage() {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        .regimental-layout {
+        .regimental-category-row {
           display: flex;
-          gap: 20px;
-          align-items: flex-start;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 20px;
         }
-        .regimental-sidebar {
-          flex: 0 0 240px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          background: #fff;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 12px;
-          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
-        }
-        .regimental-sidebar-btn {
-          text-align: left;
-          padding: 12px 14px;
-          border-radius: 10px;
+        .regimental-category-btn {
+          padding: 8px 16px;
+          border-radius: 30px;
           border: none;
-          background: transparent;
-          color: #374151;
-          font-weight: 600;
+          background: #e5e7eb;
+          color: #1f2937;
+          font-weight: 700;
           font-size: 13px;
           cursor: pointer;
+          box-shadow: 0 2px 1px -1px rgba(0,0,0,0.2), 0 1px 1px 0 rgba(0,0,0,0.14), 0 1px 3px 0 rgba(0,0,0,0.12);
+          transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .regimental-sidebar-btn.active {
-          background: #eff6ff;
-          color: #1976d2;
-        }
-        .regimental-sidebar-btn:hover:not(.active) {
-          background: #f8fafc;
+        .regimental-category-btn.active {
+          background: #1976d2;
+          color: #fff;
         }
         .regimental-content {
-          flex: 1;
           min-width: 0;
         }
         .regimental-search-row {
@@ -692,21 +679,20 @@ export default function RegimentalCenterPage() {
         </div>
       </div>
 
-      <div className="regimental-layout">
-        <div className="regimental-sidebar">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.key}
-              type="button"
-              className={`regimental-sidebar-btn ${cat.key === activeCategoryKey ? "active" : ""}`}
-              onClick={() => setActiveCategoryKey(cat.key)}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+      <div className="regimental-category-row">
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.key}
+            type="button"
+            className={`regimental-category-btn ${cat.key === activeCategoryKey ? "active" : ""}`}
+            onClick={() => setActiveCategoryKey(cat.key)}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="regimental-content">
+      <div className="regimental-content">
           <div className="regimental-search-row">
             <div className="regimental-search-box">
               <FaSearch size={14} />
@@ -756,7 +742,6 @@ export default function RegimentalCenterPage() {
               </table>
             )}
           </div>
-        </div>
       </div>
 
       {showAddModal && (
