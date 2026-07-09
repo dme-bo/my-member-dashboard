@@ -8,6 +8,8 @@ import DualRangeSlider from "../components/DualRangeSlider";
 import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import {
   getMemberName,
   getMemberPhone,
@@ -20,7 +22,28 @@ import {
   getMemberEducation,
   getMemberExperience,
   parseMemberSkills,
+  parseMemberDate,
 } from "../utils/memberFields";
+
+const toDatePickerValue = (value) => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const toDateInputValue = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateBoundary = (value, endOfDay) => {
+  if (!value) return null;
+  const boundary = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00"}`);
+  return Number.isNaN(boundary.getTime()) ? null : boundary;
+};
 
 // ─── Virtual list constants ───────────────────────────────────────────────────
 const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 170px";
@@ -121,6 +144,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const filtersRef = useRef(null);
   const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
+  const [registrationDateFrom, setRegistrationDateFrom] = useState("");
+  const [registrationDateTo, setRegistrationDateTo] = useState("");
   const [ageRange, setAgeRange] = useState([0, 100]);
   const [tagModalMember, setTagModalMember] = useState(null);
   const [availableTags, setAvailableTags] = useState([]);
@@ -241,6 +266,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       const memberPhoneDigits = normalizeProjectPhone(phone);
       const projectLabels = memberProjectsByPhone[memberPhoneDigits] || [];
       const projectLabelsLower = projectLabels.map((project) => String(project).toLowerCase());
+      const registrationDate = parseMemberDate(member.registration_date);
 
       return {
         ...member,
@@ -274,6 +300,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           .toLowerCase(),
         __experienceValue: Number.isFinite(experienceValue) ? experienceValue : NaN,
         __tagsLower: String(member.tags || member.Tags || "").toLowerCase(),
+        __registrationDateMs: registrationDate ? registrationDate.getTime() : null,
       };
     });
   }, [members, memberProjectsByPhone]);
@@ -416,6 +443,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         Tags: "All",
       });
       setRetirementStatus("All");
+      setRegistrationDateFrom("");
+      setRegistrationDateTo("");
       setAgeRange([ageBounds.min, ageBounds.max]);
     });
   };
@@ -438,6 +467,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     const activeAgeFilter = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
     const activeExperienceFilter = selectedSidebarFilters.find(([key]) => key === "Experience");
     const experienceRange = activeExperienceFilter ? parseExperienceRange(activeExperienceFilter[1]) : null;
+    const fromBoundaryMs = parseDateBoundary(registrationDateFrom, false)?.getTime() ?? null;
+    const toBoundaryMs = parseDateBoundary(registrationDateTo, true)?.getTime() ?? null;
 
     const fieldMap = {
       Gender: "gender",
@@ -468,6 +499,12 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       if (filterPlaced === "placed" && member.isPlaced !== true) continue;
       if (filterPlaced === "active" && member.isPlaced === true) continue;
       if (retirementStatus !== "All" && member.retirement_status !== retirementStatus) continue;
+
+      if (fromBoundaryMs !== null || toBoundaryMs !== null) {
+        if (member.__registrationDateMs === null) continue;
+        if (fromBoundaryMs !== null && member.__registrationDateMs < fromBoundaryMs) continue;
+        if (toBoundaryMs !== null && member.__registrationDateMs > toBoundaryMs) continue;
+      }
 
       if (activeAgeFilter) {
         const age = member.age_years;
@@ -537,7 +574,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     });
 
     return list;
-  }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, ageRange, ageBounds.min, ageBounds.max]);
+  }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, registrationDateFrom, registrationDateTo, ageRange, ageBounds.min, ageBounds.max]);
 
   const totalItems = filteredMembers.length;
   const totalPages = rowsPerPage === Infinity ? 1 : Math.max(1, Math.ceil(totalItems / rowsPerPage));
@@ -849,6 +886,32 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           padding: 36px;
         }
       }
+      .member-date-range-wrapper {
+        width: 100%;
+      }
+      .member-date-range-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 12px;
+        color: #111827;
+        outline: none;
+        font-family: inherit;
+      }
+      .member-date-range-input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+      }
+      #member-date-range-portal {
+        position: relative;
+        z-index: 10200;
+      }
+      .member-date-range-popper {
+        z-index: 10200;
+      }
     `}</style>
       {/* Header Card with Search, Total Badge, Filters, Export */}
       <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
@@ -1035,25 +1098,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   </div>
                 );
               })}
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: "12px",
-                alignItems: "stretch",
-              }}
-            >
-              <div
-                style={{
-                  background: "#f8fafc",
-                  border: "1px solid #dbe3ee",
-                  borderRadius: "12px",
-                  padding: "14px",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
-                }}
-              >
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "700", fontSize: "12px", color: "#334155" }}>Retirement Status</label>
+              <div style={{ padding: "4px 0", minWidth: 0 }}>
+                <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "12px", color: "#334155" }}>Retirement Status</label>
                 <select
                   value={retirementStatus}
                   onChange={(e) => {
@@ -1067,9 +1113,9 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                     padding: "11px 12px",
                     border: "1px solid #cbd5e1",
                     borderRadius: "10px",
-                    background: "#fff",
+                    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
                     fontSize: "13px",
-                    color: "#111827",
+                    color: "#0f172a",
                     outline: "none",
                     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
                   }}
@@ -1079,7 +1125,60 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   <option value="Not Retired">Not Retired</option>
                 </select>
               </div>
-              <div style={{ border: "1px solid #dbe3ee", borderRadius: "12px", background: "#f8fafc", overflow: "hidden" }}>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "12px",
+                alignItems: "stretch",
+              }}
+            >
+              <div
+                style={{
+                  flex: "1 1 320px",
+                  background: "#f8fafc",
+                  border: "1px solid #dbe3ee",
+                  borderRadius: "10px",
+                  padding: "10px",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
+                }}
+              >
+                <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "11px", color: "#334155" }}>Registration Date Range</label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <DatePicker
+                    selected={toDatePickerValue(registrationDateFrom)}
+                    onChange={(date) =>
+                      startTransition(() => {
+                        setRegistrationDateFrom(toDateInputValue(date));
+                      })
+                    }
+                    dateFormat="dd MMM yyyy"
+                    placeholderText="From date"
+                    showPopperArrow={false}
+                    className="member-date-range-input"
+                    wrapperClassName="member-date-range-wrapper"
+                    portalId="member-date-range-portal"
+                    popperClassName="member-date-range-popper"
+                  />
+                  <DatePicker
+                    selected={toDatePickerValue(registrationDateTo)}
+                    onChange={(date) =>
+                      startTransition(() => {
+                        setRegistrationDateTo(toDateInputValue(date));
+                      })
+                    }
+                    dateFormat="dd MMM yyyy"
+                    placeholderText="To date"
+                    showPopperArrow={false}
+                    className="member-date-range-input"
+                    wrapperClassName="member-date-range-wrapper"
+                    portalId="member-date-range-portal"
+                    popperClassName="member-date-range-popper"
+                  />
+                </div>
+              </div>
+              <div style={{ flex: "1 1 280px", border: "1px solid #dbe3ee", borderRadius: "12px", background: "#f8fafc", overflow: "hidden" }}>
                 <DualRangeSlider
                   label="Age Range"
                   helperText="Drag both handles to narrow the visible age range."

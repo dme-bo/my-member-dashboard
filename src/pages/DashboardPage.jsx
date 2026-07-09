@@ -868,7 +868,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                   <DatePicker
                     selected={toDatePickerValue(registrationDateFrom)}
                     onChange={(date) => setRegistrationDateFrom(toDateInputValue(date))}
-                    dateFormat="dd-MM-yyyy"
+                    dateFormat="dd MMM yyyy"
                     placeholderText="Select date"
                     className="date-picker-input"
                     wrapperClassName="date-picker-wrapper"
@@ -882,7 +882,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                   <DatePicker
                     selected={toDatePickerValue(registrationDateTo)}
                     onChange={(date) => setRegistrationDateTo(toDateInputValue(date))}
-                    dateFormat="dd-MM-yyyy"
+                    dateFormat="dd MMM yyyy"
                     placeholderText="Select date"
                     className="date-picker-input"
                     wrapperClassName="date-picker-wrapper"

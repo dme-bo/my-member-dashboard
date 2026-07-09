@@ -15,9 +15,15 @@ import {
   FaUserFriends,
   FaFolderOpen,
   FaExternalLinkAlt,
+  FaEnvelope,
+  FaStar,
+  FaRegStar,
+  FaHistory,
+  FaSearch,
 } from "react-icons/fa";
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
+import { getMemberName, getMemberPhone } from "../utils/memberFields";
 
 const COLLECTION_NAME = "trainingsessions";
 const MATERIAL_TYPES = ["PPT", "Recording", "PDF", "Document", "Other"];
@@ -29,9 +35,11 @@ const createEmptyForm = () => ({
   date: "",
   time: "",
   meetingLink: "",
+  teamEmails: "",
 });
 
 const createEmptyMaterialForm = () => ({ title: "", type: MATERIAL_TYPES[0], link: "" });
+const createEmptyFeedbackForm = () => ({ rating: 0, comment: "" });
 
 const todayStr = () => {
   const now = new Date();
@@ -48,32 +56,65 @@ const formatDateDisplay = (dateStr) => {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+// Trainees are stored as {id, name, phone}; older sessions may still have plain name strings.
+const getTraineeName = (trainee) => (typeof trainee === "string" ? trainee : trainee?.name || "Unknown");
+
+function StarRating({ value, onChange, size = 20 }) {
+  return (
+    <div style={{ display: "flex", gap: "4px" }}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => onChange(star)}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: star <= value ? "#f59e0b" : "#d1d5db" }}
+        >
+          {star <= value ? <FaStar size={size} /> : <FaRegStar size={size} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function TrainingPage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
+
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState(null);
   const [form, setForm] = useState(createEmptyForm());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [deletingId, setDeletingId] = useState("");
   const [togglingId, setTogglingId] = useState("");
 
+  // Trainee multiselect (shared members list, loaded once)
+  const [allMembers, setAllMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [memberSearchTerm, setMemberSearchTerm] = useState("");
+  const [selectedTrainees, setSelectedTrainees] = useState([]); // [{id, name, phone}]
+
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState("All");
   const [topicSearch, setTopicSearch] = useState("");
-
-  const [attendeesSession, setAttendeesSession] = useState(null);
-  const [attendeeInput, setAttendeeInput] = useState("");
-  const [savingAttendee, setSavingAttendee] = useState(false);
 
   const [activeView, setActiveView] = useState("sessions");
   const [materialsSession, setMaterialsSession] = useState(null);
   const [materialForm, setMaterialForm] = useState(createEmptyMaterialForm());
   const [materialFormError, setMaterialFormError] = useState("");
   const [savingMaterial, setSavingMaterial] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [showUploadPicker, setShowUploadPicker] = useState(false);
+  const [uploadPickerSearch, setUploadPickerSearch] = useState("");
   const [libraryTypeFilter, setLibraryTypeFilter] = useState("All");
   const [libraryTrainingFilter, setLibraryTrainingFilter] = useState("All");
   const [librarySearch, setLibrarySearch] = useState("");
+
+  const [feedbackSession, setFeedbackSession] = useState(null);
+  const [feedbackForm, setFeedbackForm] = useState(createEmptyFeedbackForm());
+  const [savingFeedback, setSavingFeedback] = useState(false);
+
+  const [historySearch, setHistorySearch] = useState("");
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -100,6 +141,39 @@ export default function TrainingPage() {
     loadSessions();
   }, []);
 
+  const ensureMembersLoaded = async () => {
+    if (allMembers.length > 0) return;
+    setMembersLoading(true);
+    try {
+      const snapshot = await getDocs(collection(db, "users"));
+      const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      setAllMembers(rows);
+    } catch (error) {
+      console.error("Error loading members:", error);
+      showToast("Failed to load members list.", "error");
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const filteredMembersForPicker = useMemo(() => {
+    const term = memberSearchTerm.trim().toLowerCase();
+    if (!term) return allMembers;
+    return allMembers.filter((m) => {
+      const name = getMemberName(m).toLowerCase();
+      const phone = getMemberPhone(m).toLowerCase();
+      return name.includes(term) || phone.includes(term);
+    });
+  }, [allMembers, memberSearchTerm]);
+
+  const toggleTrainee = (member) => {
+    setSelectedTrainees((prev) => {
+      const exists = prev.some((t) => t.id === member.id);
+      if (exists) return prev.filter((t) => t.id !== member.id);
+      return [...prev, { id: member.id, name: getMemberName(member), phone: getMemberPhone(member) }];
+    });
+  };
+
   const sortedSessions = useMemo(
     () => [...sessions].sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))),
     [sessions]
@@ -122,6 +196,13 @@ export default function TrainingPage() {
     setTopicSearch("");
   };
 
+  const uploadPickerSessions = useMemo(() => {
+    const term = uploadPickerSearch.trim().toLowerCase();
+    const desc = [...sortedSessions].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    if (!term) return desc;
+    return desc.filter((session) => String(session.topic || "").toLowerCase().includes(term));
+  }, [sortedSessions, uploadPickerSearch]);
+
   const counts = useMemo(() => {
     const upcoming = sessions.filter((session) => getSessionStatus(session) === "Upcoming").length;
     const totalAttendance = sessions.reduce((sum, session) => sum + (session.attendees?.length || 0), 0);
@@ -135,19 +216,44 @@ export default function TrainingPage() {
 
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const openAddModal = () => {
-    setForm(createEmptyForm());
+  const openScheduleModal = (session = null) => {
+    if (session) {
+      setEditingSessionId(session.id);
+      setForm({
+        topic: session.topic || "",
+        description: session.description || "",
+        trainer: session.trainer || "",
+        date: session.date || "",
+        time: session.time || "",
+        meetingLink: session.meetingLink || "",
+        teamEmails: session.teamEmails || "",
+      });
+      setSelectedTrainees(
+        (session.attendees || []).map((t) =>
+          typeof t === "string" ? { id: t, name: t, phone: "" } : t
+        )
+      );
+    } else {
+      setEditingSessionId(null);
+      setForm(createEmptyForm());
+      setSelectedTrainees([]);
+    }
+    setMemberSearchTerm("");
     setFormError("");
-    setShowAddModal(true);
+    setShowScheduleModal(true);
+    void ensureMembersLoaded();
   };
 
-  const closeAddModal = () => {
-    setShowAddModal(false);
+  const closeScheduleModal = () => {
+    setShowScheduleModal(false);
+    setEditingSessionId(null);
     setForm(createEmptyForm());
+    setSelectedTrainees([]);
+    setMemberSearchTerm("");
     setFormError("");
   };
 
-  const handleAddSession = async (e) => {
+  const handleSaveSession = async (e) => {
     e.preventDefault();
 
     if (!form.topic.trim()) {
@@ -162,23 +268,38 @@ export default function TrainingPage() {
     setFormError("");
     setSaving(true);
     try {
-      const newSession = {
+      const payload = {
         topic: form.topic.trim(),
         description: form.description.trim() || "-",
         trainer: form.trainer.trim() || "-",
         date: form.date,
         time: form.time || "-",
         meetingLink: form.meetingLink.trim() || "",
-        reminderSent: false,
-        attendees: [],
-        createdAt: serverTimestamp(),
+        teamEmails: form.teamEmails.trim(),
+        attendees: selectedTrainees,
       };
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), newSession);
-      setSessions((prev) => [...prev, { id: docRef.id, ...newSession }]);
-      showToast("Training session added successfully!");
-      closeAddModal();
+
+      if (editingSessionId) {
+        await updateDoc(doc(db, COLLECTION_NAME, editingSessionId), payload);
+        setSessions((prev) => prev.map((item) => (item.id === editingSessionId ? { ...item, ...payload } : item)));
+        showToast("Training session updated successfully!");
+      } else {
+        const newSession = {
+          ...payload,
+          reminderSent: false,
+          lastReminderSent: false,
+          materials: [],
+          feedback: null,
+          emailSentAt: null,
+          createdAt: serverTimestamp(),
+        };
+        const docRef = await addDoc(collection(db, COLLECTION_NAME), newSession);
+        setSessions((prev) => [...prev, { id: docRef.id, ...newSession }]);
+        showToast("Training session scheduled successfully!");
+      }
+      closeScheduleModal();
     } catch (error) {
-      console.error("Error adding training session:", error);
+      console.error("Error saving training session:", error);
       setFormError("Failed to save. Please try again.");
     } finally {
       setSaving(false);
@@ -198,70 +319,65 @@ export default function TrainingPage() {
     }
   };
 
-  const handleToggleReminder = async (session) => {
-    setTogglingId(session.id);
-    const nextValue = !session.reminderSent;
-    try {
-      await updateDoc(doc(db, COLLECTION_NAME, session.id), { reminderSent: nextValue });
-      setSessions((prev) => prev.map((item) => (item.id === session.id ? { ...item, reminderSent: nextValue } : item)));
-    } catch (error) {
-      console.error("Error updating reminder status:", error);
-      showToast("Failed to update reminder status.", "error");
-    } finally {
-      setTogglingId("");
+  const getTeamEmailRecipients = (session) =>
+    String(session.teamEmails || "")
+      .split(",")
+      .map((email) => email.trim())
+      .filter(Boolean);
+
+  const sendTrainingEmail = async ({ recipients, subject, body }) => {
+    const response = await fetch("/api/send-allocation-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: recipients, subject, body }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to send email.");
     }
   };
 
-  const openAttendeesModal = (session) => {
-    setAttendeesSession(session);
-    setAttendeeInput("");
-  };
-
-  const closeAttendeesModal = () => {
-    setAttendeesSession(null);
-    setAttendeeInput("");
-  };
-
-  const handleAddAttendee = async (e) => {
-    e.preventDefault();
-    const name = attendeeInput.trim();
-    if (!name || !attendeesSession) return;
-
-    const currentAttendees = attendeesSession.attendees || [];
-    if (currentAttendees.some((existing) => existing.toLowerCase() === name.toLowerCase())) {
-      setAttendeeInput("");
+  const handleSendReminder = async (session, field) => {
+    const recipients = getTeamEmailRecipients(session);
+    if (recipients.length === 0) {
+      showToast("Add at least one team email in this training's schedule details first.", "error");
       return;
     }
 
-    const updatedAttendees = [...currentAttendees, name];
-    setSavingAttendee(true);
-    try {
-      await updateDoc(doc(db, COLLECTION_NAME, attendeesSession.id), { attendees: updatedAttendees });
-      setSessions((prev) =>
-        prev.map((item) => (item.id === attendeesSession.id ? { ...item, attendees: updatedAttendees } : item))
-      );
-      setAttendeesSession((prev) => ({ ...prev, attendees: updatedAttendees }));
-      setAttendeeInput("");
-    } catch (error) {
-      console.error("Error adding attendee:", error);
-      showToast("Failed to add attendee.", "error");
-    } finally {
-      setSavingAttendee(false);
-    }
-  };
+    const isLastReminder = field === "lastReminderSent";
+    const traineeNames = (session.attendees || []).map(getTraineeName);
+    const bodyLines = [
+      `${isLastReminder ? "Final Reminder" : "Reminder"}: ${session.topic}`,
+      `Date: ${formatDateDisplay(session.date)}${session.time && session.time !== "-" ? ` at ${session.time}` : ""}`,
+      `Trainer: ${session.trainer || "-"}`,
+      `Meeting Link: ${session.meetingLink || "-"}`,
+      `Trainees: ${traineeNames.length ? traineeNames.join(", ") : "-"}`,
+      "",
+      "Regards,",
+      "Training Team",
+    ];
 
-  const handleRemoveAttendee = async (name) => {
-    if (!attendeesSession) return;
-    const updatedAttendees = (attendeesSession.attendees || []).filter((existing) => existing !== name);
+    setTogglingId(`${session.id}-${field}`);
     try {
-      await updateDoc(doc(db, COLLECTION_NAME, attendeesSession.id), { attendees: updatedAttendees });
+      await sendTrainingEmail({
+        recipients,
+        subject: `${isLastReminder ? "Final Reminder" : "Reminder"} — ${session.topic} (${formatDateDisplay(session.date)})`,
+        body: bodyLines.join("\n"),
+      });
+
+      const sentAtField = `${field}At`;
+      const sentAt = new Date().toISOString();
+      await updateDoc(doc(db, COLLECTION_NAME, session.id), { [field]: true, [sentAtField]: sentAt });
       setSessions((prev) =>
-        prev.map((item) => (item.id === attendeesSession.id ? { ...item, attendees: updatedAttendees } : item))
+        prev.map((item) => (item.id === session.id ? { ...item, [field]: true, [sentAtField]: sentAt } : item))
       );
-      setAttendeesSession((prev) => ({ ...prev, attendees: updatedAttendees }));
+      showToast(`${isLastReminder ? "Final reminder" : "Reminder"} emailed to ${recipients.length} recipient(s).`);
     } catch (error) {
-      console.error("Error removing attendee:", error);
-      showToast("Failed to remove attendee.", "error");
+      console.error("Error sending reminder email:", error);
+      showToast("Failed to send reminder email.", "error");
+    } finally {
+      setTogglingId("");
     }
   };
 
@@ -275,6 +391,21 @@ export default function TrainingPage() {
     setMaterialsSession(null);
     setMaterialForm(createEmptyMaterialForm());
     setMaterialFormError("");
+  };
+
+  const openUploadPicker = () => {
+    setUploadPickerSearch("");
+    setShowUploadPicker(true);
+  };
+
+  const closeUploadPicker = () => {
+    setShowUploadPicker(false);
+    setUploadPickerSearch("");
+  };
+
+  const handlePickTrainingForUpload = (session) => {
+    closeUploadPicker();
+    openMaterialsModal(session);
   };
 
   const updateMaterialForm = (field, value) => setMaterialForm((prev) => ({ ...prev, [field]: value }));
@@ -332,6 +463,94 @@ export default function TrainingPage() {
     }
   };
 
+  const handleSendTeamEmail = async () => {
+    if (!materialsSession) return;
+
+    const recipients = getTeamEmailRecipients(materialsSession);
+    if (recipients.length === 0) {
+      showToast("Add at least one team email in the training's schedule details first.", "error");
+      return;
+    }
+
+    const materials = materialsSession.materials || [];
+    if (materials.length === 0) {
+      showToast("Add at least one material before emailing the team.", "error");
+      return;
+    }
+
+    const traineeNames = (materialsSession.attendees || []).map(getTraineeName);
+    const bodyLines = [
+      `Training: ${materialsSession.topic}`,
+      `Date: ${formatDateDisplay(materialsSession.date)}${materialsSession.time && materialsSession.time !== "-" ? ` at ${materialsSession.time}` : ""}`,
+      `Trainer: ${materialsSession.trainer || "-"}`,
+      `Trainees: ${traineeNames.length ? traineeNames.join(", ") : "-"}`,
+      "",
+      "Materials:",
+      ...materials.map((m) => `- [${m.type}] ${m.title}: ${m.link}`),
+      "",
+      "Regards,",
+      "Training Team",
+    ];
+
+    setSendingEmail(true);
+    try {
+      await sendTrainingEmail({
+        recipients,
+        subject: `Training Materials — ${materialsSession.topic} (${formatDateDisplay(materialsSession.date)})`,
+        body: bodyLines.join("\n"),
+      });
+
+      const sentAt = new Date().toISOString();
+      await updateDoc(doc(db, COLLECTION_NAME, materialsSession.id), { emailSentAt: sentAt });
+      setSessions((prev) =>
+        prev.map((item) => (item.id === materialsSession.id ? { ...item, emailSentAt: sentAt } : item))
+      );
+      setMaterialsSession((prev) => ({ ...prev, emailSentAt: sentAt }));
+      showToast(`Email sent to ${recipients.length} recipient(s).`);
+    } catch (error) {
+      console.error("Error sending team email:", error);
+      showToast("Failed to send email. Please try again.", "error");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const openFeedbackModal = (session) => {
+    setFeedbackSession(session);
+    setFeedbackForm(session.feedback ? { rating: session.feedback.rating || 0, comment: session.feedback.comment || "" } : createEmptyFeedbackForm());
+  };
+
+  const closeFeedbackModal = () => {
+    setFeedbackSession(null);
+    setFeedbackForm(createEmptyFeedbackForm());
+  };
+
+  const handleSaveFeedback = async () => {
+    if (!feedbackSession) return;
+    if (feedbackForm.rating === 0) {
+      showToast("Please select a star rating.", "error");
+      return;
+    }
+
+    setSavingFeedback(true);
+    try {
+      const feedback = {
+        rating: feedbackForm.rating,
+        comment: feedbackForm.comment.trim(),
+        submittedAt: new Date().toISOString(),
+      };
+      await updateDoc(doc(db, COLLECTION_NAME, feedbackSession.id), { feedback });
+      setSessions((prev) => prev.map((item) => (item.id === feedbackSession.id ? { ...item, feedback } : item)));
+      showToast("Feedback saved successfully!");
+      closeFeedbackModal();
+    } catch (error) {
+      console.error("Error saving feedback:", error);
+      showToast("Failed to save feedback.", "error");
+    } finally {
+      setSavingFeedback(false);
+    }
+  };
+
   const allMaterials = useMemo(
     () =>
       sortedSessions.flatMap((session) =>
@@ -359,6 +578,23 @@ export default function TrainingPage() {
       return true;
     });
   }, [allMaterials, libraryTypeFilter, libraryTrainingFilter, librarySearch]);
+
+  const historyRows = useMemo(
+    () => [...sessions].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    [sessions]
+  );
+
+  const filteredHistoryRows = useMemo(() => {
+    const term = historySearch.trim().toLowerCase();
+    if (!term) return historyRows;
+    return historyRows.filter((session) => {
+      const traineeNames = (session.attendees || []).map(getTraineeName).join(" ").toLowerCase();
+      return (
+        String(session.topic || "").toLowerCase().includes(term) ||
+        traineeNames.includes(term)
+      );
+    });
+  }, [historyRows, historySearch]);
 
   return (
     <div className="training-page">
@@ -514,7 +750,7 @@ export default function TrainingPage() {
           width: 100%;
           border-collapse: collapse;
           font-size: 13px;
-          min-width: 1000px;
+          min-width: 1100px;
         }
         .training-table th {
           background: #2563eb;
@@ -555,7 +791,9 @@ export default function TrainingPage() {
           font-weight: 600;
           text-decoration: none;
         }
-        .training-attendees-btn {
+        .training-attendees-btn,
+        .training-materials-btn,
+        .training-feedback-btn {
           display: inline-flex;
           align-items: center;
           gap: 6px;
@@ -578,6 +816,8 @@ export default function TrainingPage() {
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
+          margin-right: 6px;
+          margin-bottom: 4px;
         }
         .training-reminder-btn.sent {
           background: #dcfce7;
@@ -636,6 +876,9 @@ export default function TrainingPage() {
           color: #fff;
           border-top-left-radius: 16px;
           border-top-right-radius: 16px;
+          position: sticky;
+          top: 0;
+          z-index: 2;
         }
         .modal-panel-header h3 {
           margin: 0;
@@ -733,18 +976,6 @@ export default function TrainingPage() {
           cursor: pointer;
           display: inline-flex;
         }
-        .training-attendee-add-row {
-          display: flex;
-          gap: 10px;
-        }
-        .training-attendee-add-row input {
-          flex: 1;
-          padding: 10px 12px;
-          border-radius: 10px;
-          border: 1px solid #cbd5e1;
-          font-size: 14px;
-          outline: none;
-        }
         .training-view-tabs {
           display: flex;
           gap: 8px;
@@ -761,23 +992,13 @@ export default function TrainingPage() {
           cursor: pointer;
           border-bottom: 3px solid transparent;
           margin-bottom: -1px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
         .training-view-tab.active {
           color: #1976d2;
           border-bottom-color: #1976d2;
-        }
-        .training-materials-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 5px 12px;
-          border-radius: 999px;
-          border: 1px solid #dbe3ee;
-          background: #fff;
-          color: #0f172a;
-          font-size: 12px;
-          font-weight: 700;
-          cursor: pointer;
         }
         .training-material-type-select {
           width: 100%;
@@ -863,6 +1084,86 @@ export default function TrainingPage() {
           z-index: 5000;
           box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
         }
+        .training-member-picker {
+          margin-bottom: 18px;
+        }
+        .training-member-search {
+          position: relative;
+          margin-bottom: 8px;
+        }
+        .training-member-search svg {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #9ca3af;
+        }
+        .training-member-search input {
+          width: 100%;
+          padding: 10px 12px 10px 36px;
+          border-radius: 10px;
+          border: 1px solid #cbd5e1;
+          font-size: 13px;
+          box-sizing: border-box;
+        }
+        .training-member-list {
+          max-height: 220px;
+          overflow-y: auto;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+        }
+        .training-member-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 12px;
+          border-bottom: 1px solid #f1f5f9;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        .training-member-row:hover {
+          background: #f8fafc;
+        }
+        .training-member-row.selected {
+          background: #eff6ff;
+        }
+        .training-member-name {
+          font-weight: 600;
+          color: #0f172a;
+        }
+        .training-member-phone {
+          color: #64748b;
+          font-size: 12px;
+        }
+        .training-selected-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 10px;
+        }
+        .training-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 10px;
+          border-radius: 999px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .training-chip button {
+          border: none;
+          background: none;
+          color: #1d4ed8;
+          cursor: pointer;
+          display: inline-flex;
+        }
+        .training-feedback-summary {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
       `}</style>
 
       {toast.show && (
@@ -874,24 +1175,28 @@ export default function TrainingPage() {
       <div className="training-header">
         <div>
           <h2>Training</h2>
-          <p>Track weekly training sessions, reminders, and attendance.</p>
+          <p>Schedule weekly training sessions, upload materials, and track feedback.</p>
         </div>
         <div className="training-header-actions">
           {activeView === "sessions" && (
-            <>
-              <button
-                type="button"
-                className={`training-btn ${hasActiveFilters ? "training-btn-primary" : "training-btn-secondary"}`}
-                onClick={() => setShowFilters((prev) => !prev)}
-              >
-                <FaFilter size={12} />
-                Filters
-              </button>
-              <button type="button" className="training-btn training-btn-primary" onClick={openAddModal}>
-                <FaPlus size={12} />
-                Add Training
-              </button>
-            </>
+            <button
+              type="button"
+              className={`training-btn ${hasActiveFilters ? "training-btn-primary" : "training-btn-secondary"}`}
+              onClick={() => setShowFilters((prev) => !prev)}
+            >
+              <FaFilter size={12} />
+              Filters
+            </button>
+          )}
+          <button type="button" className="training-btn training-btn-secondary" onClick={openUploadPicker}>
+            <FaFolderOpen size={12} />
+            Upload Documents
+          </button>
+          {activeView === "sessions" && (
+            <button type="button" className="training-btn training-btn-primary" onClick={() => openScheduleModal()}>
+              <FaPlus size={12} />
+              Schedule Training
+            </button>
           )}
         </div>
       </div>
@@ -902,6 +1207,7 @@ export default function TrainingPage() {
           className={`training-view-tab ${activeView === "sessions" ? "active" : ""}`}
           onClick={() => setActiveView("sessions")}
         >
+          <FaChalkboardTeacher size={13} />
           Training Sessions
         </button>
         <button
@@ -909,7 +1215,16 @@ export default function TrainingPage() {
           className={`training-view-tab ${activeView === "library" ? "active" : ""}`}
           onClick={() => setActiveView("library")}
         >
+          <FaFolderOpen size={13} />
           Materials Library
+        </button>
+        <button
+          type="button"
+          className={`training-view-tab ${activeView === "history" ? "active" : ""}`}
+          onClick={() => setActiveView("history")}
+        >
+          <FaHistory size={13} />
+          History
         </button>
       </div>
 
@@ -961,7 +1276,7 @@ export default function TrainingPage() {
           <div className="card-icon purple">
             <FaUsers size={24} />
           </div>
-          <div className="card-label">Total Attendance</div>
+          <div className="card-label">Total Trainee Slots</div>
           <div className="card-value">{counts.totalAttendance.toLocaleString()}</div>
         </div>
       </div>
@@ -982,11 +1297,11 @@ export default function TrainingPage() {
                 <th>Date</th>
                 <th>Time</th>
                 <th>Topic</th>
-                <th>Trainer</th>
+                <th>Trainees</th>
                 <th>Meeting Link</th>
-                <th>Attendees</th>
                 <th>Materials</th>
-                <th>Reminder</th>
+                <th>Feedback</th>
+                <th>Reminders</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -998,8 +1313,15 @@ export default function TrainingPage() {
                   <tr key={session.id}>
                     <td>{formatDateDisplay(session.date)}</td>
                     <td>{session.time || "-"}</td>
-                    <td>{session.topic}</td>
-                    <td>{session.trainer || "-"}</td>
+                    <td style={{ cursor: "pointer", color: "#1976d2", fontWeight: 700 }} onClick={() => openScheduleModal(session)} title="Click to edit">
+                      {session.topic}
+                    </td>
+                    <td>
+                      <button type="button" className="training-attendees-btn" onClick={() => openScheduleModal(session)}>
+                        <FaUserFriends size={11} />
+                        {(session.attendees || []).length}
+                      </button>
+                    </td>
                     <td>
                       {session.meetingLink ? (
                         <a className="training-meeting-link" href={session.meetingLink} target="_blank" rel="noopener noreferrer">
@@ -1011,26 +1333,46 @@ export default function TrainingPage() {
                       )}
                     </td>
                     <td>
-                      <button type="button" className="training-attendees-btn" onClick={() => openAttendeesModal(session)}>
-                        <FaUserFriends size={11} />
-                        {(session.attendees || []).length}
-                      </button>
-                    </td>
-                    <td>
                       <button type="button" className="training-materials-btn" onClick={() => openMaterialsModal(session)}>
                         <FaFolderOpen size={11} />
                         {(session.materials || []).length}
                       </button>
                     </td>
                     <td>
+                      <button type="button" className="training-feedback-btn" onClick={() => openFeedbackModal(session)}>
+                        {session.feedback ? (
+                          <span className="training-feedback-summary">
+                            <FaStar size={11} color="#f59e0b" />
+                            {session.feedback.rating}/5
+                          </span>
+                        ) : (
+                          <>
+                            <FaRegStar size={11} />
+                            Add
+                          </>
+                        )}
+                      </button>
+                    </td>
+                    <td>
                       <button
                         type="button"
                         className={`training-reminder-btn ${session.reminderSent ? "sent" : "pending"}`}
-                        onClick={() => handleToggleReminder(session)}
-                        disabled={togglingId === session.id}
+                        onClick={() => handleSendReminder(session, "reminderSent")}
+                        disabled={togglingId === `${session.id}-reminderSent`}
+                        title={session.reminderSentAt ? `Last sent ${new Date(session.reminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to email the team a reminder"}
                       >
                         {session.reminderSent ? <FaBell size={11} /> : <FaRegBell size={11} />}
-                        {session.reminderSent ? "Sent" : "Pending"}
+                        {togglingId === `${session.id}-reminderSent` ? "Sending..." : "Reminder"}
+                      </button>
+                      <button
+                        type="button"
+                        className={`training-reminder-btn ${session.lastReminderSent ? "sent" : "pending"}`}
+                        onClick={() => handleSendReminder(session, "lastReminderSent")}
+                        disabled={togglingId === `${session.id}-lastReminderSent`}
+                        title={session.lastReminderSentAt ? `Last sent ${new Date(session.lastReminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to email the team a final reminder"}
+                      >
+                        {session.lastReminderSent ? <FaBell size={11} /> : <FaRegBell size={11} />}
+                        {togglingId === `${session.id}-lastReminderSent` ? "Sending..." : "Last Reminder"}
                       </button>
                     </td>
                     <td>
@@ -1159,16 +1501,92 @@ export default function TrainingPage() {
       </>
       )}
 
-      {showAddModal && (
-        <div className="modal-overlay" onClick={closeAddModal}>
+      {activeView === "history" && (
+        <div className="training-table-card">
+          <div className="training-filter-row" style={{ marginBottom: "16px" }}>
+            <input
+              type="text"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              placeholder="Search by training topic or trainee name..."
+              style={{ minWidth: "280px" }}
+            />
+          </div>
+          <h3>Training History ({filteredHistoryRows.length})</h3>
+
+          {loading ? (
+            <div className="training-empty">Loading history...</div>
+          ) : filteredHistoryRows.length === 0 ? (
+            <div className="training-empty">No training history yet.</div>
+          ) : (
+            <table className="training-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Training</th>
+                  <th>Trainer</th>
+                  <th>Trainees</th>
+                  <th>Documents Uploaded</th>
+                  <th>Feedback</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistoryRows.map((session) => (
+                  <tr key={session.id}>
+                    <td>{formatDateDisplay(session.date)}</td>
+                    <td>{session.topic}</td>
+                    <td>{session.trainer || "-"}</td>
+                    <td>
+                      {(session.attendees || []).length === 0
+                        ? "-"
+                        : (session.attendees || []).map(getTraineeName).join(", ")}
+                    </td>
+                    <td>
+                      {(session.materials || []).length === 0 ? (
+                        "-"
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          {session.materials.map((m) => (
+                            <a key={m.id} href={m.link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>
+                              [{m.type}] {m.title}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {session.feedback ? (
+                        <div>
+                          <div className="training-feedback-summary">
+                            <FaStar size={11} color="#f59e0b" />
+                            {session.feedback.rating}/5
+                          </div>
+                          {session.feedback.comment && (
+                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{session.feedback.comment}</div>
+                          )}
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {showScheduleModal && (
+        <div className="modal-overlay" onClick={closeScheduleModal}>
           <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
             <div className="modal-panel-header">
-              <h3>Add Training Session</h3>
-              <button type="button" className="modal-close-btn" onClick={closeAddModal} title="Close">
+              <h3>{editingSessionId ? "Edit Training Session" : "Schedule Training"}</h3>
+              <button type="button" className="modal-close-btn" onClick={closeScheduleModal} title="Close">
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleAddSession}>
+            <form onSubmit={handleSaveSession}>
               <div className="modal-panel-body">
                 <div className="training-field" style={{ marginBottom: "16px" }}>
                   <label htmlFor="topic">Training Topic</label>
@@ -1179,6 +1597,58 @@ export default function TrainingPage() {
                     onChange={(e) => updateForm("topic", e.target.value)}
                     placeholder="e.g. Objection Handling Workshop"
                   />
+                </div>
+
+                <div className="training-member-picker">
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#64748b", marginBottom: "6px" }}>
+                    Add Trainees
+                  </label>
+                  <div className="training-member-search">
+                    <FaSearch size={13} />
+                    <input
+                      type="text"
+                      value={memberSearchTerm}
+                      onChange={(e) => setMemberSearchTerm(e.target.value)}
+                      placeholder="Search members by name or mobile..."
+                    />
+                  </div>
+                  <div className="training-member-list">
+                    {membersLoading ? (
+                      <div className="training-empty">Loading members...</div>
+                    ) : filteredMembersForPicker.length === 0 ? (
+                      <div className="training-empty">No members match your search.</div>
+                    ) : (
+                      filteredMembersForPicker.slice(0, 200).map((member) => {
+                        const selected = selectedTrainees.some((t) => t.id === member.id);
+                        return (
+                          <div
+                            key={member.id}
+                            className={`training-member-row ${selected ? "selected" : ""}`}
+                            onClick={() => toggleTrainee(member)}
+                          >
+                            <input type="checkbox" checked={selected} onChange={() => toggleTrainee(member)} onClick={(e) => e.stopPropagation()} />
+                            <div>
+                              <div className="training-member-name">{getMemberName(member)}</div>
+                              <div className="training-member-phone">{getMemberPhone(member) || "-"}</div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {selectedTrainees.length > 0 && (
+                    <div className="training-selected-chips">
+                      {selectedTrainees.map((trainee) => (
+                        <span key={trainee.id} className="training-chip">
+                          {trainee.name}
+                          <button type="button" onClick={() => setSelectedTrainees((prev) => prev.filter((t) => t.id !== trainee.id))}>
+                            <FaTimes size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="training-grid">
@@ -1215,6 +1685,17 @@ export default function TrainingPage() {
                   </div>
                 </div>
 
+                <div className="training-field" style={{ marginBottom: "16px" }}>
+                  <label htmlFor="team-emails">Team Emails (for post-training update, comma-separated)</label>
+                  <input
+                    id="team-emails"
+                    type="text"
+                    value={form.teamEmails}
+                    onChange={(e) => updateForm("teamEmails", e.target.value)}
+                    placeholder="lead@brisk...,manager@brisk..."
+                  />
+                </div>
+
                 <div className="training-field" style={{ marginBottom: "20px" }}>
                   <label htmlFor="description">Description / Agenda</label>
                   <textarea
@@ -1228,11 +1709,11 @@ export default function TrainingPage() {
                 {formError && <div className="training-error">{formError}</div>}
 
                 <div className="modal-footer-actions">
-                  <button type="button" className="training-cancel-btn" onClick={closeAddModal}>
+                  <button type="button" className="training-cancel-btn" onClick={closeScheduleModal}>
                     Cancel
                   </button>
                   <button type="submit" className="training-btn training-btn-primary" disabled={saving}>
-                    {saving ? "Saving..." : "Save Training"}
+                    {saving ? "Saving..." : editingSessionId ? "Save Changes" : "Schedule Training"}
                   </button>
                 </div>
               </div>
@@ -1241,42 +1722,42 @@ export default function TrainingPage() {
         </div>
       )}
 
-      {attendeesSession && (
-        <div className="modal-overlay" onClick={closeAttendeesModal}>
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 100%)" }}>
+      {showUploadPicker && (
+        <div className="modal-overlay" onClick={closeUploadPicker}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(480px, 100%)" }}>
             <div className="modal-panel-header">
-              <h3>Attendees - {attendeesSession.topic}</h3>
-              <button type="button" className="modal-close-btn" onClick={closeAttendeesModal} title="Close">
+              <h3>Select Training To Upload Documents</h3>
+              <button type="button" className="modal-close-btn" onClick={closeUploadPicker} title="Close">
                 <FaTimes />
               </button>
             </div>
             <div className="modal-panel-body">
-              <div className="training-attendees-list">
-                {(attendeesSession.attendees || []).length === 0 ? (
-                  <div style={{ fontSize: "13px", color: "#94a3b8" }}>No attendees recorded yet.</div>
+              <div className="training-member-search" style={{ marginBottom: "12px" }}>
+                <FaSearch size={13} />
+                <input
+                  type="text"
+                  autoFocus
+                  value={uploadPickerSearch}
+                  onChange={(e) => setUploadPickerSearch(e.target.value)}
+                  placeholder="Search training by topic..."
+                />
+              </div>
+              <div className="training-member-list" style={{ maxHeight: "320px" }}>
+                {uploadPickerSessions.length === 0 ? (
+                  <div className="training-empty">No trainings match your search.</div>
                 ) : (
-                  attendeesSession.attendees.map((name) => (
-                    <div key={name} className="training-attendee-row">
-                      <span>{name}</span>
-                      <button type="button" className="training-attendee-remove" onClick={() => handleRemoveAttendee(name)} title="Remove">
-                        <FaTimes size={12} />
-                      </button>
+                  uploadPickerSessions.map((session) => (
+                    <div key={session.id} className="training-member-row" onClick={() => handlePickTrainingForUpload(session)}>
+                      <div>
+                        <div className="training-member-name">{session.topic}</div>
+                        <div className="training-member-phone">
+                          {formatDateDisplay(session.date)} · {(session.materials || []).length} doc(s) uploaded
+                        </div>
+                      </div>
                     </div>
                   ))
                 )}
               </div>
-              <form className="training-attendee-add-row" onSubmit={handleAddAttendee}>
-                <input
-                  type="text"
-                  value={attendeeInput}
-                  onChange={(e) => setAttendeeInput(e.target.value)}
-                  placeholder="Add attendee name..."
-                />
-                <button type="submit" className="training-btn training-btn-primary" disabled={savingAttendee || !attendeeInput.trim()}>
-                  <FaPlus size={11} />
-                  Add
-                </button>
-              </form>
             </div>
           </div>
         </div>
@@ -1360,6 +1841,60 @@ export default function TrainingPage() {
                   {savingMaterial ? "Saving..." : "Add Material"}
                 </button>
               </form>
+
+              <div style={{ marginTop: "18px", paddingTop: "16px", borderTop: "1px solid #e2e8f0" }}>
+                <button
+                  type="button"
+                  className="training-btn training-btn-secondary"
+                  onClick={handleSendTeamEmail}
+                  disabled={sendingEmail}
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
+                  <FaEnvelope size={12} />
+                  {sendingEmail ? "Sending..." : "Email Materials To Team"}
+                </button>
+                {materialsSession.emailSentAt && (
+                  <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", textAlign: "center" }}>
+                    Last sent {new Date(materialsSession.emailSentAt).toLocaleString("en-IN")}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {feedbackSession && (
+        <div className="modal-overlay" onClick={closeFeedbackModal}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 100%)" }}>
+            <div className="modal-panel-header">
+              <h3>Feedback - {feedbackSession.topic}</h3>
+              <button type="button" className="modal-close-btn" onClick={closeFeedbackModal} title="Close">
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-panel-body">
+              <div className="training-field" style={{ marginBottom: "16px" }}>
+                <label>Overall Rating</label>
+                <StarRating value={feedbackForm.rating} onChange={(rating) => setFeedbackForm((prev) => ({ ...prev, rating }))} />
+              </div>
+              <div className="training-field" style={{ marginBottom: "16px" }}>
+                <label htmlFor="feedback-comment">Comments</label>
+                <textarea
+                  id="feedback-comment"
+                  value={feedbackForm.comment}
+                  onChange={(e) => setFeedbackForm((prev) => ({ ...prev, comment: e.target.value }))}
+                  placeholder="How did the session go? What can be improved next time..."
+                />
+              </div>
+              <div className="modal-footer-actions">
+                <button type="button" className="training-cancel-btn" onClick={closeFeedbackModal}>
+                  Cancel
+                </button>
+                <button type="button" className="training-btn training-btn-primary" onClick={handleSaveFeedback} disabled={savingFeedback}>
+                  {savingFeedback ? "Saving..." : "Save Feedback"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
