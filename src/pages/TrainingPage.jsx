@@ -16,17 +16,32 @@ import {
   FaFolderOpen,
   FaExternalLinkAlt,
   FaEnvelope,
-  FaStar,
-  FaRegStar,
   FaHistory,
   FaSearch,
 } from "react-icons/fa";
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { getMemberName, getMemberPhone } from "../utils/memberFields";
+import { getMemberName, getMemberPhone, getMemberEmail } from "../utils/memberFields";
 
 const COLLECTION_NAME = "trainingsessions";
-const MATERIAL_TYPES = ["PPT", "Recording", "PDF", "Document", "Other"];
+const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
+const WORKSHOP_APPLICANTS_SUBCOLLECTION = "workshop_users_applied";
+const MATERIAL_TYPES = ["Feedback Form", "Members Training Update", "Training Video"];
+
+const WORKSHOP_MONTHS = {
+  Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+  Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+};
+
+// Workshop dates look like "06-Aug-2025 09:30" -> { date: "2025-08-06", time: "09:30" }
+const parseWorkshopDateTime = (value) => {
+  if (!value) return { date: "", time: "" };
+  const [datePart, timePart = ""] = String(value).trim().split(" ");
+  const [day, monName, year] = datePart.split("-");
+  const month = WORKSHOP_MONTHS[monName];
+  if (!day || !month || !year) return { date: "", time: timePart };
+  return { date: `${year}-${month}-${day.padStart(2, "0")}`, time: timePart };
+};
 
 const createEmptyForm = () => ({
   topic: "",
@@ -38,8 +53,7 @@ const createEmptyForm = () => ({
   teamEmails: "",
 });
 
-const createEmptyMaterialForm = () => ({ title: "", type: MATERIAL_TYPES[0], link: "" });
-const createEmptyFeedbackForm = () => ({ rating: 0, comment: "" });
+const createEmptyMaterialForm = () => ({ type: MATERIAL_TYPES[0], link: "" });
 
 const todayStr = () => {
   const now = new Date();
@@ -59,23 +73,6 @@ const formatDateDisplay = (dateStr) => {
 // Trainees are stored as {id, name, phone}; older sessions may still have plain name strings.
 const getTraineeName = (trainee) => (typeof trainee === "string" ? trainee : trainee?.name || "Unknown");
 
-function StarRating({ value, onChange, size = 20 }) {
-  return (
-    <div style={{ display: "flex", gap: "4px" }}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          onClick={() => onChange(star)}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: star <= value ? "#f59e0b" : "#d1d5db" }}
-        >
-          {star <= value ? <FaStar size={size} /> : <FaRegStar size={size} />}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function TrainingPage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,18 +85,25 @@ export default function TrainingPage() {
   const [deletingId, setDeletingId] = useState("");
   const [togglingId, setTogglingId] = useState("");
 
-  // Trainee multiselect (shared members list, loaded once)
+  // Members list (used to resolve workshop applicant ids to names/phones/emails)
   const [allMembers, setAllMembers] = useState([]);
-  const [membersLoading, setMembersLoading] = useState(false);
-  const [memberSearchTerm, setMemberSearchTerm] = useState("");
-  const [selectedTrainees, setSelectedTrainees] = useState([]); // [{id, name, phone}]
+  const [selectedTrainees, setSelectedTrainees] = useState([]); // [{id, name, phone}] — sourced from workshop applicants
+
+  // Workshops (trainings are now created by picking an already-applied-to workshop)
+  const [workshops, setWorkshops] = useState([]);
+  const [workshopsLoading, setWorkshopsLoading] = useState(false);
+  const [workshopsLoaded, setWorkshopsLoaded] = useState(false);
+  const [showWorkshopPicker, setShowWorkshopPicker] = useState(false);
+  const [workshopPickerSearch, setWorkshopPickerSearch] = useState("");
+  const [selectedWorkshop, setSelectedWorkshop] = useState(null);
+  const [loadingApplicants, setLoadingApplicants] = useState(false);
 
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState("All");
   const [topicSearch, setTopicSearch] = useState("");
 
   const [activeView, setActiveView] = useState("sessions");
-  const [materialsSession, setMaterialsSession] = useState(null);
+  const [documentsSession, setdocumentsSession] = useState(null);
   const [materialForm, setMaterialForm] = useState(createEmptyMaterialForm());
   const [materialFormError, setMaterialFormError] = useState("");
   const [savingMaterial, setSavingMaterial] = useState(false);
@@ -109,10 +113,6 @@ export default function TrainingPage() {
   const [libraryTypeFilter, setLibraryTypeFilter] = useState("All");
   const [libraryTrainingFilter, setLibraryTrainingFilter] = useState("All");
   const [librarySearch, setLibrarySearch] = useState("");
-
-  const [feedbackSession, setFeedbackSession] = useState(null);
-  const [feedbackForm, setFeedbackForm] = useState(createEmptyFeedbackForm());
-  const [savingFeedback, setSavingFeedback] = useState(false);
 
   const [historySearch, setHistorySearch] = useState("");
 
@@ -142,35 +142,57 @@ export default function TrainingPage() {
   }, []);
 
   const ensureMembersLoaded = async () => {
-    if (allMembers.length > 0) return;
-    setMembersLoading(true);
+    if (allMembers.length > 0) return allMembers;
     try {
       const snapshot = await getDocs(collection(db, "users"));
       const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       setAllMembers(rows);
+      return rows;
     } catch (error) {
       console.error("Error loading members:", error);
       showToast("Failed to load members list.", "error");
-    } finally {
-      setMembersLoading(false);
+      return [];
     }
   };
 
-  const filteredMembersForPicker = useMemo(() => {
-    const term = memberSearchTerm.trim().toLowerCase();
-    if (!term) return allMembers;
-    return allMembers.filter((m) => {
-      const name = getMemberName(m).toLowerCase();
-      const phone = getMemberPhone(m).toLowerCase();
-      return name.includes(term) || phone.includes(term);
-    });
-  }, [allMembers, memberSearchTerm]);
+  const ensureWorkshopsLoaded = async () => {
+    if (workshopsLoaded) return;
+    setWorkshopsLoading(true);
+    try {
+      const snapshot = await getDocs(collection(db, WORKSHOP_COLLECTION_NAME));
+      const results = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
+          if (docSnap.data()?.workshop_isdraft) return null;
+          const applicantsSnap = await getDocs(
+            collection(db, WORKSHOP_COLLECTION_NAME, docSnap.id, WORKSHOP_APPLICANTS_SUBCOLLECTION)
+          );
+          if (applicantsSnap.size === 0) return null;
+          return { id: docSnap.id, ...docSnap.data(), applicantCount: applicantsSnap.size };
+        })
+      );
+      setWorkshops(results.filter(Boolean));
+      setWorkshopsLoaded(true);
+    } catch (error) {
+      console.error("Error loading workshops:", error);
+      showToast("Failed to load workshops.", "error");
+    } finally {
+      setWorkshopsLoading(false);
+    }
+  };
 
-  const toggleTrainee = (member) => {
-    setSelectedTrainees((prev) => {
-      const exists = prev.some((t) => t.id === member.id);
-      if (exists) return prev.filter((t) => t.id !== member.id);
-      return [...prev, { id: member.id, name: getMemberName(member), phone: getMemberPhone(member) }];
+  const loadApplicantsForWorkshop = async (workshopId) => {
+    const members = await ensureMembersLoaded();
+    const snapshot = await getDocs(
+      collection(db, WORKSHOP_COLLECTION_NAME, workshopId, WORKSHOP_APPLICANTS_SUBCOLLECTION)
+    );
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() || {};
+      const uid = data.user_id || data.uid || data.userId || docSnap.id;
+      const member = members.find((m) => m.id === uid);
+      if (member) {
+        return { id: uid, name: getMemberName(member), phone: getMemberPhone(member), email: getMemberEmail(member) };
+      }
+      return { id: uid, name: data.name || uid, phone: data.phone || "", email: data.email || "" };
     });
   };
 
@@ -216,32 +238,43 @@ export default function TrainingPage() {
 
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const openScheduleModal = (session = null) => {
-    if (session) {
-      setEditingSessionId(session.id);
-      setForm({
-        topic: session.topic || "",
-        description: session.description || "",
-        trainer: session.trainer || "",
-        date: session.date || "",
-        time: session.time || "",
-        meetingLink: session.meetingLink || "",
-        teamEmails: session.teamEmails || "",
-      });
-      setSelectedTrainees(
-        (session.attendees || []).map((t) =>
-          typeof t === "string" ? { id: t, name: t, phone: "" } : t
-        )
-      );
-    } else {
-      setEditingSessionId(null);
-      setForm(createEmptyForm());
-      setSelectedTrainees([]);
-    }
-    setMemberSearchTerm("");
+  const workshopFromSession = (session) =>
+    session.workshopId
+      ? {
+          id: session.workshopId,
+          workshop_title: session.topic,
+          workshop_description: session.description,
+          workshop_benefit: session.workshopBenefit,
+          workshop_eligibility: session.workshopEligibility,
+          workshop_fee: session.workshopFee,
+          workshop_location: session.workshopLocation,
+          workshop_organizer: session.workshopOrganizer,
+          workshop_organizer_logo: session.workshopOrganizerLogo,
+          workshop_speakers: session.workshopSpeakers,
+          workshop_start_date: session.workshopStartDate,
+          workshop_end_date: session.workshopEndDate,
+          workshop_website: session.workshopWebsite,
+          workshop_status: session.workshopStatus,
+        }
+      : null;
+
+  const openScheduleModal = (session) => {
+    setEditingSessionId(session.id);
+    setForm({
+      topic: session.topic || "",
+      description: session.description || "",
+      trainer: session.trainer || "",
+      date: session.date || "",
+      time: session.time || "",
+      meetingLink: session.meetingLink || "",
+      teamEmails: session.teamEmails || "",
+    });
+    setSelectedTrainees(
+      (session.attendees || []).map((t) => (typeof t === "string" ? { id: t, name: t, phone: "" } : t))
+    );
+    setSelectedWorkshop(workshopFromSession(session));
     setFormError("");
     setShowScheduleModal(true);
-    void ensureMembersLoaded();
   };
 
   const closeScheduleModal = () => {
@@ -249,15 +282,75 @@ export default function TrainingPage() {
     setEditingSessionId(null);
     setForm(createEmptyForm());
     setSelectedTrainees([]);
-    setMemberSearchTerm("");
+    setSelectedWorkshop(null);
     setFormError("");
+  };
+
+  const openWorkshopPicker = () => {
+    setWorkshopPickerSearch("");
+    setShowWorkshopPicker(true);
+    void ensureWorkshopsLoaded();
+  };
+
+  const closeWorkshopPicker = () => {
+    setShowWorkshopPicker(false);
+    setWorkshopPickerSearch("");
+  };
+
+  const filteredWorkshopsForPicker = useMemo(() => {
+    const term = workshopPickerSearch.trim().toLowerCase();
+    if (!term) return workshops;
+    return workshops.filter((w) => String(w.workshop_title || "").toLowerCase().includes(term));
+  }, [workshops, workshopPickerSearch]);
+
+  const handlePickWorkshop = async (workshop) => {
+    closeWorkshopPicker();
+    setEditingSessionId(null);
+    setSelectedWorkshop(workshop);
+    setLoadingApplicants(true);
+    setFormError("");
+    try {
+      const applicants = await loadApplicantsForWorkshop(workshop.id);
+      const { date, time } = parseWorkshopDateTime(workshop.workshop_start_date);
+      setForm({
+        topic: workshop.workshop_title || "",
+        description: workshop.workshop_description || "",
+        trainer: workshop.workshop_speakers || "",
+        date,
+        time,
+        meetingLink: "",
+        teamEmails: "",
+      });
+      setSelectedTrainees(applicants);
+      setShowScheduleModal(true);
+    } catch (error) {
+      console.error("Error loading workshop applicants:", error);
+      showToast("Failed to load workshop applicants.", "error");
+    } finally {
+      setLoadingApplicants(false);
+    }
+  };
+
+  const handleRefreshApplicants = async () => {
+    if (!selectedWorkshop) return;
+    setLoadingApplicants(true);
+    try {
+      const applicants = await loadApplicantsForWorkshop(selectedWorkshop.id);
+      setSelectedTrainees(applicants);
+      showToast(`Refreshed — ${applicants.length} applicant(s) found.`);
+    } catch (error) {
+      console.error("Error refreshing applicants:", error);
+      showToast("Failed to refresh applicants.", "error");
+    } finally {
+      setLoadingApplicants(false);
+    }
   };
 
   const handleSaveSession = async (e) => {
     e.preventDefault();
 
-    if (!form.topic.trim()) {
-      setFormError("Please enter the training topic.");
+    if (!selectedWorkshop) {
+      setFormError("Please pick a workshop first.");
       return;
     }
     if (!form.date) {
@@ -277,6 +370,18 @@ export default function TrainingPage() {
         meetingLink: form.meetingLink.trim() || "",
         teamEmails: form.teamEmails.trim(),
         attendees: selectedTrainees,
+        workshopId: selectedWorkshop.id,
+        workshopBenefit: selectedWorkshop.workshop_benefit || "",
+        workshopEligibility: selectedWorkshop.workshop_eligibility || "",
+        workshopFee: selectedWorkshop.workshop_fee ?? "",
+        workshopLocation: selectedWorkshop.workshop_location || "",
+        workshopOrganizer: selectedWorkshop.workshop_organizer || "",
+        workshopOrganizerLogo: selectedWorkshop.workshop_organizer_logo || "",
+        workshopSpeakers: selectedWorkshop.workshop_speakers || "",
+        workshopStartDate: selectedWorkshop.workshop_start_date || "",
+        workshopEndDate: selectedWorkshop.workshop_end_date || "",
+        workshopWebsite: selectedWorkshop.workshop_website || "",
+        workshopStatus: selectedWorkshop.workshop_status || "",
       };
 
       if (editingSessionId) {
@@ -288,8 +393,7 @@ export default function TrainingPage() {
           ...payload,
           reminderSent: false,
           lastReminderSent: false,
-          materials: [],
-          feedback: null,
+          documents: [],
           emailSentAt: null,
           createdAt: serverTimestamp(),
         };
@@ -338,33 +442,49 @@ export default function TrainingPage() {
     }
   };
 
+  const buildReminderMessage = (session, trainee) => {
+    const dateLabel = formatDateDisplay(session.date);
+    const timeLabel = session.time && session.time !== "-" ? session.time : "-";
+    return `Dear ${trainee.name},
+
+This is a gentle reminder regarding the upcoming training session scheduled for ${dateLabel}.
+
+We request all registered participants to join the session on time and ensure active participation throughout the training.
+
+Training Topic: ${session.topic}
+Date: ${dateLabel}
+Time: ${timeLabel} Hrs.
+Meeting Link:
+${session.meetingLink || "-"}
+
+Your presence and participation will be highly appreciated.
+
+Thank you,
+Brisk Olive Team
+7060162717`;
+  };
+
   const handleSendReminder = async (session, field) => {
-    const recipients = getTeamEmailRecipients(session);
-    if (recipients.length === 0) {
-      showToast("Add at least one team email in this training's schedule details first.", "error");
+    const trainees = (session.attendees || []).filter((t) => typeof t === "object" && t?.email);
+
+    if (trainees.length === 0) {
+      showToast("None of the selected trainees have an email on file. Re-open Schedule and re-select trainees to capture their email.", "error");
       return;
     }
 
     const isLastReminder = field === "lastReminderSent";
-    const traineeNames = (session.attendees || []).map(getTraineeName);
-    const bodyLines = [
-      `${isLastReminder ? "Final Reminder" : "Reminder"}: ${session.topic}`,
-      `Date: ${formatDateDisplay(session.date)}${session.time && session.time !== "-" ? ` at ${session.time}` : ""}`,
-      `Trainer: ${session.trainer || "-"}`,
-      `Meeting Link: ${session.meetingLink || "-"}`,
-      `Trainees: ${traineeNames.length ? traineeNames.join(", ") : "-"}`,
-      "",
-      "Regards,",
-      "Training Team",
-    ];
 
     setTogglingId(`${session.id}-${field}`);
     try {
-      await sendTrainingEmail({
-        recipients,
-        subject: `${isLastReminder ? "Final Reminder" : "Reminder"} — ${session.topic} (${formatDateDisplay(session.date)})`,
-        body: bodyLines.join("\n"),
-      });
+      await Promise.all(
+        trainees.map((trainee) =>
+          sendTrainingEmail({
+            recipients: [trainee.email],
+            subject: `Training Reminder — ${session.topic} (${formatDateDisplay(session.date)})`,
+            body: buildReminderMessage(session, trainee),
+          })
+        )
+      );
 
       const sentAtField = `${field}At`;
       const sentAt = new Date().toISOString();
@@ -372,7 +492,7 @@ export default function TrainingPage() {
       setSessions((prev) =>
         prev.map((item) => (item.id === session.id ? { ...item, [field]: true, [sentAtField]: sentAt } : item))
       );
-      showToast(`${isLastReminder ? "Final reminder" : "Reminder"} emailed to ${recipients.length} recipient(s).`);
+      showToast(`${isLastReminder ? "Final reminder" : "Reminder"} emailed to ${trainees.length} trainee(s).`);
     } catch (error) {
       console.error("Error sending reminder email:", error);
       showToast("Failed to send reminder email.", "error");
@@ -381,14 +501,14 @@ export default function TrainingPage() {
     }
   };
 
-  const openMaterialsModal = (session) => {
-    setMaterialsSession(session);
+  const opendocumentsModal = (session) => {
+    setdocumentsSession(session);
     setMaterialForm(createEmptyMaterialForm());
     setMaterialFormError("");
   };
 
-  const closeMaterialsModal = () => {
-    setMaterialsSession(null);
+  const closedocumentsModal = () => {
+    setdocumentsSession(null);
     setMaterialForm(createEmptyMaterialForm());
     setMaterialFormError("");
   };
@@ -405,21 +525,17 @@ export default function TrainingPage() {
 
   const handlePickTrainingForUpload = (session) => {
     closeUploadPicker();
-    openMaterialsModal(session);
+    opendocumentsModal(session);
   };
 
   const updateMaterialForm = (field, value) => setMaterialForm((prev) => ({ ...prev, [field]: value }));
 
   const handleAddMaterial = async (e) => {
     e.preventDefault();
-    if (!materialsSession) return;
+    if (!documentsSession) return;
 
-    if (!materialForm.title.trim()) {
-      setMaterialFormError("Please enter a title for the material.");
-      return;
-    }
     if (!materialForm.link.trim()) {
-      setMaterialFormError("Please paste the Drive/share link for the material.");
+      setMaterialFormError("Please paste the Drive/share link.");
       return;
     }
 
@@ -428,17 +544,20 @@ export default function TrainingPage() {
     try {
       const newMaterial = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: materialForm.title.trim(),
+        title: materialForm.type,
         type: materialForm.type,
         link: materialForm.link.trim(),
         addedAt: new Date().toISOString(),
       };
-      const updatedMaterials = [...(materialsSession.materials || []), newMaterial];
-      await updateDoc(doc(db, COLLECTION_NAME, materialsSession.id), { materials: updatedMaterials });
+      const updateddocuments = [
+        ...(documentsSession.documents || []).filter((item) => item.type !== materialForm.type),
+        newMaterial,
+      ];
+      await updateDoc(doc(db, COLLECTION_NAME, documentsSession.id), { documents: updateddocuments });
       setSessions((prev) =>
-        prev.map((item) => (item.id === materialsSession.id ? { ...item, materials: updatedMaterials } : item))
+        prev.map((item) => (item.id === documentsSession.id ? { ...item, documents: updateddocuments } : item))
       );
-      setMaterialsSession((prev) => ({ ...prev, materials: updatedMaterials }));
+      setdocumentsSession((prev) => ({ ...prev, documents: updateddocuments }));
       setMaterialForm(createEmptyMaterialForm());
     } catch (error) {
       console.error("Error adding material:", error);
@@ -449,14 +568,14 @@ export default function TrainingPage() {
   };
 
   const handleRemoveMaterial = async (materialId) => {
-    if (!materialsSession) return;
-    const updatedMaterials = (materialsSession.materials || []).filter((item) => item.id !== materialId);
+    if (!documentsSession) return;
+    const updateddocuments = (documentsSession.documents || []).filter((item) => item.id !== materialId);
     try {
-      await updateDoc(doc(db, COLLECTION_NAME, materialsSession.id), { materials: updatedMaterials });
+      await updateDoc(doc(db, COLLECTION_NAME, documentsSession.id), { documents: updateddocuments });
       setSessions((prev) =>
-        prev.map((item) => (item.id === materialsSession.id ? { ...item, materials: updatedMaterials } : item))
+        prev.map((item) => (item.id === documentsSession.id ? { ...item, documents: updateddocuments } : item))
       );
-      setMaterialsSession((prev) => ({ ...prev, materials: updatedMaterials }));
+      setdocumentsSession((prev) => ({ ...prev, documents: updateddocuments }));
     } catch (error) {
       console.error("Error removing material:", error);
       showToast("Failed to remove material.", "error");
@@ -464,29 +583,46 @@ export default function TrainingPage() {
   };
 
   const handleSendTeamEmail = async () => {
-    if (!materialsSession) return;
+    if (!documentsSession) return;
 
-    const recipients = getTeamEmailRecipients(materialsSession);
+    const recipients = getTeamEmailRecipients(documentsSession);
     if (recipients.length === 0) {
       showToast("Add at least one team email in the training's schedule details first.", "error");
       return;
     }
 
-    const materials = materialsSession.materials || [];
-    if (materials.length === 0) {
-      showToast("Add at least one material before emailing the team.", "error");
+    const documents = documentsSession.documents || [];
+    const findLink = (type) => documents.find((m) => m.type === type)?.link;
+    const feedbackLink = findLink("Feedback Form");
+    const updateLink = findLink("Members Training Update");
+    const videoLink = findLink("Training Video");
+
+    const missing = [
+      !feedbackLink && "Feedback Form",
+      !updateLink && "Members Training Update",
+      !videoLink && "Training Video",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      showToast(`Add the ${missing.join(", ")} link before emailing the team.`, "error");
       return;
     }
 
-    const traineeNames = (materialsSession.attendees || []).map(getTraineeName);
+    const dateTime = `${formatDateDisplay(documentsSession.date)}${
+      documentsSession.time && documentsSession.time !== "-" ? ` at ${documentsSession.time}` : ""
+    }`;
     const bodyLines = [
-      `Training: ${materialsSession.topic}`,
-      `Date: ${formatDateDisplay(materialsSession.date)}${materialsSession.time && materialsSession.time !== "-" ? ` at ${materialsSession.time}` : ""}`,
-      `Trainer: ${materialsSession.trainer || "-"}`,
-      `Trainees: ${traineeNames.length ? traineeNames.join(", ") : "-"}`,
+      "Dear All,",
+      `I am pleased to inform you that the training session on "${documentsSession.topic}" was successfully conducted on ${dateTime}. The session went well, and participants were actively engaged throughout.`,
       "",
-      "Materials:",
-      ...materials.map((m) => `- [${m.type}] ${m.title}: ${m.link}`),
+      "A feedback form has been shared with all attendees to gather their insights and suggestions:",
+      `Feedback Form Link: ${feedbackLink}`,
+      "",
+      "Additionally, you can track the training progress and updates here:",
+      `Members Training Update Link: ${updateLink}`,
+      "",
+      `Training Video Link: ${videoLink}`,
+      "",
+      "We will review the feedback received and incorporate improvements in upcoming sessions.",
       "",
       "Regards,",
       "Training Team",
@@ -496,16 +632,16 @@ export default function TrainingPage() {
     try {
       await sendTrainingEmail({
         recipients,
-        subject: `Training Materials — ${materialsSession.topic} (${formatDateDisplay(materialsSession.date)})`,
+        subject: `Training Update — ${documentsSession.topic} (${formatDateDisplay(documentsSession.date)})`,
         body: bodyLines.join("\n"),
       });
 
       const sentAt = new Date().toISOString();
-      await updateDoc(doc(db, COLLECTION_NAME, materialsSession.id), { emailSentAt: sentAt });
+      await updateDoc(doc(db, COLLECTION_NAME, documentsSession.id), { emailSentAt: sentAt });
       setSessions((prev) =>
-        prev.map((item) => (item.id === materialsSession.id ? { ...item, emailSentAt: sentAt } : item))
+        prev.map((item) => (item.id === documentsSession.id ? { ...item, emailSentAt: sentAt } : item))
       );
-      setMaterialsSession((prev) => ({ ...prev, emailSentAt: sentAt }));
+      setdocumentsSession((prev) => ({ ...prev, emailSentAt: sentAt }));
       showToast(`Email sent to ${recipients.length} recipient(s).`);
     } catch (error) {
       console.error("Error sending team email:", error);
@@ -515,46 +651,11 @@ export default function TrainingPage() {
     }
   };
 
-  const openFeedbackModal = (session) => {
-    setFeedbackSession(session);
-    setFeedbackForm(session.feedback ? { rating: session.feedback.rating || 0, comment: session.feedback.comment || "" } : createEmptyFeedbackForm());
-  };
 
-  const closeFeedbackModal = () => {
-    setFeedbackSession(null);
-    setFeedbackForm(createEmptyFeedbackForm());
-  };
-
-  const handleSaveFeedback = async () => {
-    if (!feedbackSession) return;
-    if (feedbackForm.rating === 0) {
-      showToast("Please select a star rating.", "error");
-      return;
-    }
-
-    setSavingFeedback(true);
-    try {
-      const feedback = {
-        rating: feedbackForm.rating,
-        comment: feedbackForm.comment.trim(),
-        submittedAt: new Date().toISOString(),
-      };
-      await updateDoc(doc(db, COLLECTION_NAME, feedbackSession.id), { feedback });
-      setSessions((prev) => prev.map((item) => (item.id === feedbackSession.id ? { ...item, feedback } : item)));
-      showToast("Feedback saved successfully!");
-      closeFeedbackModal();
-    } catch (error) {
-      console.error("Error saving feedback:", error);
-      showToast("Failed to save feedback.", "error");
-    } finally {
-      setSavingFeedback(false);
-    }
-  };
-
-  const allMaterials = useMemo(
+  const alldocuments = useMemo(
     () =>
       sortedSessions.flatMap((session) =>
-        (session.materials || []).map((material) => ({
+        (session.documents || []).map((material) => ({
           ...material,
           sessionId: session.id,
           sessionTopic: session.topic,
@@ -565,19 +666,19 @@ export default function TrainingPage() {
   );
 
   const libraryTrainingOptions = useMemo(
-    () => ["All", ...Array.from(new Set(allMaterials.map((item) => item.sessionTopic))).sort((a, b) => a.localeCompare(b))],
-    [allMaterials]
+    () => ["All", ...Array.from(new Set(alldocuments.map((item) => item.sessionTopic))).sort((a, b) => a.localeCompare(b))],
+    [alldocuments]
   );
 
-  const filteredMaterials = useMemo(() => {
+  const filtereddocuments = useMemo(() => {
     const term = librarySearch.trim().toLowerCase();
-    return allMaterials.filter((item) => {
+    return alldocuments.filter((item) => {
       if (libraryTypeFilter !== "All" && item.type !== libraryTypeFilter) return false;
       if (libraryTrainingFilter !== "All" && item.sessionTopic !== libraryTrainingFilter) return false;
       if (term && !item.title.toLowerCase().includes(term) && !item.sessionTopic.toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [allMaterials, libraryTypeFilter, libraryTrainingFilter, librarySearch]);
+  }, [alldocuments, libraryTypeFilter, libraryTrainingFilter, librarySearch]);
 
   const historyRows = useMemo(
     () => [...sessions].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
@@ -792,8 +893,7 @@ export default function TrainingPage() {
           text-decoration: none;
         }
         .training-attendees-btn,
-        .training-materials-btn,
-        .training-feedback-btn {
+        .training-documents-btn {
           display: inline-flex;
           align-items: center;
           gap: 6px;
@@ -1159,10 +1259,50 @@ export default function TrainingPage() {
           cursor: pointer;
           display: inline-flex;
         }
-        .training-feedback-summary {
+        .training-workshop-card {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 18px;
+        }
+        .training-workshop-card-header {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 12px;
+          margin-bottom: 10px;
+        }
+        .training-workshop-logo {
+          width: 40px;
+          height: 40px;
+          border-radius: 8px;
+          object-fit: cover;
+          flex: 0 0 auto;
+        }
+        .training-workshop-title {
+          font-size: 15px;
+          font-weight: 700;
+          color: #0f172a;
+        }
+        .training-workshop-organizer {
+          font-size: 12px;
+          color: #64748b;
+        }
+        .training-workshop-desc {
+          font-size: 13px;
+          color: #334155;
+          margin: 0 0 10px;
+        }
+        .training-workshop-meta {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 8px 16px;
+          font-size: 12.5px;
+          color: #334155;
+        }
+        .training-workshop-meta strong {
+          color: #64748b;
+          font-weight: 700;
         }
       `}</style>
 
@@ -1175,7 +1315,7 @@ export default function TrainingPage() {
       <div className="training-header">
         <div>
           <h2>Training</h2>
-          <p>Schedule weekly training sessions, upload materials, and track feedback.</p>
+          <p>Schedule weekly training sessions and upload documents.</p>
         </div>
         <div className="training-header-actions">
           {activeView === "sessions" && (
@@ -1193,9 +1333,9 @@ export default function TrainingPage() {
             Upload Documents
           </button>
           {activeView === "sessions" && (
-            <button type="button" className="training-btn training-btn-primary" onClick={() => openScheduleModal()}>
+            <button type="button" className="training-btn training-btn-primary" onClick={openWorkshopPicker}>
               <FaPlus size={12} />
-              Schedule Training
+              Schedule Workshop
             </button>
           )}
         </div>
@@ -1216,7 +1356,7 @@ export default function TrainingPage() {
           onClick={() => setActiveView("library")}
         >
           <FaFolderOpen size={13} />
-          Materials Library
+          Documents Library
         </button>
         <button
           type="button"
@@ -1296,11 +1436,11 @@ export default function TrainingPage() {
               <tr>
                 <th>Date</th>
                 <th>Time</th>
-                <th>Topic</th>
+                <th>Workshop</th>
+                <th>Fee</th>
                 <th>Trainees</th>
                 <th>Meeting Link</th>
-                <th>Materials</th>
-                <th>Feedback</th>
+                <th>Documents</th>
                 <th>Reminders</th>
                 <th>Status</th>
                 <th></th>
@@ -1313,9 +1453,15 @@ export default function TrainingPage() {
                   <tr key={session.id}>
                     <td>{formatDateDisplay(session.date)}</td>
                     <td>{session.time || "-"}</td>
-                    <td style={{ cursor: "pointer", color: "#1976d2", fontWeight: 700 }} onClick={() => openScheduleModal(session)} title="Click to edit">
-                      {session.topic}
+                    <td style={{ cursor: "pointer" }} onClick={() => openScheduleModal(session)} title="Click to edit">
+                      <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic}</div>
+                      {(session.workshopOrganizer || session.workshopLocation) && (
+                        <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                          {[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
                     </td>
+                    <td>{session.workshopFee || session.workshopFee === 0 ? `₹${session.workshopFee}` : "-"}</td>
                     <td>
                       <button type="button" className="training-attendees-btn" onClick={() => openScheduleModal(session)}>
                         <FaUserFriends size={11} />
@@ -1333,24 +1479,9 @@ export default function TrainingPage() {
                       )}
                     </td>
                     <td>
-                      <button type="button" className="training-materials-btn" onClick={() => openMaterialsModal(session)}>
+                      <button type="button" className="training-documents-btn" onClick={() => opendocumentsModal(session)}>
                         <FaFolderOpen size={11} />
-                        {(session.materials || []).length}
-                      </button>
-                    </td>
-                    <td>
-                      <button type="button" className="training-feedback-btn" onClick={() => openFeedbackModal(session)}>
-                        {session.feedback ? (
-                          <span className="training-feedback-summary">
-                            <FaStar size={11} color="#f59e0b" />
-                            {session.feedback.rating}/5
-                          </span>
-                        ) : (
-                          <>
-                            <FaRegStar size={11} />
-                            Add
-                          </>
-                        )}
+                        {(session.documents || []).length}
                       </button>
                     </td>
                     <td>
@@ -1406,7 +1537,7 @@ export default function TrainingPage() {
           type="text"
           value={librarySearch}
           onChange={(e) => setLibrarySearch(e.target.value)}
-          placeholder="Search materials or training..."
+          placeholder="Search documents or training..."
         />
         <select value={libraryTypeFilter} onChange={(e) => setLibraryTypeFilter(e.target.value)}>
           <option value="All">All Types</option>
@@ -1443,27 +1574,27 @@ export default function TrainingPage() {
           <div className="card-icon blue">
             <FaFolderOpen size={24} />
           </div>
-          <div className="card-label">Total Materials</div>
-          <div className="card-value">{allMaterials.length.toLocaleString()}</div>
+          <div className="card-label">Total documents</div>
+          <div className="card-value">{alldocuments.length.toLocaleString()}</div>
         </div>
         <div className="stat-card">
           <div className="card-icon orange">
             <FaChalkboardTeacher size={24} />
           </div>
-          <div className="card-label">Trainings With Materials</div>
+          <div className="card-label">Trainings With documents</div>
           <div className="card-value">{(libraryTrainingOptions.length - 1).toLocaleString()}</div>
         </div>
       </div>
 
       <div className="training-table-card">
-        <h3>Materials Library ({filteredMaterials.length})</h3>
+        <h3>Documents Library ({filtereddocuments.length})</h3>
 
         {loading ? (
-          <div className="training-empty">Loading materials...</div>
-        ) : allMaterials.length === 0 ? (
-          <div className="training-empty">No materials added to any training yet.</div>
-        ) : filteredMaterials.length === 0 ? (
-          <div className="training-empty">No materials match these filters.</div>
+          <div className="training-empty">Loading documents...</div>
+        ) : alldocuments.length === 0 ? (
+          <div className="training-empty">No documents added to any training yet.</div>
+        ) : filtereddocuments.length === 0 ? (
+          <div className="training-empty">No documents match these filters.</div>
         ) : (
           <table className="training-table">
             <thead>
@@ -1477,7 +1608,7 @@ export default function TrainingPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredMaterials.map((material) => (
+              {filtereddocuments.map((material) => (
                 <tr key={`${material.sessionId}-${material.id}`}>
                   <td>{material.sessionTopic}</td>
                   <td>{formatDateDisplay(material.sessionDate)}</td>
@@ -1527,7 +1658,6 @@ export default function TrainingPage() {
                   <th>Trainer</th>
                   <th>Trainees</th>
                   <th>Documents Uploaded</th>
-                  <th>Feedback</th>
                 </tr>
               </thead>
               <tbody>
@@ -1542,31 +1672,16 @@ export default function TrainingPage() {
                         : (session.attendees || []).map(getTraineeName).join(", ")}
                     </td>
                     <td>
-                      {(session.materials || []).length === 0 ? (
+                      {(session.documents || []).length === 0 ? (
                         "-"
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                          {session.materials.map((m) => (
+                          {session.documents.map((m) => (
                             <a key={m.id} href={m.link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>
                               [{m.type}] {m.title}
                             </a>
                           ))}
                         </div>
-                      )}
-                    </td>
-                    <td>
-                      {session.feedback ? (
-                        <div>
-                          <div className="training-feedback-summary">
-                            <FaStar size={11} color="#f59e0b" />
-                            {session.feedback.rating}/5
-                          </div>
-                          {session.feedback.comment && (
-                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{session.feedback.comment}</div>
-                          )}
-                        </div>
-                      ) : (
-                        "-"
                       )}
                     </td>
                   </tr>
@@ -1581,74 +1696,89 @@ export default function TrainingPage() {
         <div className="modal-overlay" onClick={closeScheduleModal}>
           <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
             <div className="modal-panel-header">
-              <h3>{editingSessionId ? "Edit Training Session" : "Schedule Training"}</h3>
+              <h3>{editingSessionId ? "Edit Training Session" : "Schedule Training From Workshop"}</h3>
               <button type="button" className="modal-close-btn" onClick={closeScheduleModal} title="Close">
                 <FaTimes />
               </button>
             </div>
             <form onSubmit={handleSaveSession}>
               <div className="modal-panel-body">
-                <div className="training-field" style={{ marginBottom: "16px" }}>
-                  <label htmlFor="topic">Training Topic</label>
-                  <input
-                    id="topic"
-                    type="text"
-                    value={form.topic}
-                    onChange={(e) => updateForm("topic", e.target.value)}
-                    placeholder="e.g. Objection Handling Workshop"
-                  />
-                </div>
+                {selectedWorkshop && (
+                  <div className="training-workshop-card">
+                    <div className="training-workshop-card-header">
+                      {selectedWorkshop.workshop_organizer_logo && (
+                        <img src={selectedWorkshop.workshop_organizer_logo} alt="" className="training-workshop-logo" />
+                      )}
+                      <div>
+                        <div className="training-workshop-title">{selectedWorkshop.workshop_title || "-"}</div>
+                        <div className="training-workshop-organizer">{selectedWorkshop.workshop_organizer || "-"}</div>
+                      </div>
+                      {selectedWorkshop.workshop_status && (
+                        <span className="training-status-badge upcoming" style={{ marginLeft: "auto" }}>
+                          {selectedWorkshop.workshop_status}
+                        </span>
+                      )}
+                    </div>
+                    {selectedWorkshop.workshop_description && (
+                      <p className="training-workshop-desc">{selectedWorkshop.workshop_description}</p>
+                    )}
+                    <div className="training-workshop-meta">
+                      <div><strong>Benefit:</strong> {selectedWorkshop.workshop_benefit || "-"}</div>
+                      <div><strong>Eligibility:</strong> {selectedWorkshop.workshop_eligibility || "-"}</div>
+                      <div><strong>Fee:</strong> {selectedWorkshop.workshop_fee || selectedWorkshop.workshop_fee === 0 ? `₹${selectedWorkshop.workshop_fee}` : "-"}</div>
+                      <div><strong>Location:</strong> {selectedWorkshop.workshop_location || "-"}</div>
+                      <div><strong>Speakers:</strong> {selectedWorkshop.workshop_speakers || "-"}</div>
+                      <div>
+                        <strong>Workshop Dates:</strong> {selectedWorkshop.workshop_start_date || "-"}
+                        {selectedWorkshop.workshop_end_date ? ` to ${selectedWorkshop.workshop_end_date}` : ""}
+                      </div>
+                      {selectedWorkshop.workshop_website && (
+                        <div>
+                          <strong>Website:</strong>{" "}
+                          <a href={`https://${String(selectedWorkshop.workshop_website).replace(/^https?:\/\//, "")}`} target="_blank" rel="noopener noreferrer">
+                            {selectedWorkshop.workshop_website}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="training-member-picker">
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#64748b", marginBottom: "6px" }}>
-                    Add Trainees
-                  </label>
-                  <div className="training-member-search">
-                    <FaSearch size={13} />
-                    <input
-                      type="text"
-                      value={memberSearchTerm}
-                      onChange={(e) => setMemberSearchTerm(e.target.value)}
-                      placeholder="Search members by name or mobile..."
-                    />
-                  </div>
-                  <div className="training-member-list">
-                    {membersLoading ? (
-                      <div className="training-empty">Loading members...</div>
-                    ) : filteredMembersForPicker.length === 0 ? (
-                      <div className="training-empty">No members match your search.</div>
-                    ) : (
-                      filteredMembersForPicker.slice(0, 200).map((member) => {
-                        const selected = selectedTrainees.some((t) => t.id === member.id);
-                        return (
-                          <div
-                            key={member.id}
-                            className={`training-member-row ${selected ? "selected" : ""}`}
-                            onClick={() => toggleTrainee(member)}
-                          >
-                            <input type="checkbox" checked={selected} onChange={() => toggleTrainee(member)} onClick={(e) => e.stopPropagation()} />
-                            <div>
-                              <div className="training-member-name">{getMemberName(member)}</div>
-                              <div className="training-member-phone">{getMemberPhone(member) || "-"}</div>
-                            </div>
-                          </div>
-                        );
-                      })
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", margin: 0 }}>
+                      Applicants ({selectedTrainees.length})
+                    </label>
+                    {selectedWorkshop && (
+                      <button type="button" className="training-clear-filters-btn" onClick={handleRefreshApplicants} disabled={loadingApplicants} style={{ padding: "6px 10px", fontSize: "12px" }}>
+                        {loadingApplicants ? "Refreshing..." : "Refresh Applicants"}
+                      </button>
                     )}
                   </div>
-
-                  {selectedTrainees.length > 0 && (
-                    <div className="training-selected-chips">
-                      {selectedTrainees.map((trainee) => (
-                        <span key={trainee.id} className="training-chip">
-                          {trainee.name}
-                          <button type="button" onClick={() => setSelectedTrainees((prev) => prev.filter((t) => t.id !== trainee.id))}>
-                            <FaTimes size={10} />
+                  <div className="training-attendees-list" style={{ marginBottom: 0 }}>
+                    {loadingApplicants ? (
+                      <div className="training-empty">Loading applicants...</div>
+                    ) : selectedTrainees.length === 0 ? (
+                      <div className="training-empty">No applicants found for this workshop.</div>
+                    ) : (
+                      selectedTrainees.map((trainee) => (
+                        <div key={trainee.id} className="training-attendee-row">
+                          <span>
+                            {trainee.name}
+                            {trainee.phone ? ` · ${trainee.phone}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            className="training-attendee-remove"
+                            onClick={() => setSelectedTrainees((prev) => prev.filter((t) => t.id !== trainee.id))}
+                            title="Remove"
+                          >
+                            <FaTimes size={13} />
                           </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
 
                 <div className="training-grid">
@@ -1696,16 +1826,6 @@ export default function TrainingPage() {
                   />
                 </div>
 
-                <div className="training-field" style={{ marginBottom: "20px" }}>
-                  <label htmlFor="description">Description / Agenda</label>
-                  <textarea
-                    id="description"
-                    value={form.description}
-                    onChange={(e) => updateForm("description", e.target.value)}
-                    placeholder="What will this session cover..."
-                  />
-                </div>
-
                 {formError && <div className="training-error">{formError}</div>}
 
                 <div className="modal-footer-actions">
@@ -1718,6 +1838,51 @@ export default function TrainingPage() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showWorkshopPicker && (
+        <div className="modal-overlay" onClick={closeWorkshopPicker}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(560px, 100%)" }}>
+            <div className="modal-panel-header">
+              <h3>Select Workshop</h3>
+              <button type="button" className="modal-close-btn" onClick={closeWorkshopPicker} title="Close">
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-panel-body">
+              <div className="training-member-search" style={{ marginBottom: "12px" }}>
+                <FaSearch size={13} />
+                <input
+                  type="text"
+                  autoFocus
+                  value={workshopPickerSearch}
+                  onChange={(e) => setWorkshopPickerSearch(e.target.value)}
+                  placeholder="Search workshops by title..."
+                />
+              </div>
+              <div className="training-member-list" style={{ maxHeight: "360px" }}>
+                {workshopsLoading ? (
+                  <div className="training-empty">Loading workshops...</div>
+                ) : filteredWorkshopsForPicker.length === 0 ? (
+                  <div className="training-empty">No workshops with applicants found.</div>
+                ) : (
+                  filteredWorkshopsForPicker.map((workshop) => (
+                    <div key={workshop.id} className="training-member-row" onClick={() => handlePickWorkshop(workshop)}>
+                      <div>
+                        <div className="training-member-name">{workshop.workshop_title}</div>
+                        <div className="training-member-phone">
+                          {[workshop.workshop_organizer, workshop.workshop_location].filter(Boolean).join(" · ")}
+                          {" · "}
+                          {workshop.applicantCount} applicant(s)
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1751,7 +1916,7 @@ export default function TrainingPage() {
                       <div>
                         <div className="training-member-name">{session.topic}</div>
                         <div className="training-member-phone">
-                          {formatDateDisplay(session.date)} · {(session.materials || []).length} doc(s) uploaded
+                          {formatDateDisplay(session.date)} · {(session.documents || []).length} doc(s) uploaded
                         </div>
                       </div>
                     </div>
@@ -1763,21 +1928,21 @@ export default function TrainingPage() {
         </div>
       )}
 
-      {materialsSession && (
-        <div className="modal-overlay" onClick={closeMaterialsModal}>
+      {documentsSession && (
+        <div className="modal-overlay" onClick={closedocumentsModal}>
           <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 100%)" }}>
             <div className="modal-panel-header">
-              <h3>Materials - {materialsSession.topic}</h3>
-              <button type="button" className="modal-close-btn" onClick={closeMaterialsModal} title="Close">
+              <h3>Documents - {documentsSession.topic}</h3>
+              <button type="button" className="modal-close-btn" onClick={closedocumentsModal} title="Close">
                 <FaTimes />
               </button>
             </div>
             <div className="modal-panel-body">
               <div className="training-attendees-list">
-                {(materialsSession.materials || []).length === 0 ? (
-                  <div style={{ fontSize: "13px", color: "#94a3b8" }}>No materials added yet.</div>
+                {(documentsSession.documents || []).length === 0 ? (
+                  <div style={{ fontSize: "13px", color: "#94a3b8" }}>No documents added yet.</div>
                 ) : (
-                  materialsSession.materials.map((material) => (
+                  documentsSession.documents.map((material) => (
                     <div key={material.id} className="training-material-row">
                       <div className="training-material-info">
                         <span className="training-material-type-badge">{material.type}</span>
@@ -1810,25 +1975,17 @@ export default function TrainingPage() {
               </div>
 
               <form className="training-material-add-form" onSubmit={handleAddMaterial}>
-                <div className="training-material-add-grid">
-                  <input
-                    type="text"
-                    value={materialForm.title}
-                    onChange={(e) => updateMaterialForm("title", e.target.value)}
-                    placeholder="Material title, e.g. Week 3 Slides"
-                  />
-                  <select
-                    className="training-material-type-select"
-                    value={materialForm.type}
-                    onChange={(e) => updateMaterialForm("type", e.target.value)}
-                  >
-                    {MATERIAL_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  className="training-material-type-select"
+                  value={materialForm.type}
+                  onChange={(e) => updateMaterialForm("type", e.target.value)}
+                >
+                  {MATERIAL_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   value={materialForm.link}
@@ -1851,11 +2008,11 @@ export default function TrainingPage() {
                   style={{ width: "100%", justifyContent: "center" }}
                 >
                   <FaEnvelope size={12} />
-                  {sendingEmail ? "Sending..." : "Email Materials To Team"}
+                  {sendingEmail ? "Sending..." : "Email Documents To Team"}
                 </button>
-                {materialsSession.emailSentAt && (
+                {documentsSession.emailSentAt && (
                   <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", textAlign: "center" }}>
-                    Last sent {new Date(materialsSession.emailSentAt).toLocaleString("en-IN")}
+                    Last sent {new Date(documentsSession.emailSentAt).toLocaleString("en-IN")}
                   </div>
                 )}
               </div>
@@ -1864,41 +2021,6 @@ export default function TrainingPage() {
         </div>
       )}
 
-      {feedbackSession && (
-        <div className="modal-overlay" onClick={closeFeedbackModal}>
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 100%)" }}>
-            <div className="modal-panel-header">
-              <h3>Feedback - {feedbackSession.topic}</h3>
-              <button type="button" className="modal-close-btn" onClick={closeFeedbackModal} title="Close">
-                <FaTimes />
-              </button>
-            </div>
-            <div className="modal-panel-body">
-              <div className="training-field" style={{ marginBottom: "16px" }}>
-                <label>Overall Rating</label>
-                <StarRating value={feedbackForm.rating} onChange={(rating) => setFeedbackForm((prev) => ({ ...prev, rating }))} />
-              </div>
-              <div className="training-field" style={{ marginBottom: "16px" }}>
-                <label htmlFor="feedback-comment">Comments</label>
-                <textarea
-                  id="feedback-comment"
-                  value={feedbackForm.comment}
-                  onChange={(e) => setFeedbackForm((prev) => ({ ...prev, comment: e.target.value }))}
-                  placeholder="How did the session go? What can be improved next time..."
-                />
-              </div>
-              <div className="modal-footer-actions">
-                <button type="button" className="training-cancel-btn" onClick={closeFeedbackModal}>
-                  Cancel
-                </button>
-                <button type="button" className="training-btn training-btn-primary" onClick={handleSaveFeedback} disabled={savingFeedback}>
-                  {savingFeedback ? "Saving..." : "Save Feedback"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

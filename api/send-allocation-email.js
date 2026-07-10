@@ -1,3 +1,5 @@
+import nodemailer from "nodemailer";
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -5,6 +7,20 @@ const escapeHtml = (value) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+
+let cachedTransporter = null;
+const getTransporter = () => {
+  if (!cachedTransporter) {
+    cachedTransporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+  }
+  return cachedTransporter;
+};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -19,41 +35,26 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing to, subject, or body." });
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.ALLOCATION_EMAIL_FROM || "Brisk Olive <onboarding@resend.dev>";
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
 
-    if (!apiKey) {
+    if (!gmailUser || !gmailAppPassword) {
       return res.status(500).json({
-        error: "Missing RESEND_API_KEY environment variable.",
+        error: "Missing GMAIL_USER or GMAIL_APP_PASSWORD environment variable.",
       });
     }
 
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to,
-        subject,
-        text: body,
-        html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${escapeHtml(body)}</pre>`,
-      }),
+    await getTransporter().sendMail({
+      from: `Brisk Olive <${gmailUser}>`,
+      to,
+      subject,
+      text: body,
+      html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${escapeHtml(body)}</pre>`,
     });
 
-    const responseText = await emailResponse.text();
-    if (!emailResponse.ok) {
-      return res.status(emailResponse.status).send(responseText || "Failed to send email.");
-    }
-
-    return res.status(200).json({
-      ok: true,
-      result: responseText ? JSON.parse(responseText) : null,
-    });
+    return res.status(200).json({ ok: true });
   } catch (error) {
     console.error("send-allocation-email error:", error);
-    return res.status(500).json({ error: "Failed to send allocation email." });
+    return res.status(500).json({ error: error?.message || "Failed to send allocation email." });
   }
 }

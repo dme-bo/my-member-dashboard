@@ -1149,7 +1149,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
                 }}
               >
-                <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "11px", color: "#334155" }}>Registration Date Range</label>
+                <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "11px", color: "#334155" }}>Date Range</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                   <DatePicker
                     selected={toDatePickerValue(registrationDateFrom)}

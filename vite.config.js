@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import nodemailer from 'nodemailer'
 
 function allocationEmailDevApi() {
   return {
@@ -24,46 +25,37 @@ function allocationEmailDevApi() {
             }
 
             const env = loadEnv(server.config.mode, process.cwd(), '')
-            const apiKey = env.RESEND_API_KEY
-            const from = env.ALLOCATION_EMAIL_FROM || 'Brisk Olive <onboarding@resend.dev>'
+            const gmailUser = env.GMAIL_USER
+            const gmailAppPassword = env.GMAIL_APP_PASSWORD
 
-            if (!apiKey) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ error: 'Missing RESEND_API_KEY environment variable.' }))
-              return
-            }
-
-            const emailResponse = await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                from,
-                to,
-                subject,
-                text: body,
-                html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${String(body)
-                  .replace(/&/g, '&amp;')
-                  .replace(/</g, '&lt;')
-                  .replace(/>/g, '&gt;')
-                  .replace(/"/g, '&quot;')
-                  .replace(/'/g, '&#39;')}</pre>`,
-              }),
-            })
-
-            const responseText = await emailResponse.text()
-            res.statusCode = emailResponse.status
             res.setHeader('Content-Type', 'application/json')
 
-            if (!emailResponse.ok) {
-              res.end(responseText || JSON.stringify({ error: 'Failed to send email.' }))
+            if (!gmailUser || !gmailAppPassword) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: 'Missing GMAIL_USER or GMAIL_APP_PASSWORD environment variable.' }))
               return
             }
 
-            res.end(responseText || JSON.stringify({ ok: true }))
+            const transporter = nodemailer.createTransport({
+              service: 'gmail',
+              auth: { user: gmailUser, pass: gmailAppPassword },
+            })
+
+            await transporter.sendMail({
+              from: `Brisk Olive <${gmailUser}>`,
+              to,
+              subject,
+              text: body,
+              html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${String(body)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')}</pre>`,
+            })
+
+            res.statusCode = 200
+            res.end(JSON.stringify({ ok: true }))
           } catch (error) {
             res.statusCode = 500
             res.setHeader('Content-Type', 'application/json')
