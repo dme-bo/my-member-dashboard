@@ -390,6 +390,7 @@ export default function RecruitmentPage() {
             <input
               type="text"
               placeholder="Search by name, phone, email..."
+              aria-label="Search candidates by name, phone, or email"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -419,8 +420,8 @@ export default function RecruitmentPage() {
             style={{
               padding: "10px 20px",
               backgroundColor: "white",
-              border: "1px solid #10b981",
-              color: "#10b981",
+              border: "1px solid #1976d2",
+              color: "#1976d2",
               borderRadius: "8px",
               cursor: "pointer",
               fontWeight: "600",
@@ -506,7 +507,7 @@ export default function RecruitmentPage() {
       <div className="content-with-sidebar">
         <div className="table-container">
           {loading ? (
-            <div style={{ height: "100vh",width: "80vw",padding: "60px", textAlign: "center", fontSize: "18px" }}>
+            <div style={{ height: "100vh",width: "100%",padding: "60px", textAlign: "center", fontSize: "18px", boxSizing: "border-box" }}>
               Loading candidates...
             </div>
           ) : (
@@ -728,7 +729,7 @@ export default function RecruitmentPage() {
               </div>
 
               {/* Tabs */}
-              <div style={{ display: "flex", borderBottom: "1px solid #eee", background: "#f8fafc", flexShrink: 0 }}>
+              <div style={{ display: "flex", borderBottom: "1px solid #eee", background: "#f8fafc", flexShrink: 0, overflowX: "auto" }}>
                 {["personal", "service", "professional", "interviews", "interaction"].map((tab) => (
                   <button
                     key={tab}

@@ -2,10 +2,9 @@
 import React, { useState, useMemo, useEffect, useRef, useTransition, useCallback } from "react";
 import * as ReactWindow from "react-window";
 const List = ReactWindow.FixedSizeList;
-import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
+import { collection, collectionGroup, doc, getDocs, query, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import DualRangeSlider from "../components/DualRangeSlider";
-import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import DatePicker from "react-datepicker";
@@ -46,7 +45,7 @@ const parseDateBoundary = (value, endOfDay) => {
 };
 
 // ─── Virtual list constants ───────────────────────────────────────────────────
-const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 170px";
+const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 200px";
 const ROW_HEIGHT = 68;
 const COL_HEADERS = ["Name", "Mobile", "Category", "Service", "Rank", "State", "City", "Tags"];
 
@@ -62,10 +61,10 @@ const cellStyle = {
 };
 
 const VirtualRow = React.memo(({ index, style, data }) => {
-  const { items, onMemberClick, openTagModal, openRemoveTagConfirm } = data;
+  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover } = data;
   const member = items[index];
   const memberSkills = member.__skills || [];
-  const visibleTags = memberSkills.slice(0, 2);
+  const visibleTags = memberSkills.slice(0, 1);
 
   return (
     <div
@@ -94,9 +93,10 @@ const VirtualRow = React.memo(({ index, style, data }) => {
         {visibleTags.map((tag) => (
           <span
             key={tag}
-            style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "3px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "11px", fontWeight: 600, flexShrink: 0 }}
+            title={tag}
+            style={{ display: "inline-flex", alignItems: "center", gap: "3px", maxWidth: "80px", padding: "3px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "11px", fontWeight: 600, flexShrink: 1, minWidth: 0 }}
           >
-            {tag}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tag}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); openRemoveTagConfirm(member, tag); }}
@@ -106,8 +106,17 @@ const VirtualRow = React.memo(({ index, style, data }) => {
             </button>
           </span>
         ))}
-        {memberSkills.length > 2 && (
-          <span style={{ fontSize: "11px", color: "#1976d2", fontWeight: 700, flexShrink: 0 }}>+{memberSkills.length - 2}</span>
+        {memberSkills.length > 1 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openTagsPopover(member, e.currentTarget.getBoundingClientRect());
+            }}
+            style={{ border: "none", background: "none", padding: 0, fontSize: "11px", color: "#1976d2", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+          >
+            +{memberSkills.length - 1}
+          </button>
         )}
         <button
           type="button"
@@ -142,6 +151,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filterSearchTerms, setFilterSearchTerms] = useState({});
   const filtersRef = useRef(null);
+  const tagsPopoverRef = useRef(null);
   const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
   const [registrationDateFrom, setRegistrationDateFrom] = useState("");
@@ -151,6 +161,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [availableTags, setAvailableTags] = useState([]);
   const [availableProjects, setAvailableProjects] = useState([]);
   const [memberProjectsByPhone, setMemberProjectsByPhone] = useState({});
+  const [ratedMemberIds, setRatedMemberIds] = useState(() => new Set());
   const [selectedTags, setSelectedTags] = useState([]);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
@@ -158,6 +169,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [tagModalError, setTagModalError] = useState("");
   const [tagSuccessPopup, setTagSuccessPopup] = useState({ show: false, message: "", type: "success" });
   const [removeTagTarget, setRemoveTagTarget] = useState(null);
+  const [tagsPopover, setTagsPopover] = useState(null);
   const [loadProgress, setLoadProgress] = useState(0);
 
   const [sidebarFilters, setSidebarFilters] = useState({
@@ -175,6 +187,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Placement Status": "All",
     Experience: "All",
     Tags: "All",
+    Rated: "All",
   });
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
@@ -249,6 +262,33 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     void loadProjectLinks();
   }, []);
 
+  useEffect(() => {
+    const loadRatedMembers = async () => {
+      try {
+        const snapshot = await getDocs(query(collectionGroup(db, "interactions")));
+        const ratedIds = new Set();
+
+        snapshot.docs.forEach((interactionDoc) => {
+          const data = interactionDoc.data() || {};
+          const isRated =
+            data.ratingType &&
+            data.ratingType !== "not_rated" &&
+            (Number(data.workRating) > 0 || Number(data.boRating) > 0 || Number(data.referrerRating) > 0);
+          if (!isRated) return;
+
+          const userId = interactionDoc.ref.parent.parent?.id;
+          if (userId) ratedIds.add(userId);
+        });
+
+        setRatedMemberIds(ratedIds);
+      } catch (error) {
+        console.error("Error loading rated members:", error);
+      }
+    };
+
+    void loadRatedMembers();
+  }, []);
+
   const memberIndex = useMemo(() => {
     return members.map((member) => {
       const name = getMemberName(member);
@@ -301,9 +341,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         __experienceValue: Number.isFinite(experienceValue) ? experienceValue : NaN,
         __tagsLower: String(member.tags || member.Tags || "").toLowerCase(),
         __registrationDateMs: registrationDate ? registrationDate.getTime() : null,
+        __isRated: ratedMemberIds.has(member.id),
       };
     });
-  }, [members, memberProjectsByPhone]);
+  }, [members, memberProjectsByPhone, ratedMemberIds]);
   // Dynamic filter options — single pass over memberIndex (was 12 passes before)
   const filterOptions = useMemo(() => {
     const genderSet = new Set();
@@ -374,6 +415,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       Tags:             ["All", ...Array.from(skillsSet).sort((a, b) => a.localeCompare(b))],
       "Placement Status": ["All", "Placed", "Active"],
       Experience:       buckets,
+      Rated:            ["All", "Rated", "Not Rated"],
     };
   }, [memberIndex, availableProjects]);
 
@@ -441,6 +483,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         "Placement Status": "All",
         Experience: "All",
         Tags: "All",
+        Rated: "All",
       });
       setRetirementStatus("All");
       setRegistrationDateFrom("");
@@ -524,6 +567,15 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         if (key === "Placement Status") {
           const isPlacedVal = value === "placed";
           if (member.isPlaced !== isPlacedVal) {
+            matchesSidebar = false;
+            break;
+          }
+          continue;
+        }
+
+        if (key === "Rated") {
+          const wantsRated = value === "rated";
+          if (member.__isRated !== wantsRated) {
             matchesSidebar = false;
             break;
           }
@@ -668,9 +720,13 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     setRemoveTagTarget({ member, tag });
   }, []);
 
+  const openTagsPopover = useCallback((member, anchorRect) => {
+    setTagsPopover({ member, anchorRect });
+  }, []);
+
   const virtualRowItemData = useMemo(
-    () => ({ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm }),
-    [pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm]
+    () => ({ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover }),
+    [pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover]
   );
 
   const closeRemoveTagConfirm = () => {
@@ -714,13 +770,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     });
   };
 
-  const filterData = {
-    filters: sidebarFilters,
-    handleFilterChange,
-    clearFilters,
-    options: filterOptions,
-  };
-
   const filterKeys = [
     "Gender",
     "Category",
@@ -734,6 +783,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Project",
     "Tags",
     "Experience",
+    "Rated",
   ];
 
   // Close dropdown on click-outside
@@ -746,6 +796,25 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openDropdown]);
+
+  // Close tags popover on click-outside or Escape
+  useEffect(() => {
+    if (!tagsPopover) return;
+    const handleClickOutside = (event) => {
+      if (tagsPopoverRef.current && !tagsPopoverRef.current.contains(event.target)) {
+        setTagsPopover(null);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setTagsPopover(null);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [tagsPopover]);
 
   // Export to Excel (XLSX)
   const handleExportXLSX = () => {
@@ -927,6 +996,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
               <input
               type="text"
               placeholder="Search name, mobile, email..."
+              aria-label="Search members by name, mobile, or email"
               value={searchTerm}
               onChange={(e) => {
                 const nextValue = e.target.value;
@@ -1322,6 +1392,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
               <button
                 type="button"
                 onClick={closeTagModal}
+                aria-label="Close"
                 style={{
                   border: "none",
                   background: "#f1f5f9",
@@ -1498,6 +1569,60 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {tagsPopover && (
+        <div
+          ref={tagsPopoverRef}
+          style={{
+            position: "fixed",
+            top: Math.min(tagsPopover.anchorRect.bottom + 6, window.innerHeight - 260),
+            left: Math.min(tagsPopover.anchorRect.left, window.innerWidth - 240),
+            width: "220px",
+            maxHeight: "260px",
+            overflowY: "auto",
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "12px",
+            boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
+            zIndex: 3500,
+            padding: "10px",
+          }}
+        >
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "8px" }}>
+            All Tags
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            {(tagsPopover.member.__skills || []).map((tag) => (
+              <span
+                key={tag}
+                style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#334155", fontSize: "12px", fontWeight: 600 }}
+              >
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => {
+                    openRemoveTagConfirm(tagsPopover.member, tag);
+                    setTagsPopover(null);
+                  }}
+                  style={{ width: "14px", height: "14px", borderRadius: "50%", border: "none", background: "#cbd5e1", color: "#0f172a", fontSize: "10px", cursor: "pointer", padding: 0, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              openTagModal(tagsPopover.member);
+              setTagsPopover(null);
+            }}
+            style={{ marginTop: "10px", width: "100%", padding: "6px 8px", borderRadius: "8px", border: "1px solid #1976d2", background: "#e3f2fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "12px" }}
+          >
+            + Manage Tags
+          </button>
         </div>
       )}
 

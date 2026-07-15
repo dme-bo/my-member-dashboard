@@ -1217,6 +1217,7 @@ export default function MemberLocationPage({ memberRecords = [] }) {
                       }
                     }}
                   placeholder="Search a place on the map..."
+                  aria-label="Search a place on the map"
                 />
                   <button
                     type="button"

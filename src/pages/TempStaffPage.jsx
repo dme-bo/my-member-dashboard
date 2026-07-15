@@ -11,7 +11,6 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx";
 
 export default function TempStaffPage() {
@@ -395,14 +394,13 @@ export default function TempStaffPage() {
     }
   };
 
-  const filterData = { filters, handleFilterChange, clearFilters, options: dynamicFilterOptions };
   const filterKeys = viewMode === "applications"
     ? ["coordinator_name", "city", "status", "role"]
     : ["city", "coordinator_type"];
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "86vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
+      <div style={{ height: "100vh", width: "100%",padding: "60px", textAlign: "center", fontSize: "18px", boxSizing: "border-box" }}>
         Loading {viewMode === "applications" ? "TCS Applications" : "Coordinators"}...
       </div>
     );
@@ -420,6 +418,7 @@ export default function TempStaffPage() {
             <input
               type="text"
               placeholder={`Search by Name, Mobile${viewMode === "applications" ? ", Aadhaar, PAN" : ", Email"}...`}
+              aria-label="Search by name or mobile number"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -427,7 +426,7 @@ export default function TempStaffPage() {
               }}
               style={{
                 padding: "12px 14px 12px 40px",
-                width: "126%",
+                width: "100%",
                 borderRadius: "8px",
                 border: "1px solid #d1d5db",
                 fontSize: "14px",
@@ -449,8 +448,8 @@ export default function TempStaffPage() {
             style={{
               padding: "10px 20px",
               backgroundColor: "white",
-              border: "1px solid #10b981",
-              color: "#10b981",
+              border: "1px solid #1976d2",
+              color: "#1976d2",
               borderRadius: "8px",
               cursor: "pointer",
               fontWeight: "600",
@@ -734,7 +733,7 @@ export default function TempStaffPage() {
               </div>
 
               {/* Tabs */}
-              <div style={{ display: "flex", borderBottom: "1px solid #eee", background: "#f8fafc", flexShrink: 0 }}>
+              <div style={{ display: "flex", borderBottom: "1px solid #eee", background: "#f8fafc", flexShrink: 0, overflowX: "auto" }}>
                 {(selectedMember.type === "application"
                   ? ["personal", "bank", "documents", "interaction"]
                   : ["personal", "locations", "bank", "interaction"]

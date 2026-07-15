@@ -55,6 +55,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error("send-allocation-email error:", error);
-    return res.status(500).json({ error: error?.message || "Failed to send allocation email." });
+    return res.status(500).json({ error: "Failed to send allocation email." });
   }
 }

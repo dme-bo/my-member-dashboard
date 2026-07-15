@@ -378,7 +378,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
   return (
     <>
-      <style jsx>{`
+      <style>{`
         .dashboard-container {
           width: 100%;
           min-height: 100vh;

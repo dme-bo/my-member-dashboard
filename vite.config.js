@@ -57,9 +57,10 @@ function allocationEmailDevApi() {
             res.statusCode = 200
             res.end(JSON.stringify({ ok: true }))
           } catch (error) {
+            console.error('send-allocation-email (dev) error:', error)
             res.statusCode = 500
             res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: error?.message || 'Failed to send allocation email.' }))
+            res.end(JSON.stringify({ error: 'Failed to send allocation email.' }))
           }
         })
       })
@@ -110,8 +111,9 @@ function verifyLoginDevApi() {
 
           res.end(JSON.stringify({ ok: true, email, name: match.name || '' }))
         } catch (error) {
+          console.error('verify-login (dev) error:', error)
           res.statusCode = 500
-          res.end(JSON.stringify({ ok: false, error: error?.message || 'Failed to verify login.' }))
+          res.end(JSON.stringify({ ok: false, error: 'Failed to verify login.' }))
         }
       })
     },

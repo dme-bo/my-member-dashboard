@@ -699,6 +699,7 @@ export default function RegimentalCenterPage() {
               <input
                 type="text"
                 placeholder={`Search ${activeCategory.label.toLowerCase()}...`}
+                aria-label={`Search ${activeCategory.label.toLowerCase()}`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />

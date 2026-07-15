@@ -701,9 +701,6 @@ export default function MemberDetailModal({ member, onClose }) {
             {activeTab === "education" && (
               <div className="detail-grid">
                 <div><strong>Education:</strong> {normalizedMember.graduation_course || normalizedMember.education || "-"}</div>
-                <div><strong>Graduation %:</strong> {normalizedMember.graduation_percentage || "-"}</div>
-                <div><strong>11th %:</strong> {normalizedMember.percentage11th || "-"}</div>
-                <div><strong>12th %:</strong> {normalizedMember.percentage12th || "-"}</div>
                 <div><strong>MBA:</strong> {normalizedMember.mba || "-"}</div>
                 <div><strong>English Proficiency:</strong> {normalizedMember.english_proficiency || normalizedMember.english || "-"}</div>
                 <div><strong>IT Skills:</strong> {normalizedMember.it_skills || "-"}</div>
