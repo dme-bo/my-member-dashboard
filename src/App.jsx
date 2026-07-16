@@ -19,8 +19,6 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { normalizeMemberRecord } from "./utils/memberFields";
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
-import { getSession, setSession, clearSession, SESSION_RECHECK_MS } from "./utils/session";
-import { AUTH_EMAIL_PARAM, goToLogin } from "./utils/auth";
 import "./App.css";
 
 const DashboardPage       = lazy(() => import("./pages/DashboardPage"));
@@ -63,122 +61,6 @@ function PageLoadingSpinner() {
       <style>{`@keyframes navSpin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
-}
-
-// ------------------------------------------------------------------
-// Auth gate — redirects to the operations login page when there is
-// no active session, or completes login via ?authEmail= handoff
-// ------------------------------------------------------------------
-function AuthGate({ children }) {
-  const [authenticated, setAuthenticated] = useState(false);
-
-  useEffect(() => {
-    // The authEmail handback always takes priority over a stored session —
-    // it's the authoritative signal that a login on operations.briskolive.com
-    // just completed, and must be processed even if a prior visit already
-    // redirected once.
-    const params = new URLSearchParams(window.location.search);
-    const authEmail = params.get(AUTH_EMAIL_PARAM);
-
-    if (!authEmail) {
-      if (getSession()?.email) {
-        setAuthenticated(true);
-        return;
-      }
-      goToLogin();
-      return;
-    }
-
-    let cancelled = false;
-
-    fetch(`/api/verify-login?email=${encodeURIComponent(authEmail)}`)
-      .then((res) => res.json())
-      .then((result) => {
-        if (cancelled) return;
-
-        if (!result.ok) {
-          goToLogin();
-          return;
-        }
-
-        setSession({ email: result.email, name: result.name, ts: Date.now() });
-
-        params.delete(AUTH_EMAIL_PARAM);
-        const cleanSearch = params.toString();
-        window.history.replaceState(
-          {},
-          "",
-          `${window.location.pathname}${cleanSearch ? `?${cleanSearch}` : ""}`
-        );
-
-        setAuthenticated(true);
-      })
-      .catch(() => {
-        if (!cancelled) goToLogin();
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Once authenticated, periodically re-check the email against the HR
-  // onboarding API (the same check used at login) so a deactivated or
-  // removed account gets sent back to operations.briskolive.com within
-  // SESSION_RECHECK_MS instead of staying "logged in" until the 24h TTL.
-  useEffect(() => {
-    if (!authenticated) return;
-
-    let cancelled = false;
-    let lastCheck = Date.now();
-
-    const revalidate = async () => {
-      const session = getSession();
-      if (!session?.email) {
-        clearSession();
-        goToLogin();
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/verify-login?email=${encodeURIComponent(session.email)}`);
-        const result = await res.json();
-        if (cancelled) return;
-
-        if (!result.ok) {
-          clearSession();
-          goToLogin();
-        }
-      } catch {
-        // Transient network/API failure — don't log the user out for that.
-      } finally {
-        lastCheck = Date.now();
-      }
-    };
-
-    const interval = setInterval(revalidate, SESSION_RECHECK_MS);
-
-    // Also re-check on tab focus/visibility, but only if a check hasn't
-    // run recently (covers laptop sleep/wake without hammering the API).
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && Date.now() - lastCheck >= SESSION_RECHECK_MS) {
-        revalidate();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
-    };
-  }, [authenticated]);
-
-  if (!authenticated) return <PageLoadingSpinner />;
-
-  return children;
 }
 
 // ------------------------------------------------------------------
@@ -392,11 +274,9 @@ function Layout() {
 // ------------------------------------------------------------------
 function App() {
   return (
-    <AuthGate>
-      <BrowserRouter>
-        <Layout />
-      </BrowserRouter>
-    </AuthGate>
+    <BrowserRouter>
+      <Layout />
+    </BrowserRouter>
   );
 }
 

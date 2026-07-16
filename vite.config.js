@@ -68,60 +68,8 @@ function allocationEmailDevApi() {
   }
 }
 
-function verifyLoginDevApi() {
-  return {
-    name: 'verify-login-dev-api',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        if (req.method !== 'GET' || !req.url.startsWith('/api/verify-login')) {
-          return next()
-        }
-
-        const url = new URL(req.url, 'http://localhost')
-        const email = (url.searchParams.get('email') || '').trim().toLowerCase()
-
-        res.setHeader('Content-Type', 'application/json')
-
-        if (!email) {
-          res.statusCode = 400
-          res.end(JSON.stringify({ ok: false, error: 'Missing email.' }))
-          return
-        }
-
-        try {
-          const response = await fetch('http://hr.briskolive.com:5000/api/onboarding')
-          if (!response.ok) {
-            res.statusCode = 502
-            res.end(JSON.stringify({ ok: false, error: 'Onboarding API unavailable.' }))
-            return
-          }
-
-          const payload = await response.json()
-          const records = Array.isArray(payload) ? payload : payload.data || []
-          const normalize = (value) => String(value || '').trim().toLowerCase()
-
-          const match = records.find(
-            (record) => normalize(record.officialEmail) === email || normalize(record.persEmail) === email
-          )
-
-          if (!match) {
-            res.end(JSON.stringify({ ok: false }))
-            return
-          }
-
-          res.end(JSON.stringify({ ok: true, email, name: match.name || '' }))
-        } catch (error) {
-          console.error('verify-login (dev) error:', error)
-          res.statusCode = 500
-          res.end(JSON.stringify({ ok: false, error: 'Failed to verify login.' }))
-        }
-      })
-    },
-  }
-}
-
 export default defineConfig({
-  plugins: [react(), allocationEmailDevApi(), verifyLoginDevApi()],
+  plugins: [react(), allocationEmailDevApi()],
   optimizeDeps: {
     include: ['react-window'],
   },
