@@ -73,19 +73,18 @@ function AuthGate({ children }) {
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Once the user has been sent to the login page once, don't send them
-    // again — operations.briskolive.com has no way to hand back proof of
-    // login, so re-checking every visit would loop forever.
-    if (getSession()?.email || getSession()?.visitedLogin) {
-      setAuthenticated(true);
-      return;
-    }
-
+    // The authEmail handback always takes priority over a stored session —
+    // it's the authoritative signal that a login on operations.briskolive.com
+    // just completed, and must be processed even if a prior visit already
+    // redirected once.
     const params = new URLSearchParams(window.location.search);
     const authEmail = params.get(AUTH_EMAIL_PARAM);
 
     if (!authEmail) {
-      setSession({ visitedLogin: true, ts: Date.now() });
+      if (getSession()?.email) {
+        setAuthenticated(true);
+        return;
+      }
       goToLogin();
       return;
     }
@@ -98,7 +97,6 @@ function AuthGate({ children }) {
         if (cancelled) return;
 
         if (!result.ok) {
-          setSession({ visitedLogin: true, ts: Date.now() });
           goToLogin();
           return;
         }
@@ -116,10 +114,7 @@ function AuthGate({ children }) {
         setAuthenticated(true);
       })
       .catch(() => {
-        if (!cancelled) {
-          setSession({ visitedLogin: true, ts: Date.now() });
-          goToLogin();
-        }
+        if (!cancelled) goToLogin();
       });
 
     return () => {
