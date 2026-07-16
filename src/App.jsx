@@ -19,7 +19,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { normalizeMemberRecord } from "./utils/memberFields";
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
-import { getSession, setSession } from "./utils/session";
+import { getSession, setSession, clearSession, SESSION_RECHECK_MS } from "./utils/session";
 import { AUTH_EMAIL_PARAM, goToLogin } from "./utils/auth";
 import "./App.css";
 
@@ -126,6 +126,60 @@ function AuthGate({ children }) {
       cancelled = true;
     };
   }, []);
+
+  // Once authenticated, periodically re-check the email against the HR
+  // onboarding API (the same check used at login) so a deactivated or
+  // removed account gets sent back to operations.briskolive.com within
+  // SESSION_RECHECK_MS instead of staying "logged in" until the 24h TTL.
+  useEffect(() => {
+    if (!authenticated) return;
+
+    let cancelled = false;
+    let lastCheck = Date.now();
+
+    const revalidate = async () => {
+      const session = getSession();
+      if (!session?.email) {
+        clearSession();
+        goToLogin();
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/verify-login?email=${encodeURIComponent(session.email)}`);
+        const result = await res.json();
+        if (cancelled) return;
+
+        if (!result.ok) {
+          clearSession();
+          goToLogin();
+        }
+      } catch {
+        // Transient network/API failure — don't log the user out for that.
+      } finally {
+        lastCheck = Date.now();
+      }
+    };
+
+    const interval = setInterval(revalidate, SESSION_RECHECK_MS);
+
+    // Also re-check on tab focus/visibility, but only if a check hasn't
+    // run recently (covers laptop sleep/wake without hammering the API).
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastCheck >= SESSION_RECHECK_MS) {
+        revalidate();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [authenticated]);
 
   if (!authenticated) return <PageLoadingSpinner />;
 
