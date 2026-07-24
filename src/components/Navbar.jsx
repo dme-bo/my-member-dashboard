@@ -22,6 +22,7 @@ function Navbar() {
       configuration: "Configuration",
       newsletter: "Newsletter",
       partneragent: "Regional Partner List",
+      scoring: "Scoring",
     };
     return titles[path] || "Dashboard";
   };

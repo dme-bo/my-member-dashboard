@@ -34,6 +34,7 @@ const TrainingPage        = lazy(() => import("./pages/TrainingPage"));
 const ConfigurationPage   = lazy(() => import("./pages/ConfigurationPage"));
 const NewsLetterPage      = lazy(() => import("./pages/NewsLetterPage"));
 const PartnerAgentList    = lazy(() => import("./pages/PartnerAgentList"));
+const ScoringPage         = lazy(() => import("./pages/ScoringPage"));
 
 const preloadMemberListPage = () => import("./pages/MemberListPage");
 
@@ -252,6 +253,17 @@ function Layout() {
             <Route path="/configuration" element={<ErrorBoundary><ConfigurationPage /></ErrorBoundary>} />
             <Route path="/newsletter"    element={<ErrorBoundary><NewsLetterPage /></ErrorBoundary>} />
             <Route path="/partneragent"  element={<ErrorBoundary><PartnerAgentList /></ErrorBoundary>} />
+            <Route
+              path="/scoring"
+              element={
+                <ErrorBoundary>
+                  <ScoringPage
+                    memberRecords={memberRecords}
+                    membersLoading={membersLoading}
+                  />
+                </ErrorBoundary>
+              }
+            />
             <Route path="*" element={<div style={{ padding: 32, color: "#475569" }}>Page not found</div>} />
           </Routes>
         </Suspense>

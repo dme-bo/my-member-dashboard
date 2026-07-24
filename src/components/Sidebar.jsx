@@ -10,7 +10,8 @@ import {
   MdWork,             // Requirements
   MdForum,            // Interactions
   MdEmail,            // Newsletter
-  MdSettings          // Configuration
+  MdSettings,         // Configuration
+  MdLeaderboard       // Scoring
 } from "react-icons/md";
 
 import {
@@ -32,6 +33,7 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
   const isTrainingActive = location.pathname === "/training";
   const isNewsletterActive = location.pathname === "/newsletter";
   const isConfigurationActive = location.pathname === "/configuration";
+  const isScoringActive = location.pathname === "/scoring";
 
   // Determine if "Member Applications" parent should look active
   const isApplicationsActive =
@@ -139,6 +141,11 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
         <NavLink to="/newsletter" className={`menu-item ${isNewsletterActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdEmail className="menu-icon" />
           <span>News Letter</span>
+        </NavLink>
+
+        <NavLink to="/scoring" className={`menu-item ${isScoringActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+          <MdLeaderboard className="menu-icon" />
+          <span>Scoring</span>
         </NavLink>
 
         <NavLink to="/configuration" className={`menu-item ${isConfigurationActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
