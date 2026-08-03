@@ -5,6 +5,7 @@ const List = ReactWindow.FixedSizeList;
 import { collection, collectionGroup, doc, getDocs, query, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import DualRangeSlider from "../components/DualRangeSlider";
+import MultiSelectDropdown from "../components/MultiSelectDropdown";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import DatePicker from "react-datepicker";
@@ -148,9 +149,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(500);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [filterSearchTerms, setFilterSearchTerms] = useState({});
-  const filtersRef = useRef(null);
   const tagsPopoverRef = useRef(null);
   const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
@@ -173,21 +171,21 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [loadProgress, setLoadProgress] = useState(0);
 
   const [sidebarFilters, setSidebarFilters] = useState({
-    Gender: "All",
-    Category: "All",
-    Service: "All",
-    Rank: "All",
-    Level: "All",
-    Trade: "All",
-    City: "All",
-    State: "All",
-    Education: "All",
-    Project: "All",
+    Gender: [],
+    Category: [],
+    Service: [],
+    Rank: [],
+    Level: [],
+    Trade: [],
+    City: [],
+    State: [],
+    Education: [],
+    Project: [],
     Status: "All",
     "Placement Status": "All",
-    Experience: "All",
-    Tags: "All",
-    Rated: "All",
+    Experience: [],
+    Tags: [],
+    Rated: [],
   });
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
@@ -385,11 +383,11 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       }
     }
 
-    const toSorted = (set) => ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    const toSorted = (set) => Array.from(set).sort((a, b) => a.localeCompare(b));
 
-    let buckets = ["All"];
+    let buckets = [];
     if (experiences.length === 0) {
-      buckets = ["All", "0-1 yr", "1-3 yrs", "3-5 yrs", "5-10 yrs", "10+ yrs"];
+      buckets = ["0-1 yr", "1-3 yrs", "3-5 yrs", "5-10 yrs", "10+ yrs"];
     } else {
       const maxExp = Math.max(...experiences);
       const ceiling = Math.ceil(maxExp / 5) * 5;
@@ -415,12 +413,12 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       City:             toSorted(citySet),
       State:            toSorted(stateSet),
       Education:        toSorted(educationSet),
-      Project:          availableProjects,
+      Project:          availableProjects.filter((p) => p !== "All"),
       Status:           toSorted(statusSet),
-      Tags:             ["All", ...Array.from(skillsSet).sort((a, b) => a.localeCompare(b))],
-      "Placement Status": ["All", "Placed", "Active"],
+      Tags:             Array.from(skillsSet).sort((a, b) => a.localeCompare(b)),
+      "Placement Status": ["Placed", "Active"],
       Experience:       buckets,
-      Rated:            ["All", "Rated", "Not Rated"],
+      Rated:            ["Rated", "Not Rated"],
     };
   }, [memberIndex, availableProjects]);
 
@@ -474,21 +472,21 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const clearFilters = () => {
     startTransition(() => {
       setSidebarFilters({
-        Gender: "All",
-        Category: "All",
-        Service: "All",
-        Rank: "All",
-        Level: "All",
-        Trade: "All",
-        City: "All",
-        State: "All",
-        Education: "All",
-        Project: "All",
+        Gender: [],
+        Category: [],
+        Service: [],
+        Rank: [],
+        Level: [],
+        Trade: [],
+        City: [],
+        State: [],
+        Education: [],
+        Project: [],
         Status: "All",
         "Placement Status": "All",
-        Experience: "All",
-        Tags: "All",
-        Rated: "All",
+        Experience: [],
+        Tags: [],
+        Rated: [],
       });
       setRetirementStatus("All");
       setRegistrationDateFrom("");
@@ -511,10 +509,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const filteredMembers = useMemo(() => {
     const list = [];
     const searchTerm = debouncedSearchTerm.trim().toLowerCase();
-    const selectedSidebarFilters = Object.entries(sidebarFilters).filter(([, value]) => value !== "All");
+    const selectedSidebarFilters = Object.entries(sidebarFilters).filter(([, value]) =>
+      Array.isArray(value) ? value.length > 0 : value !== "All"
+    );
     const activeAgeFilter = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
-    const activeExperienceFilter = selectedSidebarFilters.find(([key]) => key === "Experience");
-    const experienceRange = activeExperienceFilter ? parseExperienceRange(activeExperienceFilter[1]) : null;
     const fromBoundaryMs = parseDateBoundary(registrationDateFrom, false)?.getTime() ?? null;
     const toBoundaryMs = parseDateBoundary(registrationDateTo, true)?.getTime() ?? null;
 
@@ -531,7 +529,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       Project: "project",
     };
 
-    const lowercasedSidebarFilters = selectedSidebarFilters.map(([key, value]) => [key, String(value).toLowerCase()]);
+    const lowercasedSidebarFilters = selectedSidebarFilters.map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.map((v) => String(v).toLowerCase()) : String(value).toLowerCase(),
+    ]);
 
     for (const member of memberIndex) {
       if (searchTerm) {
@@ -560,9 +561,9 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       }
 
       let matchesSidebar = true;
-      for (const [key, value] of lowercasedSidebarFilters) {
+      for (const [key, values] of lowercasedSidebarFilters) {
         if (key === "Tags") {
-          if (!member.__skillsLower.some((tag) => tag === value)) {
+          if (!values.some((v) => member.__skillsLower.includes(v))) {
             matchesSidebar = false;
             break;
           }
@@ -570,27 +571,29 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         }
 
         if (key === "Placement Status") {
-          const isPlacedVal = value === "placed";
-          if (member.isPlaced !== isPlacedVal) {
-            matchesSidebar = false;
-            break;
-          }
+          const wantsPlaced = values.includes("placed");
+          const wantsActive = values.includes("active");
+          if (wantsPlaced && !wantsActive && member.isPlaced !== true) { matchesSidebar = false; break; }
+          if (wantsActive && !wantsPlaced && member.isPlaced === true) { matchesSidebar = false; break; }
           continue;
         }
 
         if (key === "Rated") {
-          const wantsRated = value === "rated";
-          if (member.__isRated !== wantsRated) {
-            matchesSidebar = false;
-            break;
-          }
+          const wantsRated = values.includes("rated");
+          const wantsNotRated = values.includes("not rated");
+          if (wantsRated && !wantsNotRated && !member.__isRated) { matchesSidebar = false; break; }
+          if (wantsNotRated && !wantsRated && member.__isRated) { matchesSidebar = false; break; }
           continue;
         }
 
         if (key === "Experience") {
-          if (!experienceRange) continue;
+          const ranges = values.map((v) => parseExperienceRange(v)).filter(Boolean);
+          if (!ranges.length) continue;
           const exp = member.__experienceValue;
-          if (!Number.isFinite(exp) || exp < experienceRange.min || (experienceRange.max !== Infinity && exp > experienceRange.max)) {
+          const matchesAny = Number.isFinite(exp) && ranges.some(
+            (r) => exp >= r.min && (r.max === Infinity || exp <= r.max)
+          );
+          if (!matchesAny) {
             matchesSidebar = false;
             break;
           }
@@ -598,7 +601,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         }
 
         if (key === "Project") {
-          if (!member.__projectsLower.some((project) => project === value)) {
+          if (!values.some((v) => member.__projectsLower.includes(v))) {
             matchesSidebar = false;
           }
           if (!matchesSidebar) break;
@@ -607,15 +610,16 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
         const dbField = fieldMap[key];
         if (!dbField) continue;
-        if (dbField === "organization" && member.__organizationLower !== value) matchesSidebar = false;
-        else if (dbField === "service" && member.__serviceLower !== value) matchesSidebar = false;
-        else if (dbField === "rank" && member.__rankLower !== value) matchesSidebar = false;
-        else if (dbField === "state" && member.__stateLower !== value) matchesSidebar = false;
-        else if (dbField === "city" && member.__cityLower !== value) matchesSidebar = false;
-        else if (dbField === "education" && member.__educationLower !== value) matchesSidebar = false;
-        else if (!["organization", "service", "rank", "state", "city", "education"].includes(dbField) && String(member[dbField] || "").toLowerCase() !== value) {
-          matchesSidebar = false;
-        }
+        let memberValue;
+        if (dbField === "organization") memberValue = member.__organizationLower;
+        else if (dbField === "service") memberValue = member.__serviceLower;
+        else if (dbField === "rank") memberValue = member.__rankLower;
+        else if (dbField === "state") memberValue = member.__stateLower;
+        else if (dbField === "city") memberValue = member.__cityLower;
+        else if (dbField === "education") memberValue = member.__educationLower;
+        else memberValue = String(member[dbField] || "").toLowerCase();
+
+        if (!values.includes(memberValue)) matchesSidebar = false;
 
         if (!matchesSidebar) break;
       }
@@ -790,17 +794,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Experience",
     "Rated",
   ];
-
-  // Close dropdown on click-outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (filtersRef.current && !filtersRef.current.contains(event.target) && openDropdown) {
-        setOpenDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openDropdown]);
 
   // Close tags popover on click-outside or Escape
   useEffect(() => {
@@ -1076,7 +1069,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         {/* Inline Filters */}
         {isFilterOpen && (
           <div
-            ref={filtersRef}
             style={{
               borderTop: "1px solid #e5e7eb",
               marginTop: "14px",
@@ -1128,56 +1120,15 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                 alignItems: "start",
               }}
             >
-              {filterKeys.map(filterKey => {
-                const selectedValue = sidebarFilters[filterKey];
-                const filterOpts = filterOptions[filterKey] || [];
-                const searchTerm = filterSearchTerms[filterKey] || "";
-                const filteredOpts = filterOpts.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
-                const isDropdownOpen = openDropdown === filterKey;
-
-                return (
-                  <div
-                    key={filterKey}
-                    style={{
-                      padding: "4px 0",
-                      minWidth: 0,
-                    }}
-                  >
-                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "12px", textTransform: "capitalize", color: "#334155" }}>{filterKey}</label>
-                    <div style={{ position: "relative" }}>
-                      <div
-                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
-                        style={{
-                          padding: "11px 12px",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: "10px",
-                          background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-                          cursor: "pointer",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          fontSize: "13px",
-                          color: "#0f172a",
-                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
-                        }}
-                      >
-                        <span>{selectedValue || "All"}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
-                      </div>
-                      {isDropdownOpen && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #dbe3ee", borderRadius: "10px", marginTop: "6px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 14px 30px rgba(15, 23, 42, 0.12)" }}>
-                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", outline: "none", fontSize: "12px", color: "#0f172a", background: "#f8fafc" }} />
-                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
-                            {filteredOpts.length === 0 ? <div style={{ padding: "10px 12px", color: "#94a3b8", fontSize: "12px" }}>No options</div> : filteredOpts.map(o => (
-                              <div key={o} onClick={() => { handleFilterChange(filterKey, o); setOpenDropdown(null); }} style={{ padding: "9px 12px", cursor: "pointer", background: selectedValue === o ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#0f172a" }}><span>{o}</span>{selectedValue === o && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {filterKeys.map(filterKey => (
+                <MultiSelectDropdown
+                  key={filterKey}
+                  label={filterKey}
+                  options={filterOptions[filterKey] || []}
+                  selected={sidebarFilters[filterKey] || []}
+                  onChange={(next) => handleFilterChange(filterKey, next)}
+                />
+              ))}
               <div style={{ padding: "4px 0", minWidth: 0 }}>
                 <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "12px", color: "#334155" }}>Retirement Status</label>
                 <select
