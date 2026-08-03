@@ -37,7 +37,11 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDUDgc9Jzg8RhiJ7jAQGSCI9piAi8gBVSw",
@@ -51,7 +55,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Persist reads to IndexedDB so repeat visits (and page navigation within a
+// session) can show the ~12k-member "users" collection instantly from cache
+// while Firestore quietly syncs any changes in the background, instead of
+// re-fetching the entire collection over the network every time.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 
 // Optional: export app itself if some files need it
 export { app };

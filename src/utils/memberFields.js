@@ -391,6 +391,37 @@ export const parseMemberDate = (dateInput) => {
   return null;
 };
 
+const toDateText = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "object" && typeof value.toDate === "function") {
+    const parsed = value.toDate();
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? "" : value.toISOString().slice(0, 10);
+  }
+  return toText(value);
+};
+
+export const getMemberEntryDate = (record) => {
+  const entryValue = firstPresent(record, ["entry_date", "registration_date", "Entry Date", "Registration Date"]);
+  const entryText = toDateText(entryValue);
+  if (entryText && parseMemberDate(entryText)) return entryText;
+
+  const createdValue = firstPresent(record, [
+    "created_time",
+    "createdAt",
+    "created_at",
+    "Created Time",
+    "CreatedAt",
+    "Created At",
+  ]);
+  const createdText = toDateText(createdValue);
+  if (createdText && parseMemberDate(createdText)) return createdText;
+
+  return entryText || createdText || "";
+};
+
 export const getMemberDateOfBirth = (record) =>
   pickMemberText(record, ["dateofbirth", "date_of_birth", "dob", "DOB", "Dob", "Date of Birth", "Date Of Birth"]);
 
@@ -479,7 +510,7 @@ export const normalizeMemberRecord = (raw = {}) => {
     gender: pickMemberText(raw, ["gender", "Gender"]),
     email: getMemberEmail(raw),
     member_id: pickMemberText(raw, ["member_id", "Member Id"]),
-    registration_date: pickMemberText(raw, ["entry_date", "registration_date", "Entry Date", "Registration Date"]),
+    registration_date: getMemberEntryDate(raw),
     total_experience: experience,
     experience,
     experience_years: (() => {

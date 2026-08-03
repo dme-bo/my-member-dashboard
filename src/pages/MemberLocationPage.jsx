@@ -528,12 +528,25 @@ export default function MemberLocationPage({ memberRecords = [] }) {
       clearMarkers();
 
       const zoom = Math.max(map.getZoom() || 5, 3);
+
+      // Below STATE_CLUSTER_ZOOM the whole country is roughly in view, so bounds
+      // filtering wouldn't drop anything — skip it there. At higher zoom levels
+      // only a small region is on screen; without this, buildClusters/buildMemberMarkers
+      // would iterate and create markers for the entire nationwide dataset even though
+      // almost all of them are off-screen and invisible.
+      const viewBounds = zoom >= STATE_CLUSTER_ZOOM ? map.getBounds() : null;
+      const membersInView = viewBounds
+        ? filteredMembersForMap.filter((member) =>
+            viewBounds.contains(new google.maps.LatLng(member.location_point.lat, member.location_point.lng))
+          )
+        : filteredMembersForMap;
+
       const rawClusters =
         zoom < STATE_CLUSTER_ZOOM
           ? buildStateClusters(filteredMembersForMap)
           : zoom < MEMBER_CLUSTER_ZOOM
-            ? buildClusters(filteredMembersForMap, zoom)
-            : buildMemberMarkers(filteredMembersForMap);
+            ? buildClusters(membersInView, zoom)
+            : buildMemberMarkers(membersInView);
       const clusters = zoom < MEMBER_CLUSTER_ZOOM ? mergeCloseClusters(rawClusters, zoom) : rawClusters;
       const bounds = new google.maps.LatLngBounds();
 

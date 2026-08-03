@@ -13,6 +13,7 @@ import { Chart } from 'react-google-charts';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import DualRangeSlider from '../components/DualRangeSlider';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { parseMemberDate } from '../utils/memberFields';
 
 const PIE_CHART_OPTIONS = {
@@ -73,11 +74,11 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const [members, setMembers] = useState(memberRecords);
   const [loading, setLoading] = useState(membersLoading);
 
-  const [organizationFilter, setOrganizationFilter] = useState('All');
-  const [serviceFilter, setServiceFilter] = useState('All');
-  const [rankFilter, setRankFilter] = useState('All');
-  const [stateFilter, setStateFilter] = useState('All');
-  const [cityFilter, setCityFilter] = useState('All');
+  const [organizationFilter, setOrganizationFilter] = useState([]);
+  const [serviceFilter, setServiceFilter] = useState([]);
+  const [rankFilter, setRankFilter] = useState([]);
+  const [stateFilter, setStateFilter] = useState([]);
+  const [cityFilter, setCityFilter] = useState([]);
   const [retirementFilter, setRetirementFilter] = useState('All');
   const [ageRange, setAgeRange] = useState([0, 100]);
   const [registrationDateFrom, setRegistrationDateFrom] = useState('');
@@ -110,51 +111,48 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
   // Filter options logic (unchanged) ────────────────────────────────────────────────
   const filterOptions = useMemo(() => {
-    const organizations = ['All', ...new Set(members.map((m) => m.organization).filter(Boolean))].sort();
-    const states = ['All', ...new Set(members.map((m) => m.state).filter(Boolean))].sort();
+    const organizations = [...new Set(members.map((m) => m.organization).filter(Boolean))].sort();
+    const states = [...new Set(members.map((m) => m.state).filter(Boolean))].sort();
 
     return { organizations, states };
   }, [members]);
 
   const availableServices = useMemo(() => {
     let filtered = members;
-    if (organizationFilter !== 'All') {
-      filtered = filtered.filter((m) => m.organization === organizationFilter);
+    if (organizationFilter.length) {
+      filtered = filtered.filter((m) => organizationFilter.includes(m.organization));
     }
     const serviceCounts = filtered.reduce((acc, m) => {
       const s = m.service;
       if (s) acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
-    const topServices = Object.keys(serviceCounts)
+    return Object.keys(serviceCounts)
       .sort((a, b) => serviceCounts[b] - serviceCounts[a])
       .slice(0, 30);
-    return ['All', ...topServices];
   }, [members, organizationFilter]);
 
   const availableRanks = useMemo(() => {
     let filtered = members;
-    if (organizationFilter !== 'All') filtered = filtered.filter((m) => m.organization === organizationFilter);
-    if (serviceFilter !== 'All') filtered = filtered.filter((m) => m.service === serviceFilter);
+    if (organizationFilter.length) filtered = filtered.filter((m) => organizationFilter.includes(m.organization));
+    if (serviceFilter.length) filtered = filtered.filter((m) => serviceFilter.includes(m.service));
 
     const rankCounts = filtered.reduce((acc, m) => {
       const r = m.rank;
       if (r) acc[r] = (acc[r] || 0) + 1;
       return acc;
     }, {});
-    const topRanks = Object.keys(rankCounts)
+    return Object.keys(rankCounts)
       .sort((a, b) => rankCounts[b] - rankCounts[a])
       .slice(0, 25);
-    return ['All', ...topRanks];
   }, [members, organizationFilter, serviceFilter]);
 
   const availableCities = useMemo(() => {
     let filtered = members;
-    if (stateFilter !== 'All') {
-      filtered = filtered.filter((m) => m.state === stateFilter);
+    if (stateFilter.length) {
+      filtered = filtered.filter((m) => stateFilter.includes(m.state));
     }
-    const cities = [...new Set(filtered.map((m) => m.city).filter(Boolean))].sort();
-    return ['All', ...cities];
+    return [...new Set(filtered.map((m) => m.city).filter(Boolean))].sort();
   }, [members, stateFilter]);
 
   const ageBounds = useMemo(() => {
@@ -165,9 +163,9 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return { min, max };
   }, [members]);
 
-  useEffect(() => { setServiceFilter('All'); }, [organizationFilter]);
-  useEffect(() => { setRankFilter('All'); }, [serviceFilter, organizationFilter]);
-  useEffect(() => { setCityFilter('All'); }, [stateFilter]);
+  useEffect(() => { setServiceFilter([]); }, [organizationFilter]);
+  useEffect(() => { setRankFilter([]); }, [serviceFilter, organizationFilter]);
+  useEffect(() => { setCityFilter([]); }, [stateFilter]);
   useEffect(() => { setAgeRange([ageBounds.min, ageBounds.max]); }, [ageBounds.min, ageBounds.max]);
 
   const parseDateBoundary = (value, endOfDay = false) => {
@@ -179,11 +177,11 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   // Pass 1: filter by everything EXCEPT date range (used by registration analytics)
   const filteredMembersNoDateRange = useMemo(() => {
     return members.filter((member) => {
-      if (organizationFilter !== 'All' && member.organization !== organizationFilter) return false;
-      if (serviceFilter !== 'All' && member.service !== serviceFilter) return false;
-      if (rankFilter !== 'All' && member.rank !== rankFilter) return false;
-      if (stateFilter !== 'All' && member.state !== stateFilter) return false;
-      if (cityFilter !== 'All' && member.city !== cityFilter) return false;
+      if (organizationFilter.length && !organizationFilter.includes(member.organization)) return false;
+      if (serviceFilter.length && !serviceFilter.includes(member.service)) return false;
+      if (rankFilter.length && !rankFilter.includes(member.rank)) return false;
+      if (stateFilter.length && !stateFilter.includes(member.state)) return false;
+      if (cityFilter.length && !cityFilter.includes(member.city)) return false;
       if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
       const age = member.age_years;
       const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
@@ -203,13 +201,29 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     const fromBoundary = parseDateBoundary(registrationDateFrom, false);
     const toBoundary = parseDateBoundary(registrationDateTo, true);
     if (!fromBoundary && !toBoundary) return filteredMembersNoDateRange;
-    return filteredMembersNoDateRange.filter((member) => {
+
+    const excluded = [];
+    const result = filteredMembersNoDateRange.filter((member) => {
       const registrationDate = member.__registrationDate || parseMemberDate(member.registration_date);
-      if (!registrationDate) return false;
-      if (fromBoundary && registrationDate < fromBoundary) return false;
-      if (toBoundary && registrationDate > toBoundary) return false;
+      if (!registrationDate) {
+        excluded.push({ member_id: member.member_id, full_name: member.full_name, registration_date: member.registration_date, reason: 'missing/unparseable date' });
+        return false;
+      }
+      if (fromBoundary && registrationDate < fromBoundary) {
+        excluded.push({ member_id: member.member_id, full_name: member.full_name, registration_date: member.registration_date, reason: 'before From Date' });
+        return false;
+      }
+      if (toBoundary && registrationDate > toBoundary) {
+        excluded.push({ member_id: member.member_id, full_name: member.full_name, registration_date: member.registration_date, reason: 'after To Date' });
+        return false;
+      }
       return true;
     });
+
+    if (excluded.length) {
+      console.warn(`[Dashboard] Date filter excluded ${excluded.length} member(s) — open this list to see why:`, excluded);
+    }
+    return result;
   }, [filteredMembersNoDateRange, registrationDateFrom, registrationDateTo]);
 
 
@@ -291,11 +305,11 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const hasData = Boolean(analytics);
 
   const clearAllFilters = () => {
-    setOrganizationFilter('All');
-    setServiceFilter('All');
-    setRankFilter('All');
-    setStateFilter('All');
-    setCityFilter('All');
+    setOrganizationFilter([]);
+    setServiceFilter([]);
+    setRankFilter([]);
+    setStateFilter([]);
+    setCityFilter([]);
     setRetirementFilter('All');
     setAgeRange([ageBounds.min, ageBounds.max]);
     setRegistrationDateFrom('');
@@ -814,60 +828,45 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
             </button>
           </div>
           <div className="filter-controls">
-            <div className="filter-group filter-span-2">
-              <label>Category</label>
-              <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)}>
-                {filterOptions.organizations.map((organization) => (
-                  <option key={organization} value={organization}>
-                    {organization}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectDropdown
+              className="filter-span-2"
+              label="Category"
+              options={filterOptions.organizations}
+              selected={organizationFilter}
+              onChange={setOrganizationFilter}
+            />
 
-            <div className="filter-group filter-span-2">
-              <label>Service</label>
-              <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
-                {availableServices.map((srv) => (
-                  <option key={srv} value={srv}>
-                    {srv}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectDropdown
+              className="filter-span-2"
+              label="Service"
+              options={availableServices}
+              selected={serviceFilter}
+              onChange={setServiceFilter}
+            />
 
-            <div className="filter-group filter-span-2">
-              <label>Rank</label>
-              <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)}>
-                {availableRanks.map((rank) => (
-                  <option key={rank} value={rank}>
-                    {rank}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectDropdown
+              className="filter-span-2"
+              label="Rank"
+              options={availableRanks}
+              selected={rankFilter}
+              onChange={setRankFilter}
+            />
 
-            <div className="filter-group filter-span-2">
-              <label>State</label>
-              <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
-                {filterOptions.states.map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectDropdown
+              className="filter-span-2"
+              label="State"
+              options={filterOptions.states}
+              selected={stateFilter}
+              onChange={setStateFilter}
+            />
 
-            <div className="filter-group filter-span-2">
-              <label>City</label>
-              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
-                {availableCities.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectDropdown
+              className="filter-span-2"
+              label="City"
+              options={availableCities}
+              selected={cityFilter}
+              onChange={setCityFilter}
+            />
 
             <div className="filter-group filter-span-2">
               <label>Retirement Status</label>

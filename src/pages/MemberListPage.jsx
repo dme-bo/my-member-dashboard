@@ -83,12 +83,12 @@ const VirtualRow = React.memo(({ index, style, data }) => {
       <div style={{ ...cellStyle, fontWeight: 600, color: "#0f172a" }}>
         {member.__name || "—"}
       </div>
-      <div style={cellStyle}>{getMemberPhone(member) || "—"}</div>
-      <div style={cellStyle}>{getMemberOrganization(member) || "—"}</div>
-      <div style={cellStyle}>{getMemberService(member) || "—"}</div>
-      <div style={cellStyle}>{getMemberRank(member) || "—"}</div>
-      <div style={cellStyle}>{getMemberState(member) || "—"}</div>
-      <div style={cellStyle}>{getMemberCity(member) || "—"}</div>
+      <div style={cellStyle}>{member.phone_number || "—"}</div>
+      <div style={cellStyle}>{member.organization || "—"}</div>
+      <div style={cellStyle}>{member.service || "—"}</div>
+      <div style={cellStyle}>{member.rank || "—"}</div>
+      <div style={cellStyle}>{member.state || "—"}</div>
+      <div style={cellStyle}>{member.city || "—"}</div>
       <div style={{ padding: "0 10px", display: "flex", flexWrap: "nowrap", gap: "4px", alignItems: "center", overflow: "hidden", height: "100%" }}>
         {visibleTags.map((tag) => (
           <span
@@ -290,18 +290,23 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   }, []);
 
   const memberIndex = useMemo(() => {
+    // `member` is already normalized once in App.jsx's Layout (normalizeMemberRecord),
+    // so full_name/phone_number/organization/etc. are already direct properties here.
+    // Re-running the getMemberX() fuzzy key-matching helpers on every one of 15k+ rows
+    // was the dominant cost of this list (each helper rescans every raw key on the record
+    // for every candidate name) — read the precomputed fields directly instead.
     return members.map((member) => {
-      const name = getMemberName(member);
-      const email = getMemberEmail(member);
-      const phone = getMemberPhone(member) || "";
-      const organization = getMemberOrganization(member);
-      const service = getMemberService(member);
-      const rank = getMemberRank(member);
-      const state = getMemberState(member);
-      const city = getMemberCity(member);
-      const education = getMemberEducation(member);
-      const skills = parseMemberSkills(member);
-      const experienceText = getMemberExperience(member);
+      const name = member.full_name || getMemberName(member);
+      const email = member.email || getMemberEmail(member);
+      const phone = member.phone_number || getMemberPhone(member) || "";
+      const organization = member.organization || getMemberOrganization(member);
+      const service = member.service || getMemberService(member);
+      const rank = member.rank || getMemberRank(member);
+      const state = member.state || getMemberState(member);
+      const city = member.city || getMemberCity(member);
+      const education = member.education || getMemberEducation(member);
+      const skills = Array.isArray(member.skills) ? member.skills : parseMemberSkills(member);
+      const experienceText = member.experience || member.total_experience || getMemberExperience(member);
       const experienceValue = parseFloat(experienceText);
       const memberPhoneDigits = normalizeProjectPhone(phone);
       const projectLabels = memberProjectsByPhone[memberPhoneDigits] || [];
