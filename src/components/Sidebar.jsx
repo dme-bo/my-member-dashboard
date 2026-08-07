@@ -19,7 +19,8 @@ import {
   FaBriefcase,        // Recruitment
   FaTasks,            // Projects
   FaLandmark,         // Regimental Centers
-  FaChalkboardTeacher // Training
+  FaChalkboardTeacher, // Training
+  FaTags              // Bulk Tag Upload
 } from "react-icons/fa";
 
 export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
@@ -34,6 +35,7 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
   const isNewsletterActive = location.pathname === "/newsletter";
   const isConfigurationActive = location.pathname === "/configuration";
   const isScoringActive = location.pathname === "/scoring";
+  const isTagUploadActive = location.pathname === "/tag-upload";
 
   // Determine if "Member Applications" parent should look active
   const isApplicationsActive =
@@ -152,6 +154,11 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
           <MdSettings className="menu-icon" />
           <span>Configuration</span>
         </NavLink>
+
+        {/* <NavLink to="/tag-upload" className={`menu-item ${isTagUploadActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+          <FaTags className="menu-icon" />
+          <span>Bulk Tag Upload</span>
+        </NavLink> */}
       </nav>
     </aside>
   );

@@ -35,6 +35,7 @@ const ConfigurationPage   = lazy(() => import("./pages/ConfigurationPage"));
 const NewsLetterPage      = lazy(() => import("./pages/NewsLetterPage"));
 const PartnerAgentList    = lazy(() => import("./pages/PartnerAgentList"));
 const ScoringPage         = lazy(() => import("./pages/ScoringPage"));
+const TagUploadPage       = lazy(() => import("./pages/TagUploadPage"));
 
 const preloadMemberListPage = () => import("./pages/MemberListPage");
 
@@ -262,6 +263,17 @@ function Layout() {
               element={
                 <ErrorBoundary>
                   <ScoringPage
+                    memberRecords={memberRecords}
+                    membersLoading={membersLoading}
+                  />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/tag-upload"
+              element={
+                <ErrorBoundary>
+                  <TagUploadPage
                     memberRecords={memberRecords}
                     membersLoading={membersLoading}
                   />

@@ -68,8 +68,88 @@ function allocationEmailDevApi() {
   }
 }
 
+function whatsappDevApi() {
+  const DEFAULT_API_URL = 'https://wa.viralmarketingtools.in/api/send'
+
+  const toWhatsAppNumber = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '')
+    if (!digits) return ''
+    if (digits.length === 10) return `91${digits}`
+    return digits
+  }
+
+  return {
+    name: 'whatsapp-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'POST' || req.url !== '/api/send-whatsapp') {
+          return next()
+        }
+
+        let rawBody = ''
+        req.on('data', (chunk) => { rawBody += chunk })
+
+        req.on('end', async () => {
+          res.setHeader('Content-Type', 'application/json')
+          try {
+            const { to, message } = rawBody ? JSON.parse(rawBody) : {}
+            if (!to || !message) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'Missing to or message.' }))
+              return
+            }
+
+            const env = loadEnv(server.config.mode, process.cwd(), '')
+            const accessToken = env.WHATSAPP_ACCESS_TOKEN
+            const instanceId = env.WHATSAPP_INSTANCE_ID
+            const apiUrl = env.WHATSAPP_API_URL || DEFAULT_API_URL
+
+            if (!accessToken || !instanceId) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: 'Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_INSTANCE_ID environment variable.' }))
+              return
+            }
+
+            const number = toWhatsAppNumber(to)
+            if (!number) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'Invalid phone number.' }))
+              return
+            }
+
+            const params = new URLSearchParams({
+              number,
+              type: 'text',
+              message,
+              instance_id: instanceId,
+              access_token: accessToken,
+            })
+
+            const response = await fetch(`${apiUrl}?${params.toString()}`, { method: 'GET' })
+            const responseText = await response.text()
+
+            if (!response.ok) {
+              console.error('WhatsApp API error (dev):', response.status, responseText)
+              res.statusCode = 502
+              res.end(JSON.stringify({ error: 'WhatsApp API request failed.' }))
+              return
+            }
+
+            res.statusCode = 200
+            res.end(JSON.stringify({ ok: true, providerResponse: responseText }))
+          } catch (error) {
+            console.error('send-whatsapp (dev) error:', error)
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: 'Failed to send WhatsApp message.' }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), allocationEmailDevApi()],
+  plugins: [react(), allocationEmailDevApi(), whatsappDevApi()],
   optimizeDeps: {
     include: ['react-window'],
   },

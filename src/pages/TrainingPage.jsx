@@ -10,14 +10,13 @@ import {
   FaCheckCircle,
   FaUsers,
   FaLink,
-  FaBell,
-  FaRegBell,
   FaUserFriends,
   FaFolderOpen,
   FaExternalLinkAlt,
   FaEnvelope,
   FaHistory,
   FaSearch,
+  FaWhatsapp,
 } from "react-icons/fa";
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
@@ -88,6 +87,7 @@ export default function TrainingPage() {
   // Members list (used to resolve workshop applicant ids to names/phones/emails)
   const [allMembers, setAllMembers] = useState([]);
   const [selectedTrainees, setSelectedTrainees] = useState([]); // [{id, name, phone}] — sourced from workshop applicants
+  const [priorConfirmedIds, setPriorConfirmedIds] = useState([]); // trainee ids already sent a WhatsApp confirmation for this session
 
   // Workshops (trainings are now created by picking an already-applied-to workshop)
   const [workshops, setWorkshops] = useState([]);
@@ -272,6 +272,7 @@ export default function TrainingPage() {
     setSelectedTrainees(
       (session.attendees || []).map((t) => (typeof t === "string" ? { id: t, name: t, phone: "" } : t))
     );
+    setPriorConfirmedIds(session.whatsappConfirmedIds || []);
     setSelectedWorkshop(workshopFromSession(session));
     setFormError("");
     setShowScheduleModal(true);
@@ -282,6 +283,7 @@ export default function TrainingPage() {
     setEditingSessionId(null);
     setForm(createEmptyForm());
     setSelectedTrainees([]);
+    setPriorConfirmedIds([]);
     setSelectedWorkshop(null);
     setFormError("");
   };
@@ -322,6 +324,7 @@ export default function TrainingPage() {
         teamEmails: "",
       });
       setSelectedTrainees(applicants);
+      setPriorConfirmedIds([]);
       setShowScheduleModal(true);
     } catch (error) {
       console.error("Error loading workshop applicants:", error);
@@ -384,23 +387,61 @@ export default function TrainingPage() {
         workshopStatus: selectedWorkshop.workshop_status || "",
       };
 
+      let sessionId;
+      let baseToastMessage;
       if (editingSessionId) {
         await updateDoc(doc(db, COLLECTION_NAME, editingSessionId), payload);
         setSessions((prev) => prev.map((item) => (item.id === editingSessionId ? { ...item, ...payload } : item)));
-        showToast("Training session updated successfully!");
+        sessionId = editingSessionId;
+        baseToastMessage = "Training session updated successfully!";
       } else {
         const newSession = {
           ...payload,
-          reminderSent: false,
-          lastReminderSent: false,
+          whatsappReminderSent: false,
+          whatsappLastReminderSent: false,
+          whatsappConfirmedIds: [],
           documents: [],
           emailSentAt: null,
           createdAt: serverTimestamp(),
         };
         const docRef = await addDoc(collection(db, COLLECTION_NAME), newSession);
         setSessions((prev) => [...prev, { id: docRef.id, ...newSession }]);
-        showToast("Training session scheduled successfully!");
+        sessionId = docRef.id;
+        baseToastMessage = "Training session scheduled successfully!";
       }
+
+      // Auto-send the WhatsApp registration confirmation to anyone in the attendee
+      // list who hasn't received one yet (everyone, on first save; only the newly
+      // added registrants on later re-saves after refreshing applicants).
+      const priorSet = new Set(priorConfirmedIds);
+      const newlyAdded = selectedTrainees.filter((t) => t?.phone && !priorSet.has(t.id));
+
+      if (newlyAdded.length > 0) {
+        const message = buildWhatsAppConfirmationMessage(payload);
+        const results = await Promise.allSettled(
+          newlyAdded.map((trainee) => sendWhatsAppMessage({ to: trainee.phone, message }))
+        );
+        const succeededIds = newlyAdded.filter((_, i) => results[i].status === "fulfilled").map((t) => t.id);
+        const failedCount = newlyAdded.length - succeededIds.length;
+
+        if (succeededIds.length > 0) {
+          const nextConfirmedIds = Array.from(new Set([...priorConfirmedIds, ...succeededIds]));
+          await updateDoc(doc(db, COLLECTION_NAME, sessionId), { whatsappConfirmedIds: nextConfirmedIds });
+          setSessions((prev) =>
+            prev.map((item) => (item.id === sessionId ? { ...item, whatsappConfirmedIds: nextConfirmedIds } : item))
+          );
+        }
+
+        showToast(
+          failedCount > 0
+            ? `${baseToastMessage} WhatsApp confirmation sent to ${succeededIds.length} trainee(s); ${failedCount} failed.`
+            : `${baseToastMessage} WhatsApp confirmation sent to ${succeededIds.length} trainee(s).`,
+          failedCount > 0 ? "error" : "success"
+        );
+      } else {
+        showToast(baseToastMessage);
+      }
+
       closeScheduleModal();
     } catch (error) {
       console.error("Error saving training session:", error);
@@ -442,49 +483,88 @@ export default function TrainingPage() {
     }
   };
 
-  const buildReminderMessage = (session, trainee) => {
-    const dateLabel = formatDateDisplay(session.date);
-    const timeLabel = session.time && session.time !== "-" ? session.time : "-";
-    return `Dear ${trainee.name},
-
-This is a gentle reminder regarding the upcoming training session scheduled for ${dateLabel}.
-
-We request all registered participants to join the session on time and ensure active participation throughout the training.
-
-Training Topic: ${session.topic}
-Date: ${dateLabel}
-Time: ${timeLabel} Hrs.
-Meeting Link:
-${session.meetingLink || "-"}
-
-Your presence and participation will be highly appreciated.
-
-Thank you,
-Brisk Olive Team
-7060162717`;
+  const formatTimeDisplay = (timeStr) => {
+    const match = String(timeStr || "").match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return timeStr;
+    let hour = parseInt(match[1], 10);
+    const minute = match[2];
+    const suffix = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+    return `${hour}:${minute} ${suffix}`;
   };
 
-  const handleSendReminder = async (session, field) => {
-    const trainees = (session.attendees || []).filter((t) => typeof t === "object" && t?.email);
+  const sendWhatsAppMessage = async ({ to, message }) => {
+    const response = await fetch("/api/send-whatsapp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, message }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to send WhatsApp message.");
+    }
+  };
+
+  const buildWhatsAppConfirmationMessage = (session) => {
+    const dateObj = session.date ? new Date(`${session.date}T00:00:00`) : null;
+    const dateLabel =
+      dateObj && !Number.isNaN(dateObj.getTime())
+        ? dateObj.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })
+        : formatDateDisplay(session.date);
+    const timeLabel = session.time && session.time !== "-" ? formatTimeDisplay(session.time) : "-";
+
+    return `Thank you for registering!
+Your registration for the training session "${session.topic}" has been successfully received.
+
+Session Details:
+📅 Date: ${dateLabel}
+🕓 Time: ${timeLabel} (Asia/Kolkata)
+
+Join the session using Google Meet:
+🔗 ${session.meetingLink || "-"}
+
+We look forward to your participation. See you at the session!`;
+  };
+
+  const buildWhatsAppReminderMessage = (session) => {
+    const dateObj = session.date ? new Date(`${session.date}T00:00:00`) : null;
+    const dateLabel =
+      dateObj && !Number.isNaN(dateObj.getTime())
+        ? dateObj.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })
+        : formatDateDisplay(session.date);
+    const timeLabel = session.time && session.time !== "-" ? formatTimeDisplay(session.time) : "-";
+
+    return `Reminder: your registered training session "${session.topic}" is coming up.
+
+Session Details:
+📅 Date: ${dateLabel}
+🕓 Time: ${timeLabel} (Asia/Kolkata)
+
+Join the session using Google Meet:
+🔗 ${session.meetingLink || "-"}
+
+We look forward to your participation. See you at the session!`;
+  };
+
+  const handleSendWhatsAppReminder = async (session, field) => {
+    const trainees = (session.attendees || []).filter((t) => typeof t === "object" && t?.phone);
 
     if (trainees.length === 0) {
-      showToast("None of the selected trainees have an email on file. Re-open Schedule and re-select trainees to capture their email.", "error");
+      showToast("None of the registered trainees have a phone number on file.", "error");
       return;
     }
 
-    const isLastReminder = field === "lastReminderSent";
+    const isLastReminder = field === "whatsappLastReminderSent";
 
     setTogglingId(`${session.id}-${field}`);
     try {
-      await Promise.all(
-        trainees.map((trainee) =>
-          sendTrainingEmail({
-            recipients: [trainee.email],
-            subject: `Training Reminder — ${session.topic} (${formatDateDisplay(session.date)})`,
-            body: buildReminderMessage(session, trainee),
-          })
-        )
+      const message = buildWhatsAppReminderMessage(session);
+      const results = await Promise.allSettled(
+        trainees.map((trainee) => sendWhatsAppMessage({ to: trainee.phone, message }))
       );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = trainees.length - succeeded;
 
       const sentAtField = `${field}At`;
       const sentAt = new Date().toISOString();
@@ -492,10 +572,16 @@ Brisk Olive Team
       setSessions((prev) =>
         prev.map((item) => (item.id === session.id ? { ...item, [field]: true, [sentAtField]: sentAt } : item))
       );
-      showToast(`${isLastReminder ? "Final reminder" : "Reminder"} emailed to ${trainees.length} trainee(s).`);
+
+      showToast(
+        failed > 0
+          ? `${isLastReminder ? "Final reminder" : "Reminder"} sent to ${succeeded} trainee(s) on WhatsApp; ${failed} failed.`
+          : `${isLastReminder ? "Final WhatsApp reminder" : "WhatsApp reminder"} sent to ${succeeded} trainee(s).`,
+        failed > 0 ? "error" : "success"
+      );
     } catch (error) {
-      console.error("Error sending reminder email:", error);
-      showToast("Failed to send reminder email.", "error");
+      console.error("Error sending WhatsApp reminder:", error);
+      showToast("Failed to send WhatsApp reminder.", "error");
     } finally {
       setTogglingId("");
     }
@@ -1487,23 +1573,23 @@ Brisk Olive Team
                     <td>
                       <button
                         type="button"
-                        className={`training-reminder-btn ${session.reminderSent ? "sent" : "pending"}`}
-                        onClick={() => handleSendReminder(session, "reminderSent")}
-                        disabled={togglingId === `${session.id}-reminderSent`}
-                        title={session.reminderSentAt ? `Last sent ${new Date(session.reminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to email the team a reminder"}
+                        className={`training-reminder-btn ${session.whatsappReminderSent ? "sent" : "pending"}`}
+                        onClick={() => handleSendWhatsAppReminder(session, "whatsappReminderSent")}
+                        disabled={togglingId === `${session.id}-whatsappReminderSent`}
+                        title={session.whatsappReminderSentAt ? `Last sent ${new Date(session.whatsappReminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to WhatsApp all registered trainees a reminder"}
                       >
-                        {session.reminderSent ? <FaBell size={11} /> : <FaRegBell size={11} />}
-                        {togglingId === `${session.id}-reminderSent` ? "Sending..." : "Reminder"}
+                        <FaWhatsapp size={11} />
+                        {togglingId === `${session.id}-whatsappReminderSent` ? "Sending..." : "WhatsApp Reminder"}
                       </button>
                       <button
                         type="button"
-                        className={`training-reminder-btn ${session.lastReminderSent ? "sent" : "pending"}`}
-                        onClick={() => handleSendReminder(session, "lastReminderSent")}
-                        disabled={togglingId === `${session.id}-lastReminderSent`}
-                        title={session.lastReminderSentAt ? `Last sent ${new Date(session.lastReminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to email the team a final reminder"}
+                        className={`training-reminder-btn ${session.whatsappLastReminderSent ? "sent" : "pending"}`}
+                        onClick={() => handleSendWhatsAppReminder(session, "whatsappLastReminderSent")}
+                        disabled={togglingId === `${session.id}-whatsappLastReminderSent`}
+                        title={session.whatsappLastReminderSentAt ? `Last sent ${new Date(session.whatsappLastReminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to WhatsApp all registered trainees a final reminder"}
                       >
-                        {session.lastReminderSent ? <FaBell size={11} /> : <FaRegBell size={11} />}
-                        {togglingId === `${session.id}-lastReminderSent` ? "Sending..." : "Last Reminder"}
+                        <FaWhatsapp size={11} />
+                        {togglingId === `${session.id}-whatsappLastReminderSent` ? "Sending..." : "WhatsApp Last Reminder"}
                       </button>
                     </td>
                     <td>

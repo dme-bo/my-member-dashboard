@@ -185,6 +185,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Placement Status": "All",
     Experience: [],
     Tags: [],
+    "BO Tags": [],
     Rated: [],
   });
 
@@ -342,7 +343,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           .join(" ")
           .toLowerCase(),
         __experienceValue: Number.isFinite(experienceValue) ? experienceValue : NaN,
-        __tagsLower: String(member.tags || member.Tags || "").toLowerCase(),
+        __dataTagsLower: (Array.isArray(member.tags) ? member.tags : []).map((tag) => String(tag).toLowerCase()),
         __registrationDateMs: registrationDate ? registrationDate.getTime() : null,
         __isRated: ratedMemberIds.has(member.id),
       };
@@ -361,6 +362,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     const educationSet = new Set();
     const statusSet = new Set();
     const skillsSet = new Set();
+    const dataTagsSet = new Set();
     const experiences = [];
 
     for (const member of memberIndex) {
@@ -378,6 +380,12 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       if (member.education)    educationSet.add(String(member.education).trim());
       if (member.status)       statusSet.add(String(member.status).trim());
       for (const s of member.__skills) skillsSet.add(s);
+      if (Array.isArray(member.tags)) {
+        for (const t of member.tags) {
+          const trimmed = String(t).trim();
+          if (trimmed) dataTagsSet.add(trimmed);
+        }
+      }
       if (!isNaN(member.__experienceValue) && member.__experienceValue >= 0) {
         experiences.push(member.__experienceValue);
       }
@@ -416,6 +424,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       Project:          availableProjects.filter((p) => p !== "All"),
       Status:           toSorted(statusSet),
       Tags:             Array.from(skillsSet).sort((a, b) => a.localeCompare(b)),
+      "BO Tags":      Array.from(dataTagsSet).sort((a, b) => a.localeCompare(b)),
       "Placement Status": ["Placed", "Active"],
       Experience:       buckets,
       Rated:            ["Rated", "Not Rated"],
@@ -486,6 +495,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         "Placement Status": "All",
         Experience: [],
         Tags: [],
+        "BO Tags": [],
         Rated: [],
       });
       setRetirementStatus("All");
@@ -564,6 +574,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       for (const [key, values] of lowercasedSidebarFilters) {
         if (key === "Tags") {
           if (!values.some((v) => member.__skillsLower.includes(v))) {
+            matchesSidebar = false;
+            break;
+          }
+          continue;
+        }
+
+        if (key === "BO Tags") {
+          if (!values.some((v) => member.__dataTagsLower.includes(v))) {
             matchesSidebar = false;
             break;
           }
@@ -791,6 +809,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Education",
     "Project",
     "Tags",
+    "BO Tags",
     "Experience",
     "Rated",
   ];
