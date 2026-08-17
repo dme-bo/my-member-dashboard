@@ -85,7 +85,6 @@ const getRatingTypeLabel = (ratingType) => {
 export default function MemberDetailModal({ member, onClose }) {
   const [activeTab, setActiveTab] = useState("personal");
   const [newNotesList, setNewNotesList] = useState([]);
-  const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingDraft, setRatingDraft] = useState(null);
   const [savedNotes, setSavedNotes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -109,6 +108,7 @@ export default function MemberDetailModal({ member, onClose }) {
     { id: "job", label: "Job Preferences" },
     { id: "documents", label: "Documents" },
     { id: "interaction", label: "Interaction & Notes" },
+    { id: "rating", label: "Rating" },
   ];
 
   // Base rating starts at 3 stars for every member. A BO employee rating adds
@@ -120,6 +120,9 @@ export default function MemberDetailModal({ member, onClose }) {
     (note) => note.ratingType === RATING_TYPES.referrer && Number(note.referrerRating) > 0
   );
   const rating = 3 + (hasBoRating ? 1 : 0) + (hasReferrerRating ? 1 : 0);
+
+  const noteEntries = savedNotes.filter((note) => note.entryType !== "rating");
+  const ratingEntries = savedNotes.filter((note) => note.entryType === "rating");
 
   const renderStars = () => {
     return (
@@ -184,17 +187,20 @@ export default function MemberDetailModal({ member, onClose }) {
     notes: "",
     nextAction: "",
     followUpDate: "",
+    loggedBy: "",
   });
 
   const createNewRating = () => ({
     id: Date.now() + Math.random(),
     contactPerson: fullName,
     ratingType: RATING_TYPES.workRelated,
+    ratedBy: "",
     workRating: 0,
     boRating: 0,
     boRemarks: "",
     referrerRating: 0,
     referrerRemarks: "",
+    referrerName: "",
   });
 
   const getNoteRatingSummary = (note) => {
@@ -363,12 +369,16 @@ export default function MemberDetailModal({ member, onClose }) {
             notes: data.notes || "-",
             nextAction: data.nextAction || "-",
             followUpDate: followUpDateStr,
+            loggedBy: data.loggedBy || "-",
+            entryType: data.entryType || "note",
             ratingType: data.ratingType || RATING_TYPES.notRated,
+            ratedBy: data.ratedBy || "-",
             workRating: Number(data.workRating) || 0,
             boRating: Number(data.boRating) || 0,
             boRemarks: data.boRemarks || "-",
             referrerRating: Number(data.referrerRating) || 0,
             referrerRemarks: data.referrerRemarks || "-",
+            referrerName: data.referrerName || "-",
           };
         });
 
@@ -449,18 +459,15 @@ export default function MemberDetailModal({ member, onClose }) {
     checkEmploymentStatus();
   }, [activeTab, phoneNumber]);
 
+  // Seed the rating form as soon as the Rating tab is opened
+  useEffect(() => {
+    if (activeTab === "rating" && !ratingDraft) {
+      setRatingDraft(createNewRating());
+    }
+  }, [activeTab]);
+
   const addNewNote = () => {
     setNewNotesList([...newNotesList, createNewNote()]);
-  };
-
-  const openRatingModal = () => {
-    setRatingDraft(createNewRating());
-    setShowRatingModal(true);
-  };
-
-  const closeRatingModal = () => {
-    setShowRatingModal(false);
-    setRatingDraft(null);
   };
 
   const updateRatingDraft = (field, value) => {
@@ -502,13 +509,16 @@ export default function MemberDetailModal({ member, onClose }) {
         notes: data.notes || "-",
         nextAction: data.nextAction || "-",
         followUpDate: followUpDateStr,
+        loggedBy: data.loggedBy || "-",
         entryType: data.entryType || "note",
         ratingType: data.ratingType || RATING_TYPES.notRated,
+        ratedBy: data.ratedBy || "-",
         workRating: Number(data.workRating) || 0,
         boRating: Number(data.boRating) || 0,
         boRemarks: data.boRemarks || "-",
         referrerRating: Number(data.referrerRating) || 0,
         referrerRemarks: data.referrerRemarks || "-",
+        referrerName: data.referrerName || "-",
       };
     });
     setSavedNotes(updated);
@@ -535,6 +545,7 @@ export default function MemberDetailModal({ member, onClose }) {
           followUpDate: note.followUpDate
             ? Timestamp.fromDate(new Date(note.followUpDate + "T00:00:00"))
             : null,
+          loggedBy: String(note.loggedBy || "").trim() || "-",
           createdAt: serverTimestamp(),
           createdBy: "admin",
         })
@@ -579,17 +590,19 @@ export default function MemberDetailModal({ member, onClose }) {
         nextAction: "-",
         followUpDate: null,
         ratingType,
+        ratedBy: String(ratingDraft.ratedBy || "").trim() || "-",
         workRating: Number(ratingDraft.workRating) || 0,
         boRating: Number(ratingDraft.boRating) || 0,
         boRemarks: String(ratingDraft.boRemarks || "").trim() || "-",
         referrerRating: Number(ratingDraft.referrerRating) || 0,
         referrerRemarks: String(ratingDraft.referrerRemarks || "").trim() || "-",
+        referrerName: String(ratingDraft.referrerName || "").trim() || "-",
         createdAt: serverTimestamp(),
         createdBy: "admin",
       });
 
       showToast("Rating saved successfully!", "success");
-      closeRatingModal();
+      setRatingDraft(createNewRating());
       await refreshInteractionHistory(interactionsRef);
     } catch (error) {
       console.error("Error saving rating:", error);
@@ -847,24 +860,6 @@ export default function MemberDetailModal({ member, onClose }) {
                       >
                         <span style={{ fontSize: "18px" }}>+</span> ADD NOTE
                       </button>
-                      <button
-                        onClick={openRatingModal}
-                        disabled={loading}
-                        style={{
-                          padding: "10px 20px",
-                          backgroundColor: "#0f766e",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          fontWeight: "500",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <span style={{ fontSize: "18px" }}>?</span> ADD RATING
-                      </button>
                     </div>
                   </div>
 
@@ -900,6 +895,21 @@ export default function MemberDetailModal({ member, onClose }) {
                                   backgroundColor: "#eff6ff",
                                   fontWeight: "500",
                                   color: "#1976d2",
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Logged By</label>
+                              <input
+                                type="text"
+                                value={note.loggedBy}
+                                onChange={(e) => updateNewNote(note.id, "loggedBy", e.target.value)}
+                                placeholder="Who is logging this interaction?"
+                                style={{
+                                  width: "100%",
+                                  padding: "10px",
+                                  borderRadius: "6px",
+                                  border: "1px solid #d1d5db",
                                 }}
                               />
                             </div>
@@ -1148,321 +1158,100 @@ export default function MemberDetailModal({ member, onClose }) {
                   )}
                 </div>
 
-                {showRatingModal && ratingDraft && (
-                  <div
-                    style={{
-                      position: "fixed",
-                      inset: 0,
-                      backgroundColor: "rgba(15, 23, 42, 0.72)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 10050,
-                      padding: "20px",
-                    }}
-                    onClick={closeRatingModal}
-                  >
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        width: "min(920px, 100%)",
-                        maxHeight: "90vh",
-                        overflowY: "auto",
-                        backgroundColor: "#ffffff",
-                        borderRadius: "18px",
-                        boxShadow: "0 30px 80px rgba(0, 0, 0, 0.28)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: "18px 22px",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
-                          color: "white",
-                          borderTopLeftRadius: "18px",
-                          borderTopRightRadius: "18px",
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.9 }}>
-                            Add Rating
-                          </div>
-                          <h3 style={{ margin: "4px 0 0", fontSize: "22px" }}>{ratingDraft.contactPerson}</h3>
-                        </div>
-                        <button
-                          onClick={closeRatingModal}
-                          style={{
-                            background: "rgba(255,255,255,0.18)",
-                            border: "1px solid rgba(255,255,255,0.25)",
-                            color: "white",
-                            width: "38px",
-                            height: "38px",
-                            borderRadius: "999px",
-                            fontSize: "24px",
-                            cursor: "pointer",
-                          }}
-                          title="Close"
-                        >
-                          ×
-                        </button>
-                      </div>
-
-                      <div style={{ padding: "22px" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "16px" }}>
-                          <div>
-                            <label style={{ fontSize: "13px", color: "#6b7280" }}>Member Name</label>
-                            <input
-                              type="text"
-                              value={ratingDraft.contactPerson}
-                              readOnly
-                              style={{
-                                width: "100%",
-                                padding: "11px 12px",
-                                borderRadius: "8px",
-                                border: "1px solid #bfdbfe",
-                                backgroundColor: "#eff6ff",
-                                color: "#1d4ed8",
-                                fontWeight: "600",
-                              }}
-                            />
-                          </div>
-
-                          <div>
-                            <label style={{ fontSize: "13px", color: "#6b7280" }}>Rating Type</label>
-                            <select
-                              value={ratingDraft.ratingType}
-                              onChange={(e) => updateRatingDraft("ratingType", e.target.value)}
-                              style={{
-                                width: "100%",
-                                padding: "11px 12px",
-                                borderRadius: "8px",
-                                border: "1px solid #cbd5e1",
-                                backgroundColor: "#ffffff",
-                                color: "black",
-                              }}
-                            >
-                              <option value={RATING_TYPES.workRelated}>Work Related</option>
-                              <option value={RATING_TYPES.boEmployee}>BO Employee</option>
-                              <option value={RATING_TYPES.referrer}>Referrer</option>
-                              {/* <option value={RATING_TYPES.notRated}>Not Rated Yet</option> */}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: "18px", padding: "18px", borderRadius: "14px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                          {ratingDraft.ratingType === RATING_TYPES.workRelated && (
-                            <div>
-                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
-                                Work Related Rating
-                              </div>
-                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <button
-                                    key={star}
-                                    type="button"
-                                    onClick={() => updateRatingDraft("workRating", star)}
-                                    style={{
-                                      border: "1px solid #e2e8f0",
-                                      background: star <= Number(ratingDraft.workRating) ? "#fff7ed" : "#f8fafc",
-                                      borderRadius: "10px",
-                                      padding: "10px 14px",
-                                      cursor: "pointer",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "8px",
-                                      boxShadow: star <= Number(ratingDraft.workRating) ? "0 8px 18px rgba(245,158,11,0.12)" : "none",
-                                    }}
-                                  >
-                                     <span style={{ color: star <= Number(ratingDraft.workRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
-                                    <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
-                                  </button>
-                                ))}
-                              </div>
-                              <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
-                                Selected: {ratingDraft.workRating ? `${ratingDraft.workRating}/5` : "Not selected"}
-                              </div>
-                            </div>
-                          )}
-
-                          {ratingDraft.ratingType === RATING_TYPES.boEmployee && (
-                            <div>
-                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
-                                BO Employee Rating
-                              </div>
-                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <button
-                                    key={star}
-                                    type="button"
-                                    onClick={() => updateRatingDraft("boRating", star)}
-                                    style={{
-                                      border: "1px solid #e2e8f0",
-                                      background: star <= Number(ratingDraft.boRating) ? "#fff7ed" : "#f8fafc",
-                                      borderRadius: "10px",
-                                      padding: "10px 14px",
-                                      cursor: "pointer",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "8px",
-                                      boxShadow: star <= Number(ratingDraft.boRating) ? "0 8px 18px rgba(245,158,11,0.12)" : "none",
-                                    }}
-                                  >
-                                     <span style={{ color: star <= Number(ratingDraft.boRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
-                                    <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
-                                  </button>
-                                ))}
-                              </div>
-                              <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
-                                Selected: {ratingDraft.boRating ? `${ratingDraft.boRating}/5` : "Not selected"}
-                              </div>
-                              <div style={{ marginTop: "14px" }}>
-                                <label style={{ fontSize: "13px", color: "#6b7280" }}>BO Remarks</label>
-                                <textarea
-                                  value={ratingDraft.boRemarks}
-                                  onChange={(e) => updateRatingDraft("boRemarks", e.target.value)}
-                                  placeholder="Add remarks for BO employee rating..."
-                                  rows="3"
-                                  style={{
-                                    width: "100%",
-                                    padding: "12px",
-                                    borderRadius: "8px",
-                                    border: "1px solid #cbd5e1",
-                                    resize: "vertical",
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {ratingDraft.ratingType === RATING_TYPES.referrer && (
-                            <div>
-                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
-                                Referrer Rating
-                              </div>
-                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <button
-                                    key={star}
-                                    type="button"
-                                    onClick={() => updateRatingDraft("referrerRating", star)}
-                                    style={{
-                                      border: "1px solid #e2e8f0",
-                                      background: star <= Number(ratingDraft.referrerRating) ? "#fff7ed" : "#f8fafc",
-                                      borderRadius: "10px",
-                                      padding: "10px 14px",
-                                      cursor: "pointer",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "8px",
-                                    }}
-                                  >
-                                     <span style={{ color: star <= Number(ratingDraft.referrerRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
-                                    <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
-                                  </button>
-                                ))}
-                              </div>
-                              <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
-                                Selected: {ratingDraft.referrerRating ? `${ratingDraft.referrerRating}/5` : "Not selected"}
-                              </div>
-                              <div style={{ marginTop: "14px" }}>
-                                <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Remarks</label>
-                                <textarea
-                                  value={ratingDraft.referrerRemarks}
-                                  onChange={(e) => updateRatingDraft("referrerRemarks", e.target.value)}
-                                  placeholder="Add remarks for the referrer..."
-                                  rows="3"
-                                  style={{
-                                    width: "100%",
-                                    padding: "12px",
-                                    borderRadius: "8px",
-                                    border: "1px solid #cbd5e1",
-                                    resize: "vertical",
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {ratingDraft.ratingType === RATING_TYPES.notRated && (
-                            <div>
-                              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
-                                Not Rated Yet
-                              </div>
-                              <p style={{ color: "#475569", margin: 0 }}>
-                                Use this when you want to log that the member is not rated yet. Add a remark below if needed.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
-                          <button
-                            onClick={closeRatingModal}
-                            style={{
-                              padding: "11px 18px",
-                              borderRadius: "8px",
-                              border: "1px solid #cbd5e1",
-                              backgroundColor: "#ffffff",
-                              color: "#374151",
-                              cursor: "pointer",
-                              fontWeight: "600",
-                            }}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={handleSaveRating}
-                            disabled={loading}
-                            style={{
-                              padding: "11px 18px",
-                              borderRadius: "8px",
-                              border: "none",
-                              backgroundColor: "#0f766e",
-                              color: "white",
-                              cursor: loading ? "not-allowed" : "pointer",
-                              fontWeight: "700",
-                              opacity: loading ? 0.75 : 1,
-                            }}
-                          >
-                            {loading ? "Saving..." : "SAVE RATING"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* History Table */}
                 <div>
                   <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
-                    Interaction History ({savedNotes.length})
+                    Interaction History ({noteEntries.length})
                   </h3>
 
                   {loading && <SkeletonLoader rows={5} />}
 
-                  {!loading && savedNotes.length === 0 && (
+                  {!loading && noteEntries.length === 0 && (
                     <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
                       No past interactions recorded yet.
                     </p>
                   )}
 
-                  {!loading && savedNotes.length > 0 && (
+                  {!loading && noteEntries.length > 0 && (
                     <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                         <thead>
                           <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rating</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Next Action</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Follow-up Date</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Logged By</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {savedNotes.map((note, index) => (
+                          {noteEntries.map((note, index) => (
+                            <tr
+                              key={note.id}
+                              style={{
+                                backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                              }}
+                            >
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.date}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.contactPerson}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
+                                {note.notes}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.nextAction}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.followUpDate}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.loggedBy}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* RATING TAB */}
+            {activeTab === "rating" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
+                {/* Rating History */}
+                <div>
+                  <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
+                    Rating History ({ratingEntries.length})
+                  </h3>
+
+                  {loading && <SkeletonLoader rows={5} />}
+
+                  {!loading && ratingEntries.length === 0 && (
+                    <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
+                      No ratings recorded yet.
+                    </p>
+                  )}
+
+                  {!loading && ratingEntries.length > 0 && (
+                    <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                        <thead>
+                          <tr style={{ backgroundColor: "#0f766e", color: "white" }}>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rating</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Referrer Name</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rated By</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ratingEntries.map((note, index) => (
                             <tr
                               key={note.id}
                               style={{
@@ -1496,19 +1285,259 @@ export default function MemberDetailModal({ member, onClose }) {
                                   )}
                                 </div>
                               </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
-                                {note.notes}
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.ratingType === RATING_TYPES.referrer ? note.referrerName : "-"}
                               </td>
                               <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.nextAction}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.followUpDate}
+                                {note.ratedBy}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Add New Rating */}
+                <div>
+                  <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
+                    Add New Rating
+                  </h3>
+
+                  {ratingDraft && (
+                    <div
+                      style={{
+                        border: "1px solid #d1d5db",
+                        borderRadius: "12px",
+                        padding: "20px",
+                        backgroundColor: "#f9fafb",
+                      }}
+                    >
+                      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: "16px" }}>
+                        <div>
+                          <label style={{ fontSize: "13px", color: "#6b7280" }}>Member Name</label>
+                          <input
+                            type="text"
+                            value={ratingDraft.contactPerson}
+                            readOnly
+                            style={{
+                              width: "100%",
+                              padding: "11px 12px",
+                              borderRadius: "8px",
+                              border: "1px solid #bfdbfe",
+                              backgroundColor: "#eff6ff",
+                              color: "#1d4ed8",
+                              fontWeight: "600",
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: "13px", color: "#6b7280" }}>Rating Type</label>
+                          <select
+                            value={ratingDraft.ratingType}
+                            onChange={(e) => updateRatingDraft("ratingType", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "11px 12px",
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                              backgroundColor: "#ffffff",
+                              color: "black",
+                            }}
+                          >
+                            <option value={RATING_TYPES.workRelated}>Work Related</option>
+                            <option value={RATING_TYPES.boEmployee}>BO Employee</option>
+                            <option value={RATING_TYPES.referrer}>Referrer</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: "13px", color: "#6b7280" }}>Rated By</label>
+                          <input
+                            type="text"
+                            value={ratingDraft.ratedBy}
+                            onChange={(e) => updateRatingDraft("ratedBy", e.target.value)}
+                            placeholder="Who is giving this rating?"
+                            style={{
+                              width: "100%",
+                              padding: "11px 12px",
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: "18px", padding: "18px", borderRadius: "14px", backgroundColor: "#ffffff", border: "1px solid #e2e8f0" }}>
+                        {ratingDraft.ratingType === RATING_TYPES.workRelated && (
+                          <div>
+                            <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                              Work Related Rating
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => updateRatingDraft("workRating", star)}
+                                  style={{
+                                    border: "1px solid #e2e8f0",
+                                    background: star <= Number(ratingDraft.workRating) ? "#fff7ed" : "#f8fafc",
+                                    borderRadius: "10px",
+                                    padding: "10px 14px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    boxShadow: star <= Number(ratingDraft.workRating) ? "0 8px 18px rgba(245,158,11,0.12)" : "none",
+                                  }}
+                                >
+                                   <span style={{ color: star <= Number(ratingDraft.workRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
+                                  <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
+                              Selected: {ratingDraft.workRating ? `${ratingDraft.workRating}/5` : "Not selected"}
+                            </div>
+                          </div>
+                        )}
+
+                        {ratingDraft.ratingType === RATING_TYPES.boEmployee && (
+                          <div>
+                            <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                              BO Employee Rating
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => updateRatingDraft("boRating", star)}
+                                  style={{
+                                    border: "1px solid #e2e8f0",
+                                    background: star <= Number(ratingDraft.boRating) ? "#fff7ed" : "#f8fafc",
+                                    borderRadius: "10px",
+                                    padding: "10px 14px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    boxShadow: star <= Number(ratingDraft.boRating) ? "0 8px 18px rgba(245,158,11,0.12)" : "none",
+                                  }}
+                                >
+                                   <span style={{ color: star <= Number(ratingDraft.boRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
+                                  <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
+                              Selected: {ratingDraft.boRating ? `${ratingDraft.boRating}/5` : "Not selected"}
+                            </div>
+                            <div style={{ marginTop: "14px" }}>
+                              <label style={{ fontSize: "13px", color: "#6b7280" }}>BO Remarks</label>
+                              <textarea
+                                value={ratingDraft.boRemarks}
+                                onChange={(e) => updateRatingDraft("boRemarks", e.target.value)}
+                                placeholder="Add remarks for BO employee rating..."
+                                rows="3"
+                                style={{
+                                  width: "100%",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: "1px solid #cbd5e1",
+                                  resize: "vertical",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {ratingDraft.ratingType === RATING_TYPES.referrer && (
+                          <div>
+                            <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "#0f172a" }}>
+                              Referrer Rating
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => updateRatingDraft("referrerRating", star)}
+                                  style={{
+                                    border: "1px solid #e2e8f0",
+                                    background: star <= Number(ratingDraft.referrerRating) ? "#fff7ed" : "#f8fafc",
+                                    borderRadius: "10px",
+                                    padding: "10px 14px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                  }}
+                                >
+                                   <span style={{ color: star <= Number(ratingDraft.referrerRating) ? "#f59e0b" : "#cbd5e1", fontSize: "22px" }}>{"★"}</span>
+                                  <span style={{ fontWeight: "700", color: "#0f172a" }}>{star}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <div style={{ marginTop: "10px", fontSize: "13px", color: "#475569" }}>
+                              Selected: {ratingDraft.referrerRating ? `${ratingDraft.referrerRating}/5` : "Not selected"}
+                            </div>
+                            <div style={{ marginTop: "14px" }}>
+                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Remarks</label>
+                              <textarea
+                                value={ratingDraft.referrerRemarks}
+                                onChange={(e) => updateRatingDraft("referrerRemarks", e.target.value)}
+                                placeholder="Add remarks for the referrer..."
+                                rows="3"
+                                style={{
+                                  width: "100%",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: "1px solid #cbd5e1",
+                                  resize: "vertical",
+                                }}
+                              />
+                            </div>
+                            <div style={{ marginTop: "14px" }}>
+                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Name</label>
+                              <input
+                                type="text"
+                                value={ratingDraft.referrerName}
+                                onChange={(e) => updateRatingDraft("referrerName", e.target.value)}
+                                placeholder="Name of the referrer..."
+                                style={{
+                                  width: "100%",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: "1px solid #cbd5e1",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+                        <button
+                          onClick={handleSaveRating}
+                          disabled={loading}
+                          style={{
+                            padding: "11px 18px",
+                            borderRadius: "8px",
+                            border: "none",
+                            backgroundColor: "#0f766e",
+                            color: "white",
+                            cursor: loading ? "not-allowed" : "pointer",
+                            fontWeight: "700",
+                            opacity: loading ? 0.75 : 1,
+                          }}
+                        >
+                          {loading ? "Saving..." : "SAVE RATING"}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

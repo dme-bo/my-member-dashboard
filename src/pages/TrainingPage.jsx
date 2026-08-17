@@ -83,6 +83,15 @@ export default function TrainingPage() {
   const [formError, setFormError] = useState("");
   const [deletingId, setDeletingId] = useState("");
   const [togglingId, setTogglingId] = useState("");
+  const [reminderModal, setReminderModal] = useState(null); // { session, field }
+  const [sendingTraineeKey, setSendingTraineeKey] = useState("");
+  const [individualSentIds, setIndividualSentIds] = useState([]);
+  const [messageDrafts, setMessageDrafts] = useState({ first: "", final: "" });
+  const [savingMessage, setSavingMessage] = useState(""); // "first" | "final" | ""
+  const [memberSearch, setMemberSearch] = useState("");
+  const [addTraineesModal, setAddTraineesModal] = useState(null); // { session, trainees }
+  const [addTraineesSearch, setAddTraineesSearch] = useState("");
+  const [savingTrainees, setSavingTrainees] = useState(false);
 
   // Members list (used to resolve workshop applicant ids to names/phones/emails)
   const [allMembers, setAllMembers] = useState([]);
@@ -275,7 +284,9 @@ export default function TrainingPage() {
     setPriorConfirmedIds(session.whatsappConfirmedIds || []);
     setSelectedWorkshop(workshopFromSession(session));
     setFormError("");
+    setMemberSearch("");
     setShowScheduleModal(true);
+    void ensureMembersLoaded();
   };
 
   const closeScheduleModal = () => {
@@ -286,6 +297,95 @@ export default function TrainingPage() {
     setPriorConfirmedIds([]);
     setSelectedWorkshop(null);
     setFormError("");
+    setMemberSearch("");
+  };
+
+  const memberSearchResults = useMemo(() => {
+    const term = memberSearch.trim().toLowerCase();
+    if (!term) return [];
+    const selectedIds = new Set(selectedTrainees.map((t) => t.id));
+    return allMembers
+      .filter((m) => !selectedIds.has(m.id))
+      .filter((m) => {
+        const name = getMemberName(m).toLowerCase();
+        const phone = getMemberPhone(m).toLowerCase();
+        return name.includes(term) || phone.includes(term);
+      })
+      .slice(0, 8);
+  }, [memberSearch, allMembers, selectedTrainees]);
+
+  const handleAddMemberToTraining = (member) => {
+    setSelectedTrainees((prev) => [
+      ...prev,
+      { id: member.id, name: getMemberName(member), phone: getMemberPhone(member), email: getMemberEmail(member) },
+    ]);
+    setMemberSearch("");
+  };
+
+  const openAddTraineesModal = (session) => {
+    setAddTraineesModal({
+      session,
+      trainees: (session.attendees || []).map((t) => (typeof t === "string" ? { id: t, name: t, phone: "" } : t)),
+    });
+    setAddTraineesSearch("");
+    void ensureMembersLoaded();
+  };
+
+  const closeAddTraineesModal = () => {
+    setAddTraineesModal(null);
+    setAddTraineesSearch("");
+  };
+
+  const addTraineesSearchResults = useMemo(() => {
+    if (!addTraineesModal) return [];
+    const term = addTraineesSearch.trim().toLowerCase();
+    if (!term) return [];
+    const selectedIds = new Set(addTraineesModal.trainees.map((t) => t.id));
+    return allMembers
+      .filter((m) => !selectedIds.has(m.id))
+      .filter((m) => {
+        const name = getMemberName(m).toLowerCase();
+        const phone = getMemberPhone(m).toLowerCase();
+        return name.includes(term) || phone.includes(term);
+      })
+      .slice(0, 8);
+  }, [addTraineesModal, addTraineesSearch, allMembers]);
+
+  const handleAddTraineeToModal = (member) => {
+    setAddTraineesModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            trainees: [
+              ...prev.trainees,
+              { id: member.id, name: getMemberName(member), phone: getMemberPhone(member), email: getMemberEmail(member) },
+            ],
+          }
+        : prev
+    );
+    setAddTraineesSearch("");
+  };
+
+  const handleRemoveTraineeFromModal = (traineeId) => {
+    setAddTraineesModal((prev) => (prev ? { ...prev, trainees: prev.trainees.filter((t) => t.id !== traineeId) } : prev));
+  };
+
+  const handleSaveAddedTrainees = async () => {
+    if (!addTraineesModal) return;
+    const { session, trainees } = addTraineesModal;
+
+    setSavingTrainees(true);
+    try {
+      await updateDoc(doc(db, COLLECTION_NAME, session.id), { attendees: trainees });
+      setSessions((prev) => prev.map((item) => (item.id === session.id ? { ...item, attendees: trainees } : item)));
+      showToast("Trainees saved.");
+      closeAddTraineesModal();
+    } catch (error) {
+      console.error("Error saving trainees:", error);
+      showToast("Failed to save trainees.", "error");
+    } finally {
+      setSavingTrainees(false);
+    }
   };
 
   const openWorkshopPicker = () => {
@@ -547,7 +647,27 @@ Join the session using Google Meet:
 We look forward to your participation. See you at the session!`;
   };
 
-  const handleSendWhatsAppReminder = async (session, field) => {
+  const buildWhatsAppFinalReminderMessage = (session) => {
+    const dateObj = session.date ? new Date(`${session.date}T00:00:00`) : null;
+    const dateLabel =
+      dateObj && !Number.isNaN(dateObj.getTime())
+        ? dateObj.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })
+        : formatDateDisplay(session.date);
+    const timeLabel = session.time && session.time !== "-" ? formatTimeDisplay(session.time) : "-";
+
+    return `Final Reminder: your registered training session "${session.topic}" is starting very soon.
+
+Session Details:
+📅 Date: ${dateLabel}
+🕓 Time: ${timeLabel} (Asia/Kolkata)
+
+Join the session using Google Meet:
+🔗 ${session.meetingLink || "-"}
+
+Please don't miss it — we look forward to your participation!`;
+  };
+
+  const handleSendWhatsAppReminder = async (session, field, message) => {
     const trainees = (session.attendees || []).filter((t) => typeof t === "object" && t?.phone);
 
     if (trainees.length === 0) {
@@ -559,7 +679,6 @@ We look forward to your participation. See you at the session!`;
 
     setTogglingId(`${session.id}-${field}`);
     try {
-      const message = buildWhatsAppReminderMessage(session);
       const results = await Promise.allSettled(
         trainees.map((trainee) => sendWhatsAppMessage({ to: trainee.phone, message }))
       );
@@ -584,6 +703,63 @@ We look forward to your participation. See you at the session!`;
       showToast("Failed to send WhatsApp reminder.", "error");
     } finally {
       setTogglingId("");
+    }
+  };
+
+  const openReminderModal = (session, field) => {
+    setReminderModal({ session, field });
+    setIndividualSentIds([]);
+    setMessageDrafts({
+      first: (session.customReminderMessage || "").trim() || buildWhatsAppReminderMessage(session),
+      final: (session.customFinalReminderMessage || "").trim() || buildWhatsAppFinalReminderMessage(session),
+    });
+  };
+
+  const closeReminderModal = () => {
+    setReminderModal(null);
+    setIndividualSentIds([]);
+    setMessageDrafts({ first: "", final: "" });
+  };
+
+  const handleSaveMessageDraft = async (type) => {
+    if (!reminderModal) return;
+    const session = reminderModal.session;
+    const field = type === "final" ? "customFinalReminderMessage" : "customReminderMessage";
+    const value = messageDrafts[type];
+
+    setSavingMessage(type);
+    try {
+      await updateDoc(doc(db, COLLECTION_NAME, session.id), { [field]: value });
+      setSessions((prev) => prev.map((item) => (item.id === session.id ? { ...item, [field]: value } : item)));
+      setReminderModal((prev) => (prev ? { ...prev, session: { ...prev.session, [field]: value } } : prev));
+      showToast(`${type === "final" ? "Final" : "First"} reminder message saved.`);
+    } catch (error) {
+      console.error("Error saving reminder message:", error);
+      showToast("Failed to save message.", "error");
+    } finally {
+      setSavingMessage("");
+    }
+  };
+
+  const handleSendSingleReminder = async (session, field, trainee, message) => {
+    if (!trainee?.phone) {
+      showToast(`${getTraineeName(trainee)} does not have a phone number on file.`, "error");
+      return;
+    }
+
+    const isLastReminder = field === "whatsappLastReminderSent";
+    const key = `${session.id}-${field}-${trainee.id}`;
+
+    setSendingTraineeKey(key);
+    try {
+      await sendWhatsAppMessage({ to: trainee.phone, message });
+      setIndividualSentIds((prev) => [...prev, trainee.id]);
+      showToast(`${isLastReminder ? "Final reminder" : "Reminder"} sent to ${getTraineeName(trainee)}.`, "success");
+    } catch (error) {
+      console.error("Error sending individual WhatsApp reminder:", error);
+      showToast(`Failed to send reminder to ${getTraineeName(trainee)}.`, "error");
+    } finally {
+      setSendingTraineeKey("");
     }
   };
 
@@ -1013,6 +1189,24 @@ We look forward to your participation. See you at the session!`;
           background: #fef3c7;
           color: #b45309;
         }
+        .training-reminder-btn-sm {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 5px 10px;
+          border-radius: 999px;
+          border: none;
+          background: #e0f2fe;
+          color: #0369a1;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .training-reminder-btn-sm:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
         .training-delete-btn {
           border: none;
           background: #f1f5f9;
@@ -1161,6 +1355,136 @@ We look forward to your participation. See you at the session!`;
           color: #ef4444;
           cursor: pointer;
           display: inline-flex;
+        }
+        .training-add-member {
+          position: relative;
+          margin-top: 10px;
+        }
+        .training-add-member-input {
+          width: 100%;
+          padding: 10px 12px;
+          border-radius: 10px;
+          border: 1px solid #cbd5e1;
+          font-size: 13px;
+          color: #0f172a;
+          outline: none;
+          box-sizing: border-box;
+          font-family: inherit;
+        }
+        .training-add-member-input:focus {
+          border-color: #1976d2;
+        }
+        .training-add-member-results {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          right: 0;
+          background: #fff;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
+          z-index: 20;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        .training-add-member-result {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: 9px 12px;
+          border: none;
+          background: transparent;
+          font-size: 13px;
+          color: #0f172a;
+          cursor: pointer;
+        }
+        .training-add-member-result:hover {
+          background: #f1f5f9;
+        }
+        .training-add-member-empty {
+          padding: 10px 12px;
+          color: #94a3b8;
+          font-style: italic;
+          font-size: 12.5px;
+        }
+        .training-message-preview-group {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+        .training-message-preview {
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #f8fafc;
+          padding: 10px 12px;
+        }
+        .training-message-preview.active {
+          border-color: #1976d2;
+          background: #eff6ff;
+        }
+        .training-message-preview-label {
+          font-size: 11px;
+          font-weight: 700;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          margin-bottom: 6px;
+        }
+        .training-message-preview.active .training-message-preview-label {
+          color: #1976d2;
+        }
+        .training-message-preview pre {
+          margin: 0;
+          font-family: inherit;
+          font-size: 12.5px;
+          color: #0f172a;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .training-message-preview-textarea {
+          width: 100%;
+          box-sizing: border-box;
+          border-radius: 8px;
+          border: 1px solid #cbd5e1;
+          padding: 8px 10px;
+          font-family: inherit;
+          font-size: 12.5px;
+          color: #0f172a;
+          resize: vertical;
+          outline: none;
+        }
+        .training-message-preview-textarea:focus {
+          border-color: #1976d2;
+        }
+        .training-message-save-btn {
+          margin-top: 8px;
+          padding: 6px 14px;
+          border-radius: 8px;
+          border: none;
+          background: #1976d2;
+          color: #fff;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .training-message-save-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+        .training-add-trainees-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin-left: 6px;
+          padding: 5px 9px;
+          border-radius: 999px;
+          border: none;
+          background: #e0f2fe;
+          color: #0369a1;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
         }
         .training-view-tabs {
           display: flex;
@@ -1553,6 +1877,15 @@ We look forward to your participation. See you at the session!`;
                         <FaUserFriends size={11} />
                         {(session.attendees || []).length}
                       </button>
+                      <button
+                        type="button"
+                        className="training-add-trainees-btn"
+                        onClick={() => openAddTraineesModal(session)}
+                        title="Search and add members from Users to this training"
+                      >
+                        <FaPlus size={9} />
+                        Add
+                      </button>
                     </td>
                     <td>
                       {session.meetingLink ? (
@@ -1574,22 +1907,20 @@ We look forward to your participation. See you at the session!`;
                       <button
                         type="button"
                         className={`training-reminder-btn ${session.whatsappReminderSent ? "sent" : "pending"}`}
-                        onClick={() => handleSendWhatsAppReminder(session, "whatsappReminderSent")}
-                        disabled={togglingId === `${session.id}-whatsappReminderSent`}
-                        title={session.whatsappReminderSentAt ? `Last sent ${new Date(session.whatsappReminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to WhatsApp all registered trainees a reminder"}
+                        onClick={() => openReminderModal(session, "whatsappReminderSent")}
+                        title={session.whatsappReminderSentAt ? `Last sent ${new Date(session.whatsappReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a reminder"}
                       >
                         <FaWhatsapp size={11} />
-                        {togglingId === `${session.id}-whatsappReminderSent` ? "Sending..." : "WhatsApp Reminder"}
+                        WhatsApp Reminder
                       </button>
                       <button
                         type="button"
                         className={`training-reminder-btn ${session.whatsappLastReminderSent ? "sent" : "pending"}`}
-                        onClick={() => handleSendWhatsAppReminder(session, "whatsappLastReminderSent")}
-                        disabled={togglingId === `${session.id}-whatsappLastReminderSent`}
-                        title={session.whatsappLastReminderSentAt ? `Last sent ${new Date(session.whatsappLastReminderSentAt).toLocaleString("en-IN")} — click to resend` : "Click to WhatsApp all registered trainees a final reminder"}
+                        onClick={() => openReminderModal(session, "whatsappLastReminderSent")}
+                        title={session.whatsappLastReminderSentAt ? `Last sent ${new Date(session.whatsappLastReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a final reminder"}
                       >
                         <FaWhatsapp size={11} />
-                        {togglingId === `${session.id}-whatsappLastReminderSent` ? "Sending..." : "WhatsApp Last Reminder"}
+                        WhatsApp Last Reminder
                       </button>
                     </td>
                     <td>
@@ -1865,6 +2196,35 @@ We look forward to your participation. See you at the session!`;
                       ))
                     )}
                   </div>
+
+                  <div className="training-add-member">
+                    <input
+                      type="text"
+                      className="training-add-member-input"
+                      placeholder="Search members by name or phone to allocate..."
+                      value={memberSearch}
+                      onChange={(e) => setMemberSearch(e.target.value)}
+                    />
+                    {memberSearch.trim() && (
+                      <div className="training-add-member-results">
+                        {memberSearchResults.length === 0 ? (
+                          <div className="training-add-member-empty">No matching members found.</div>
+                        ) : (
+                          memberSearchResults.map((member) => (
+                            <button
+                              type="button"
+                              key={member.id}
+                              className="training-add-member-result"
+                              onClick={() => handleAddMemberToTraining(member)}
+                            >
+                              {getMemberName(member)}
+                              {getMemberPhone(member) ? ` · ${getMemberPhone(member)}` : ""}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="training-grid">
@@ -2101,6 +2461,193 @@ We look forward to your participation. See you at the session!`;
                     Last sent {new Date(documentsSession.emailSentAt).toLocaleString("en-IN")}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reminderModal && (
+        <div className="modal-overlay" onClick={closeReminderModal}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 100%)" }}>
+            <div className="modal-panel-header">
+              <h3>{reminderModal.field === "whatsappLastReminderSent" ? "Final Reminder" : "Reminder"} - {reminderModal.session.topic}</h3>
+              <button type="button" className="modal-close-btn" onClick={closeReminderModal} title="Close">
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-panel-body">
+              <div className="training-message-preview-group">
+                <div className={`training-message-preview ${reminderModal.field === "whatsappReminderSent" ? "active" : ""}`}>
+                  <div className="training-message-preview-label">First Reminder Message</div>
+                  <textarea
+                    className="training-message-preview-textarea"
+                    rows={6}
+                    value={messageDrafts.first}
+                    onChange={(e) => setMessageDrafts((prev) => ({ ...prev, first: e.target.value }))}
+                  />
+                  <button
+                    type="button"
+                    className="training-message-save-btn"
+                    onClick={() => handleSaveMessageDraft("first")}
+                    disabled={savingMessage === "first"}
+                  >
+                    {savingMessage === "first" ? "Saving..." : "Save"}
+                  </button>
+                </div>
+                <div className={`training-message-preview ${reminderModal.field === "whatsappLastReminderSent" ? "active" : ""}`}>
+                  <div className="training-message-preview-label">Final Reminder Message</div>
+                  <textarea
+                    className="training-message-preview-textarea"
+                    rows={6}
+                    value={messageDrafts.final}
+                    onChange={(e) => setMessageDrafts((prev) => ({ ...prev, final: e.target.value }))}
+                  />
+                  <button
+                    type="button"
+                    className="training-message-save-btn"
+                    onClick={() => handleSaveMessageDraft("final")}
+                    disabled={savingMessage === "final"}
+                  >
+                    {savingMessage === "final" ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="training-btn training-btn-primary"
+                style={{ width: "100%", justifyContent: "center", marginBottom: "16px" }}
+                onClick={() =>
+                  handleSendWhatsAppReminder(
+                    reminderModal.session,
+                    reminderModal.field,
+                    reminderModal.field === "whatsappLastReminderSent" ? messageDrafts.final : messageDrafts.first
+                  )
+                }
+                disabled={togglingId === `${reminderModal.session.id}-${reminderModal.field}`}
+              >
+                <FaWhatsapp size={12} />
+                {togglingId === `${reminderModal.session.id}-${reminderModal.field}`
+                  ? "Sending to all..."
+                  : `Send ${reminderModal.field === "whatsappLastReminderSent" ? "Final Reminder" : "Reminder"} to All`}
+              </button>
+
+              <div className="training-attendees-list" style={{ marginBottom: 0, maxHeight: "360px" }}>
+                {(reminderModal.session.attendees || []).length === 0 ? (
+                  <div className="training-empty">No registered trainees for this session.</div>
+                ) : (
+                  reminderModal.session.attendees.map((trainee, idx) => {
+                    const traineeObj = typeof trainee === "object" ? trainee : { id: `legacy-${idx}`, name: trainee };
+                    const key = `${reminderModal.session.id}-${reminderModal.field}-${traineeObj.id}`;
+                    const sentIndividually = individualSentIds.includes(traineeObj.id);
+                    return (
+                      <div key={traineeObj.id || idx} className="training-attendee-row">
+                        <span>
+                          {getTraineeName(traineeObj)}
+                          {traineeObj.phone ? ` · ${traineeObj.phone}` : " · No phone on file"}
+                        </span>
+                        <button
+                          type="button"
+                          className="training-reminder-btn-sm"
+                          onClick={() =>
+                            handleSendSingleReminder(
+                              reminderModal.session,
+                              reminderModal.field,
+                              traineeObj,
+                              reminderModal.field === "whatsappLastReminderSent" ? messageDrafts.final : messageDrafts.first
+                            )
+                          }
+                          disabled={!traineeObj.phone || sendingTraineeKey === key}
+                          title={!traineeObj.phone ? "No phone number on file" : "Send reminder to this trainee only"}
+                        >
+                          <FaWhatsapp size={10} />
+                          {sendingTraineeKey === key ? "Sending..." : sentIndividually ? "Sent" : "Send Notification"}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addTraineesModal && (
+        <div className="modal-overlay" onClick={closeAddTraineesModal}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(480px, 100%)" }}>
+            <div className="modal-panel-header">
+              <h3>Add Trainees - {addTraineesModal.session.topic}</h3>
+              <button type="button" className="modal-close-btn" onClick={closeAddTraineesModal} title="Close">
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-panel-body">
+              <div className="training-add-member" style={{ marginBottom: "16px" }}>
+                <input
+                  type="text"
+                  className="training-add-member-input"
+                  placeholder="Search members by name or phone to add..."
+                  value={addTraineesSearch}
+                  onChange={(e) => setAddTraineesSearch(e.target.value)}
+                />
+                {addTraineesSearch.trim() && (
+                  <div className="training-add-member-results">
+                    {addTraineesSearchResults.length === 0 ? (
+                      <div className="training-add-member-empty">No matching members found.</div>
+                    ) : (
+                      addTraineesSearchResults.map((member) => (
+                        <button
+                          type="button"
+                          key={member.id}
+                          className="training-add-member-result"
+                          onClick={() => handleAddTraineeToModal(member)}
+                        >
+                          {getMemberName(member)}
+                          {getMemberPhone(member) ? ` · ${getMemberPhone(member)}` : ""}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="training-attendees-list" style={{ maxHeight: "260px" }}>
+                {addTraineesModal.trainees.length === 0 ? (
+                  <div className="training-empty">No trainees yet. Search above to add.</div>
+                ) : (
+                  addTraineesModal.trainees.map((trainee, idx) => (
+                    <div key={trainee.id || idx} className="training-attendee-row">
+                      <span>
+                        {getTraineeName(trainee)}
+                        {trainee.phone ? ` · ${trainee.phone}` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        className="training-attendee-remove"
+                        onClick={() => handleRemoveTraineeFromModal(trainee.id)}
+                        title="Remove"
+                      >
+                        <FaTimes size={13} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="modal-footer-actions" style={{ marginTop: "16px" }}>
+                <button type="button" className="training-cancel-btn" onClick={closeAddTraineesModal}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="training-btn training-btn-primary"
+                  onClick={handleSaveAddedTrainees}
+                  disabled={savingTrainees}
+                >
+                  {savingTrainees ? "Saving..." : "Save"}
+                </button>
               </div>
             </div>
           </div>

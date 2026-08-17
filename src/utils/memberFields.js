@@ -403,6 +403,33 @@ const toDateText = (value) => {
   return toText(value);
 };
 
+// Firestore Timestamps (and plain {seconds, nanoseconds} objects produced by some
+// import/export paths) must never reach JSX untouched — React throws "Objects are
+// not valid as a React child" if one is rendered directly. Convert any such value
+// found on a raw record to a plain date string before it gets spread into the
+// normalized record and potentially rendered as-is.
+const isTimestampLike = (value) =>
+  typeof value === "object" &&
+  value !== null &&
+  (typeof value.toDate === "function" ||
+    (typeof value.seconds === "number" && typeof value.nanoseconds === "number"));
+
+const timestampLikeToDateText = (value) => {
+  if (typeof value.toDate === "function") return toDateText(value);
+  const parsed = new Date(value.seconds * 1000 + Math.round(value.nanoseconds / 1e6));
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+};
+
+const sanitizeRawRecord = (raw) => {
+  if (!raw || typeof raw !== "object") return raw;
+  const sanitized = {};
+  for (const key of Object.keys(raw)) {
+    const value = raw[key];
+    sanitized[key] = isTimestampLike(value) ? timestampLikeToDateText(value) : value;
+  }
+  return sanitized;
+};
+
 export const getMemberEntryDate = (record) => {
   const entryValue = firstPresent(record, ["entry_date", "registration_date", "Entry Date", "Registration Date"]);
   const entryText = toDateText(entryValue);
@@ -491,7 +518,7 @@ export const normalizeMemberRecord = (raw = {}) => {
   const skillsText = skills.join(", ");
 
   return {
-    ...raw,
+    ...sanitizeRawRecord(raw),
     full_name: fullName,
     display_name: pickMemberText(raw, ["display_name", "displayName"], fullName),
     name: pickMemberText(raw, ["name"], fullName),
