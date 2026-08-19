@@ -74,7 +74,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const [members, setMembers] = useState(memberRecords);
   const [loading, setLoading] = useState(membersLoading);
 
-  const [organizationFilter, setOrganizationFilter] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState([]);
   const [serviceFilter, setServiceFilter] = useState([]);
   const [rankFilter, setRankFilter] = useState([]);
   const [stateFilter, setStateFilter] = useState([]);
@@ -111,16 +111,16 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
   // Filter options logic (unchanged) ────────────────────────────────────────────────
   const filterOptions = useMemo(() => {
-    const organizations = [...new Set(members.map((m) => m.organization).filter(Boolean))].sort();
+    const categories = [...new Set(members.map((m) => m.category).filter(Boolean))].sort();
     const states = [...new Set(members.map((m) => m.state).filter(Boolean))].sort();
 
-    return { organizations, states };
+    return { categories, states };
   }, [members]);
 
   const availableServices = useMemo(() => {
     let filtered = members;
-    if (organizationFilter.length) {
-      filtered = filtered.filter((m) => organizationFilter.includes(m.organization));
+    if (categoryFilter.length) {
+      filtered = filtered.filter((m) => categoryFilter.includes(m.category));
     }
     const serviceCounts = filtered.reduce((acc, m) => {
       const s = m.service;
@@ -130,11 +130,11 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return Object.keys(serviceCounts)
       .sort((a, b) => serviceCounts[b] - serviceCounts[a])
       .slice(0, 30);
-  }, [members, organizationFilter]);
+  }, [members, categoryFilter]);
 
   const availableRanks = useMemo(() => {
     let filtered = members;
-    if (organizationFilter.length) filtered = filtered.filter((m) => organizationFilter.includes(m.organization));
+    if (categoryFilter.length) filtered = filtered.filter((m) => categoryFilter.includes(m.category));
     if (serviceFilter.length) filtered = filtered.filter((m) => serviceFilter.includes(m.service));
 
     const rankCounts = filtered.reduce((acc, m) => {
@@ -145,7 +145,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return Object.keys(rankCounts)
       .sort((a, b) => rankCounts[b] - rankCounts[a])
       .slice(0, 25);
-  }, [members, organizationFilter, serviceFilter]);
+  }, [members, categoryFilter, serviceFilter]);
 
   const availableCities = useMemo(() => {
     let filtered = members;
@@ -163,8 +163,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return { min, max };
   }, [members]);
 
-  useEffect(() => { setServiceFilter([]); }, [organizationFilter]);
-  useEffect(() => { setRankFilter([]); }, [serviceFilter, organizationFilter]);
+  useEffect(() => { setServiceFilter([]); }, [categoryFilter]);
+  useEffect(() => { setRankFilter([]); }, [serviceFilter, categoryFilter]);
   useEffect(() => { setCityFilter([]); }, [stateFilter]);
   useEffect(() => { setAgeRange([ageBounds.min, ageBounds.max]); }, [ageBounds.min, ageBounds.max]);
 
@@ -177,7 +177,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   // Pass 1: filter by everything EXCEPT date range (used by registration analytics)
   const filteredMembersNoDateRange = useMemo(() => {
     return members.filter((member) => {
-      if (organizationFilter.length && !organizationFilter.includes(member.organization)) return false;
+      if (categoryFilter.length && !categoryFilter.includes(member.category)) return false;
       if (serviceFilter.length && !serviceFilter.includes(member.service)) return false;
       if (rankFilter.length && !rankFilter.includes(member.rank)) return false;
       if (stateFilter.length && !stateFilter.includes(member.state)) return false;
@@ -192,7 +192,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       return true;
     });
   }, [
-    members, organizationFilter, serviceFilter, rankFilter,
+    members, categoryFilter, serviceFilter, rankFilter,
     stateFilter, cityFilter, retirementFilter, ageRange, ageBounds.min, ageBounds.max,
   ]);
 
@@ -233,7 +233,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
     const total = filteredMembers.length;
     const genderCounts = {};
-    const organizationCounts = {};
+    const categoryCounts = {};
     const serviceCounts = {};
     const rankCounts = {};
     const stateCounts = {};
@@ -244,7 +244,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       if (rawGender === 'male' || rawGender === 'm') genderCounts.Male = (genderCounts.Male || 0) + 1;
       else if (rawGender === 'female' || rawGender === 'f') genderCounts.Female = (genderCounts.Female || 0) + 1;
 
-      if (member.organization) organizationCounts[member.organization] = (organizationCounts[member.organization] || 0) + 1;
+      if (member.category) categoryCounts[member.category] = (categoryCounts[member.category] || 0) + 1;
       if (member.service) serviceCounts[member.service.trim()] = (serviceCounts[member.service.trim()] || 0) + 1;
       if (member.rank) rankCounts[member.rank] = (rankCounts[member.rank] || 0) + 1;
       if (member.state) stateCounts[member.state.trim()] = (stateCounts[member.state.trim()] || 0) + 1;
@@ -262,7 +262,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return {
       total,
       genderCounts,
-      organizationCounts: sortCountsDesc(organizationCounts),
+      categoryCounts: sortCountsDesc(categoryCounts),
       serviceCounts: sortCountsDesc(serviceCounts),
       rankCounts: sortCountsDesc(rankCounts, 15),
       stateCounts: sortCountsDesc(stateCounts),
@@ -305,7 +305,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const hasData = Boolean(analytics);
 
   const clearAllFilters = () => {
-    setOrganizationFilter([]);
+    setCategoryFilter([]);
     setServiceFilter([]);
     setRankFilter([]);
     setStateFilter([]);
@@ -333,7 +333,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   });
 
   const genderChartData = useMemo(() => (analytics ? createChartData(analytics.genderCounts) : null), [analytics]);
-  const organizationChartData = useMemo(() => (analytics ? createChartData(analytics.organizationCounts) : null), [analytics]);
+  const categoryChartData = useMemo(() => (analytics ? createChartData(analytics.categoryCounts) : null), [analytics]);
   const serviceChartData = useMemo(() => (analytics ? createChartData(analytics.serviceCounts) : null), [analytics]);
   const rankChartData = useMemo(() => (analytics ? createChartData(analytics.rankCounts) : null), [analytics]);
   const registrationChartData = useMemo(
@@ -831,9 +831,9 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
             <MultiSelectDropdown
               className="filter-span-2"
               label="Category"
-              options={filterOptions.organizations}
-              selected={organizationFilter}
-              onChange={setOrganizationFilter}
+              options={filterOptions.categories}
+              selected={categoryFilter}
+              onChange={setCategoryFilter}
             />
 
             <MultiSelectDropdown
@@ -974,7 +974,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
               <div className="chart-card">
                 <h3>Category Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={organizationChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
+                  <Bar data={categoryChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 

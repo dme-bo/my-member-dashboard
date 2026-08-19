@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FaTimes, FaPlus, FaExclamationTriangle, FaRegThumbsUp, FaCommentDots, FaMinusCircle } from "react-icons/fa";
 import { collection, collectionGroup, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { getMemberName, getMemberPhone, getMemberEmail, getMemberOrganization } from "../utils/memberFields";
+import { getMemberName, getMemberPhone, getMemberEmail, getMemberCategory } from "../utils/memberFields";
 
 const INTERACTION_TYPES = ["Lead or Project Related", "General"];
 const INTERACTION_RATINGS = ["Good", "Bad", "Neutral"];
@@ -736,7 +736,7 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
                       <p>
                         {getMemberPhone(selectedMember) || "-"}
                         {getMemberEmail(selectedMember) ? ` • ${getMemberEmail(selectedMember)}` : ""}
-                        {getMemberOrganization(selectedMember) ? ` • ${getMemberOrganization(selectedMember)}` : ""}
+                        {getMemberCategory(selectedMember) ? ` • ${getMemberCategory(selectedMember)}` : ""}
                       </p>
                     </div>
                     <button type="button" className="interaction-clear-btn" onClick={handleClearMember} title="Change member">

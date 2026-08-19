@@ -13,7 +13,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import {
   getMemberName,
   getMemberPhone,
-  getMemberOrganization,
+  getMemberCategory,
   getMemberEmail,
   getMemberService,
   getMemberRank,
@@ -85,7 +85,7 @@ const VirtualRow = React.memo(({ index, style, data }) => {
         {member.__name || "—"}
       </div>
       <div style={cellStyle}>{member.phone_number || "—"}</div>
-      <div style={cellStyle}>{member.organization || "—"}</div>
+      <div style={cellStyle}>{member.category || "—"}</div>
       <div style={cellStyle}>{member.service || "—"}</div>
       <div style={cellStyle}>{member.rank || "—"}</div>
       <div style={cellStyle}>{member.state || "—"}</div>
@@ -290,7 +290,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
   const memberIndex = useMemo(() => {
     // `member` is already normalized once in App.jsx's Layout (normalizeMemberRecord),
-    // so full_name/phone_number/organization/etc. are already direct properties here.
+    // so full_name/phone_number/category/etc. are already direct properties here.
     // Re-running the getMemberX() fuzzy key-matching helpers on every one of 15k+ rows
     // was the dominant cost of this list (each helper rescans every raw key on the record
     // for every candidate name) — read the precomputed fields directly instead.
@@ -298,7 +298,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       const name = member.full_name || getMemberName(member);
       const email = member.email || getMemberEmail(member);
       const phone = member.phone_number || getMemberPhone(member) || "";
-      const organization = member.organization || getMemberOrganization(member);
+      const category = member.category || getMemberCategory(member);
       const service = member.service || getMemberService(member);
       const rank = member.rank || getMemberRank(member);
       const state = member.state || getMemberState(member);
@@ -317,7 +317,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         __name: name,
         __emailLower: String(email || "").toLowerCase(),
         __phoneLower: String(phone || "").toLowerCase(),
-        __organizationLower: String(organization || "").toLowerCase(),
+        __categoryLower: String(category || "").toLowerCase(),
         __serviceLower: String(service || "").toLowerCase(),
         __rankLower: String(rank || "").toLowerCase(),
         __stateLower: String(state || "").toLowerCase(),
@@ -331,7 +331,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           name,
           email,
           phone,
-          organization,
+          category,
           service,
           rank,
           state,
@@ -352,7 +352,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   // Dynamic filter options — single pass over memberIndex (was 12 passes before)
   const filterOptions = useMemo(() => {
     const genderSet = new Set();
-    const orgSet = new Set();
+    const categorySet = new Set();
     const serviceSet = new Set();
     const rankSet = new Set();
     const levelSet = new Set();
@@ -370,7 +370,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         const g = String(member.gender).trim();
         genderSet.add(g.toLowerCase() === "male" ? "Male" : g.toLowerCase() === "female" ? "Female" : g);
       }
-      if (member.organization) orgSet.add(String(member.organization).trim());
+      if (member.category) categorySet.add(String(member.category).trim());
       if (member.service)      serviceSet.add(String(member.service).trim());
       if (member.rank)         rankSet.add(String(member.rank).trim());
       if (member.level)        levelSet.add(String(member.level).trim());
@@ -413,7 +413,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
     return {
       Gender:           toSorted(genderSet),
-      Category:         toSorted(orgSet),
+      Category:         toSorted(categorySet),
       Service:          toSorted(serviceSet),
       Rank:             toSorted(rankSet),
       Level:            toSorted(levelSet),
@@ -528,7 +528,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
     const fieldMap = {
       Gender: "gender",
-      Category: "organization",
+      Category: "category",
       Service: "service",
       Rank: "rank",
       Level: "level",
@@ -629,7 +629,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         const dbField = fieldMap[key];
         if (!dbField) continue;
         let memberValue;
-        if (dbField === "organization") memberValue = member.__organizationLower;
+        if (dbField === "category") memberValue = member.__categoryLower;
         else if (dbField === "service") memberValue = member.__serviceLower;
         else if (dbField === "rank") memberValue = member.__rankLower;
         else if (dbField === "state") memberValue = member.__stateLower;
@@ -839,7 +839,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       Name: getMemberName(member),
       Mobile: getMemberPhone(member) || "",
       Email: getMemberEmail(member) || "",
-      Category: getMemberOrganization(member) || "",
+      Category: getMemberCategory(member) || "",
       Service: getMemberService(member) || "",
       Rank: getMemberRank(member) || "",
       Gender: member.gender || "",

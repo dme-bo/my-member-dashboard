@@ -11,7 +11,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberOrganization, parseMemberDate } from "../utils/memberFields";
+import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberCategory, parseMemberDate } from "../utils/memberFields";
 
 function SkeletonLoader({ rows = 4, compact = false }) {
   return (
@@ -725,7 +725,7 @@ export default function MemberDetailModal({ member, onClose }) {
             {activeTab === "service" && (
               <div className="detail-grid">
                 <div><strong>Service/Category:</strong> {normalizedMember.service || "-"}</div>
-                <div><strong>Category:</strong> {getMemberOrganization(normalizedMember) || "-"}</div>
+                <div><strong>Category:</strong> {getMemberCategory(normalizedMember) || "-"}</div>
                 <div><strong>Rank:</strong> {normalizedMember.rank || "-"}</div>
                 <div><strong>Level:</strong> {normalizedMember.level || "-"}</div>
                 <div><strong>Trade:</strong> {normalizedMember.trade || "-"}</div>

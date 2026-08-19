@@ -775,7 +775,7 @@ export default function RecruitmentPage() {
                 {activeTab === "service" && (
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "15px" }}>
                     <tbody>
-                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Category</td><td>{selectedCandidate.organization || selectedCandidate.category || "-"}</td></tr>
+                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Category</td><td>{selectedCandidate.category || selectedCandidate.organization || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Service</td><td>{selectedCandidate.service || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Rank</td><td>{selectedCandidate.rank || "-"}</td></tr>
                     </tbody>

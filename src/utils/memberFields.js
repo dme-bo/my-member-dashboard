@@ -92,8 +92,8 @@ export const pickMemberText = (record, keys, fallback = "") => {
   return text || fallback;
 };
 
-export const getMemberOrganization = (record) =>
-  pickMemberText(record, ["organization", "Organization", "category", "Category"]);
+export const getMemberCategory = (record) =>
+  pickMemberText(record, ["category", "Category", "organization", "Organization"]);
 
 export const getMemberName = (record) =>
   toTitleCase(
@@ -498,7 +498,7 @@ export const isMemberRetired = (record) => {
 };
 
 export const normalizeMemberRecord = (raw = {}) => {
-  const organization = getMemberOrganization(raw);
+  const category = getMemberCategory(raw);
   const fullName = getMemberName(raw);
   const phoneNumber = getMemberPhone(raw);
   const rank = getMemberRank(raw);
@@ -525,8 +525,7 @@ export const normalizeMemberRecord = (raw = {}) => {
     phone_number: phoneNumber,
     phone: pickMemberText(raw, ["phone"], phoneNumber),
     mobile: pickMemberText(raw, ["mobile"], phoneNumber),
-    organization,
-    category: pickMemberText(raw, ["category"], organization),
+    category,
     BOCategory: pickMemberText(raw, ["BOCategory"]),
     service,
     rank,

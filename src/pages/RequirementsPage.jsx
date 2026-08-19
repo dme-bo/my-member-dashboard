@@ -27,7 +27,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import Papa from "papaparse";
-import { normalizeMemberRecord, getMemberOrganization } from "../utils/memberFields";
+import { normalizeMemberRecord, getMemberCategory } from "../utils/memberFields";
 
 export default function RequirementsPage({ memberRecords: propMembers = [], membersLoading: propLoading = false }) {
   const [requirementsData, setRequirementsData] = useState([]);
@@ -69,7 +69,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const [genderFilter, setGenderFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
-  const [organizationFilter, setOrganizationFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [serviceFilter, setServiceFilter] = useState("");
   const [rankFilter, setRankFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
@@ -273,7 +273,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
           gender: doc.data().gender || "",
           state: doc.data().state || "",
           city: doc.data().city || "",
-          organization: doc.data().organization || doc.data().category || "",
+          category: doc.data().category || doc.data().organization || "",
           service: doc.data().service || "",
           rank: doc.data().rank || "",
           level: doc.data().level || "",
@@ -299,7 +299,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   /* UNIQUE FILTER VALUES */
   const uniqueStates = useMemo(() => [...new Set(members.map((m) => m.state).filter(Boolean))].sort(), [members]);
   const uniqueCities = useMemo(() => [...new Set(members.map((m) => m.city).filter(Boolean))].sort(), [members]);
-  const uniqueOrganizations = useMemo(() => [...new Set(members.map((m) => getMemberOrganization(m)).filter(Boolean))].sort(), [members]);
+  const uniqueCategories = useMemo(() => [...new Set(members.map((m) => getMemberCategory(m)).filter(Boolean))].sort(), [members]);
   const uniqueServices = useMemo(() => [...new Set(members.map((m) => m.service).filter(Boolean))].sort(), [members]);
   const uniqueRanks = useMemo(() => [...new Set(members.map((m) => m.rank).filter(Boolean))].sort(), [members]);
   const uniqueLevels = useMemo(() => [...new Set(members.map((m) => m.level).filter(Boolean))].sort(), [members]);
@@ -320,14 +320,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     if (genderFilter) filtered = filtered.filter((m) => m.gender?.toLowerCase() === genderFilter.toLowerCase());
     if (stateFilter) filtered = filtered.filter((m) => m.state === stateFilter);
     if (cityFilter) filtered = filtered.filter((m) => m.city === cityFilter);
-    if (organizationFilter) filtered = filtered.filter((m) => getMemberOrganization(m) === organizationFilter);
+    if (categoryFilter) filtered = filtered.filter((m) => getMemberCategory(m) === categoryFilter);
     if (serviceFilter) filtered = filtered.filter((m) => m.service === serviceFilter);
     if (rankFilter) filtered = filtered.filter((m) => m.rank === rankFilter);
     if (levelFilter) filtered = filtered.filter((m) => m.level === levelFilter);
 
     setFilteredMembers(filtered);
     setCurrentPage(1);
-  }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, organizationFilter, serviceFilter, rankFilter, levelFilter, members]);
+  }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, categoryFilter, serviceFilter, rankFilter, levelFilter, members]);
 
   /* FILTERED REQUIREMENTS (for table) */
   const filteredRequirements = useMemo(() => {
@@ -520,7 +520,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         lines.push(`- Designation: ${member?.designation || "N/A"}`);
         lines.push(`- State: ${member?.state || "N/A"}`);
         lines.push(`- City: ${member?.city || "N/A"}`);
-        lines.push(`- Organization: ${member?.organization || "N/A"}`);
+        lines.push(`- Category: ${member?.category || "N/A"}`);
         lines.push("");
       });
     }
@@ -1128,7 +1128,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     setGenderFilter("");
                     setStateFilter("");
                     setCityFilter("");
-                    setOrganizationFilter("");
+                    setCategoryFilter("");
                     setServiceFilter("");
                     setRankFilter("");
                     setLevelFilter("");
@@ -1407,7 +1407,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                       setGenderFilter("");
                       setStateFilter("");
                       setCityFilter("");
-                      setOrganizationFilter("");
+                      setCategoryFilter("");
                       setServiceFilter("");
                       setRankFilter("");
                       setLevelFilter("");
@@ -1482,14 +1482,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   </datalist>
 
                   <input
-                    list="organizations-list"
-                    value={organizationFilter}
-                    onChange={(e) => setOrganizationFilter(e.target.value)}
+                    list="categories-list"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
                     placeholder="Category"
                     style={{ padding: "14px", borderRadius: "12px", border: "2px solid #d1d5db", fontSize: "15px" }}
                   />
-                  <datalist id="organizations-list">
-                    {uniqueOrganizations.map((o) => (
+                  <datalist id="categories-list">
+                    {uniqueCategories.map((o) => (
                       <option key={o} value={o} />
                     ))}
                   </datalist>
@@ -2132,7 +2132,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 <strong style={{ color: "#1976d2" }}>State:</strong> {selectedMember.state || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Category:</strong> {getMemberOrganization(selectedMember) || "—"}
+                <strong style={{ color: "#1976d2" }}>Category:</strong> {getMemberCategory(selectedMember) || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
                 <strong style={{ color: "#1976d2" }}>Service:</strong> {selectedMember.service || "—"}

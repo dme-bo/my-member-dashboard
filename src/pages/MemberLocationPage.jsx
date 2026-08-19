@@ -345,7 +345,7 @@ export default function MemberLocationPage({ memberRecords = [] }) {
           email: getMemberEmail(raw),
           city: pickMemberText(raw, ["city", "City"]),
           state: pickMemberText(raw, ["state", "State"]),
-          organization: pickMemberText(raw, ["organization", "Organization", "category", "Category"]),
+          category: pickMemberText(raw, ["category", "Category", "organization", "Organization"]),
           location_point,
         };
       })
@@ -1298,7 +1298,7 @@ export default function MemberLocationPage({ memberRecords = [] }) {
                   </div>
                   <div className="member-name-block">
                     <h3>{getMemberName(selectedMember)}</h3>
-                    <p>{selectedMember.organization || "Member"}</p>
+                    <p>{selectedMember.category || "Member"}</p>
                   </div>
                 </div>
                 <button type="button" className="member-contact-close" onClick={() => setSelectedMember(null)} aria-label="Close member card">
@@ -1378,7 +1378,7 @@ export default function MemberLocationPage({ memberRecords = [] }) {
                       <span>
                         {member.city || "-"}
                         {member.state ? `, ${member.state}` : ""}
-                        {member.organization ? ` • ${member.organization}` : ""}
+                        {member.category ? ` • ${member.category}` : ""}
                       </span>
                     </div>
                   </button>
@@ -1392,7 +1392,7 @@ export default function MemberLocationPage({ memberRecords = [] }) {
               <div>
                 <h3>No locations found</h3>
                 <p>
-                  Try a different city, state, name, or organization. The map only shows members that match your search.
+                  Try a different city, state, name, or category. The map only shows members that match your search.
                 </p>
               </div>
             </div>
