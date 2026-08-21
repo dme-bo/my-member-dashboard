@@ -189,6 +189,10 @@ export default function TrainingPage() {
     }
   };
 
+  useEffect(() => {
+    void ensureWorkshopsLoaded();
+  }, []);
+
   const loadApplicantsForWorkshop = async (workshopId) => {
     const members = await ensureMembersLoaded();
     const snapshot = await getDocs(
@@ -1935,6 +1939,57 @@ Please don't miss it — we look forward to your participation!`;
                         title="Remove"
                       >
                         <FaTrashAlt size={11} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="training-table-card" style={{ marginTop: "24px" }}>
+        <h3>Workshops ({workshops.length})</h3>
+
+        {workshopsLoading ? (
+          <div className="training-empty">Loading workshops...</div>
+        ) : workshops.length === 0 ? (
+          <div className="training-empty">No workshops with applicants found.</div>
+        ) : (
+          <table className="training-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Organizer</th>
+                <th>Location</th>
+                <th>Start Date</th>
+                <th>Fee</th>
+                <th>Applicants</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {workshops.map((workshop) => {
+                const startDate = parseWorkshopDateTime(workshop.workshop_start_date).date;
+                return (
+                  <tr key={workshop.id}>
+                    <td style={{ color: "#1976d2", fontWeight: 700 }}>{workshop.workshop_title || "-"}</td>
+                    <td>{workshop.workshop_organizer || "-"}</td>
+                    <td>{workshop.workshop_location || "-"}</td>
+                    <td>{startDate ? formatDateDisplay(startDate) : "-"}</td>
+                    <td>{workshop.workshop_fee || workshop.workshop_fee === 0 ? `₹${workshop.workshop_fee}` : "-"}</td>
+                    <td>
+                      <span className="training-attendees-btn">
+                        <FaUserFriends size={11} />
+                        {workshop.applicantCount}
+                      </span>
+                    </td>
+                    <td>{workshop.workshop_status || "-"}</td>
+                    <td>
+                      <button type="button" className="training-btn training-btn-secondary" onClick={() => handlePickWorkshop(workshop)}>
+                        Schedule
                       </button>
                     </td>
                   </tr>

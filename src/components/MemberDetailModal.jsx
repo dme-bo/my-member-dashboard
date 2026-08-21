@@ -1224,81 +1224,6 @@ export default function MemberDetailModal({ member, onClose }) {
             {/* RATING TAB */}
             {activeTab === "rating" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
-                {/* Rating History */}
-                <div>
-                  <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
-                    Rating History ({ratingEntries.length})
-                  </h3>
-
-                  {loading && <SkeletonLoader rows={5} />}
-
-                  {!loading && ratingEntries.length === 0 && (
-                    <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
-                      No ratings recorded yet.
-                    </p>
-                  )}
-
-                  {!loading && ratingEntries.length > 0 && (
-                    <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
-                        <thead>
-                          <tr style={{ backgroundColor: "#0f766e", color: "white" }}>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rating</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Referrer Name</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rated By</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ratingEntries.map((note, index) => (
-                            <tr
-                              key={note.id}
-                              style={{
-                                backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
-                              }}
-                            >
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.date}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.contactPerson}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "190px" }}>
-                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#374151" }}>
-                                    {getRatingTypeLabel(note.ratingType)}
-                                  </div>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                    {note.ratingType === RATING_TYPES.workRelated && renderRatingStars(Number(note.workRating), 16)}
-                                    {note.ratingType === RATING_TYPES.referrer && renderRatingStars(Number(note.referrerRating), 16)}
-                                    {note.ratingType === RATING_TYPES.boEmployee && renderRatingStars(Number(note.boRating), 16)}
-                                    {note.ratingType === RATING_TYPES.notRated && (
-                                      <span style={{ fontSize: "13px", color: "#6b7280" }}>Not rated yet</span>
-                                    )}
-                                  </div>
-                                  {note.ratingType === RATING_TYPES.boEmployee && (
-                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.boRemarks}</div>
-                                  )}
-                                  {note.ratingType === RATING_TYPES.referrer && (
-                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.referrerRemarks}</div>
-                                  )}
-                                </div>
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.ratingType === RATING_TYPES.referrer ? note.referrerName : "-"}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.ratedBy}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
                 {/* Add New Rating */}
                 <div>
                   <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
@@ -1486,6 +1411,21 @@ export default function MemberDetailModal({ member, onClose }) {
                               Selected: {ratingDraft.referrerRating ? `${ratingDraft.referrerRating}/5` : "Not selected"}
                             </div>
                             <div style={{ marginTop: "14px" }}>
+                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Name</label>
+                              <input
+                                type="text"
+                                value={ratingDraft.referrerName}
+                                onChange={(e) => updateRatingDraft("referrerName", e.target.value)}
+                                placeholder="Name of the referrer..."
+                                style={{
+                                  width: "100%",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: "1px solid #cbd5e1",
+                                }}
+                              />
+                            </div>
+                            <div style={{ marginTop: "14px" }}>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Remarks</label>
                               <textarea
                                 value={ratingDraft.referrerRemarks}
@@ -1498,21 +1438,6 @@ export default function MemberDetailModal({ member, onClose }) {
                                   borderRadius: "8px",
                                   border: "1px solid #cbd5e1",
                                   resize: "vertical",
-                                }}
-                              />
-                            </div>
-                            <div style={{ marginTop: "14px" }}>
-                              <label style={{ fontSize: "13px", color: "#6b7280" }}>Referrer Name</label>
-                              <input
-                                type="text"
-                                value={ratingDraft.referrerName}
-                                onChange={(e) => updateRatingDraft("referrerName", e.target.value)}
-                                placeholder="Name of the referrer..."
-                                style={{
-                                  width: "100%",
-                                  padding: "12px",
-                                  borderRadius: "8px",
-                                  border: "1px solid #cbd5e1",
                                 }}
                               />
                             </div>
@@ -1538,6 +1463,81 @@ export default function MemberDetailModal({ member, onClose }) {
                           {loading ? "Saving..." : "SAVE RATING"}
                         </button>
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Rating History */}
+                <div>
+                  <h3 style={{ margin: "0 0 16px", color: "#1f2937", fontSize: "18px" }}>
+                    Rating History ({ratingEntries.length})
+                  </h3>
+
+                  {loading && <SkeletonLoader rows={5} />}
+
+                  {!loading && ratingEntries.length === 0 && (
+                    <p style={{ textAlign: "center", color: "#9ca3af", fontStyle: "italic", padding: "50px 0" }}>
+                      No ratings recorded yet.
+                    </p>
+                  )}
+
+                  {!loading && ratingEntries.length > 0 && (
+                    <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                        <thead>
+                          <tr style={{ backgroundColor: "#0f766e", color: "white" }}>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rating</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Referrer Name</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rated By</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ratingEntries.map((note, index) => (
+                            <tr
+                              key={note.id}
+                              style={{
+                                backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                              }}
+                            >
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.date}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.contactPerson}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "190px" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#374151" }}>
+                                    {getRatingTypeLabel(note.ratingType)}
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                    {note.ratingType === RATING_TYPES.workRelated && renderRatingStars(Number(note.workRating), 16)}
+                                    {note.ratingType === RATING_TYPES.referrer && renderRatingStars(Number(note.referrerRating), 16)}
+                                    {note.ratingType === RATING_TYPES.boEmployee && renderRatingStars(Number(note.boRating), 16)}
+                                    {note.ratingType === RATING_TYPES.notRated && (
+                                      <span style={{ fontSize: "13px", color: "#6b7280" }}>Not rated yet</span>
+                                    )}
+                                  </div>
+                                  {note.ratingType === RATING_TYPES.boEmployee && (
+                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.boRemarks}</div>
+                                  )}
+                                  {note.ratingType === RATING_TYPES.referrer && (
+                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.referrerRemarks}</div>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.ratingType === RATING_TYPES.referrer ? note.referrerName : "-"}
+                              </td>
+                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                {note.ratedBy}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>

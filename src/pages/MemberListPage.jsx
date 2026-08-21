@@ -186,7 +186,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     Experience: [],
     Tags: [],
     "BO Tags": [],
-    Rated: [],
+    "Is Rated?": [],
+    "Is Tagged?": [],
   });
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
@@ -346,6 +347,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         __dataTagsLower: (Array.isArray(member.tags) ? member.tags : []).map((tag) => String(tag).toLowerCase()),
         __registrationDateMs: registrationDate ? registrationDate.getTime() : null,
         __isRated: ratedMemberIds.has(member.id),
+        __isTagged: skills.some((skill) => String(skill).trim()),
       };
     });
   }, [members, memberProjectsByPhone, ratedMemberIds]);
@@ -427,7 +429,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       "BO Tags":      Array.from(dataTagsSet).sort((a, b) => a.localeCompare(b)),
       "Placement Status": ["Placed", "Active"],
       Experience:       buckets,
-      Rated:            ["Rated", "Not Rated"],
+      "Is Rated?":      ["Yes", "No"],
+      "Is Tagged?":     ["Yes", "No"],
     };
   }, [memberIndex, availableProjects]);
 
@@ -496,7 +499,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         Experience: [],
         Tags: [],
         "BO Tags": [],
-        Rated: [],
+        "Is Rated?": [],
+        "Is Tagged?": [],
       });
       setRetirementStatus("All");
       setRegistrationDateFrom("");
@@ -596,11 +600,19 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           continue;
         }
 
-        if (key === "Rated") {
-          const wantsRated = values.includes("rated");
-          const wantsNotRated = values.includes("not rated");
-          if (wantsRated && !wantsNotRated && !member.__isRated) { matchesSidebar = false; break; }
-          if (wantsNotRated && !wantsRated && member.__isRated) { matchesSidebar = false; break; }
+        if (key === "Is Rated?") {
+          const wantsYes = values.includes("yes");
+          const wantsNo = values.includes("no");
+          if (wantsYes && !wantsNo && !member.__isRated) { matchesSidebar = false; break; }
+          if (wantsNo && !wantsYes && member.__isRated) { matchesSidebar = false; break; }
+          continue;
+        }
+
+        if (key === "Is Tagged?") {
+          const wantsYes = values.includes("yes");
+          const wantsNo = values.includes("no");
+          if (wantsYes && !wantsNo && !member.__isTagged) { matchesSidebar = false; break; }
+          if (wantsNo && !wantsYes && member.__isTagged) { matchesSidebar = false; break; }
           continue;
         }
 
@@ -811,7 +823,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Tags",
     "BO Tags",
     "Experience",
-    "Rated",
+    "Is Rated?",
+    "Is Tagged?",
   ];
 
   // Close tags popover on click-outside or Escape
