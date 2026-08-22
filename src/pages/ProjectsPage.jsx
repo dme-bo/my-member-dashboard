@@ -2,16 +2,17 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   collection,
+  db,
   getDocs,
   query,
   orderBy,
   addDoc,
   serverTimestamp,
   Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+} from "../firestoreClient";
 import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 export default function ProjectsPage() {
   const [applications, setApplications] = useState([]);
@@ -131,13 +132,17 @@ export default function ProjectsPage() {
     return filterValues.some(fv => appProjectsList.includes(fv));
   };
 
+  // Wrapped in useMemo: this re-filters+re-sorts the full applications list, and
+  // without memoization it re-ran on every render — including every keystroke
+  // typed into the detail modal's notes field — causing visible input lag.
+  const filteredApplications = useMemo(() => {
   let filteredApplications = applications.filter(app => {
     // Handle city filter (can be single value or array)
     if (filters.city) {
       const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
       if (!cityValues.includes(app.city)) return false;
     }
-    
+
     // Handle projects filter (can be single value or array)
     if (filters.projects && !matchesProjectFilter(app.projects, filters.projects)) return false;
 
@@ -159,6 +164,9 @@ export default function ProjectsPage() {
   filteredApplications.sort((a, b) =>
     (a.full_name || "").trim().toLowerCase().localeCompare((b.full_name || "").trim().toLowerCase())
   );
+
+  return filteredApplications;
+  }, [applications, filters, searchTerm]);
 
   // Pagination
   const totalItems = filteredApplications.length;
@@ -446,8 +454,8 @@ export default function ProjectsPage() {
       <div className="content-with-sidebar">
         <div className="table-container">
           {loading ? (
-            <div style={{ height: "100vh", width: "86vw",padding: "60px", textAlign: "center", fontSize: "18px" }}>
-              Loading applications...
+            <div style={{ padding: "24px" }}>
+              <SkeletonLoader rows={8} label="Loading applications…" />
             </div>
           ) : (
             <>

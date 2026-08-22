@@ -11,8 +11,8 @@ import {
   Link,
   Image,
 } from '@react-pdf/renderer';
-import { collection, getDocs, query, where, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, db, getDocs, query, where, doc, getDoc, updateDoc } from '../firestoreClient';
+import SkeletonLoader from '../components/SkeletonLoader';
 
 // ── PDF Styles ─────────────────────────────────────────────────────────────
 // Centralized PDF styles keep the newsletter layout consistent across pages.
@@ -516,10 +516,14 @@ export default function BriskOliveNewsletterApp() {
 
         const processedImages = {};
         if (contentData?.images) {
-          for (const [key, url] of Object.entries(contentData.images)) {
-            const base64 = await getBase64FromUrl(url);
-            if (base64) processedImages[key] = base64;
-          }
+          // Fetch all configured images concurrently instead of one at a time —
+          // a sequential await-in-a-loop made initial load take N x (image fetch
+          // time) instead of the time of the single slowest image.
+          const entries = Object.entries(contentData.images);
+          const results = await Promise.all(entries.map(([, url]) => getBase64FromUrl(url)));
+          entries.forEach(([key], index) => {
+            if (results[index]) processedImages[key] = results[index];
+          });
         }
 
         const fullContent = { ...contentData, images: processedImages };
@@ -630,10 +634,13 @@ export default function BriskOliveNewsletterApp() {
       await updateDoc(docRef, changes);
 
       const newImages = { ...content.images };
-      for (const [key, url] of Object.entries(changes.images || {})) {
-        const base64 = await getBase64FromUrl(url);
-        if (base64) newImages[key] = base64;
-      }
+      const changedImageEntries = Object.entries(changes.images || {});
+      const changedImageResults = await Promise.all(
+        changedImageEntries.map(([, url]) => getBase64FromUrl(url))
+      );
+      changedImageEntries.forEach(([key], index) => {
+        if (changedImageResults[index]) newImages[key] = changedImageResults[index];
+      });
 
       setContent(prev => ({
         ...prev,
@@ -690,11 +697,7 @@ export default function BriskOliveNewsletterApp() {
   const filteredProjects = projects.filter((p) => selectedProjects.some((s) => s.value === p.id));
 
     if (loading) {
-    return (
-      <div style={{ height: "100vh", width: "87vw",padding: "60px", textAlign: "center", fontSize: "18px", }}>
-        Loading Newsletter...
-      </div>
-    );
+    return <SkeletonLoader rows={6} fullPage label="Loading Newsletter…" />;
   }
 
   return (

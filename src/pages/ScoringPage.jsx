@@ -1,7 +1,7 @@
 // src/pages/ScoringPage.jsx
 import { useEffect, useMemo, useState } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { doc, getDoc, setDoc, db } from "../firestoreClient";
+import SkeletonLoader from "../components/SkeletonLoader";
 import { getMemberName, getMemberPhone } from "../utils/memberFields";
 import {
   getLastThreeCompleteMonthsRange,
@@ -94,9 +94,7 @@ export default function ScoringPage({ memberRecords = [], membersLoading = false
   }, [taggingRows]);
 
   if (membersLoading || targetLoading) {
-    return (
-      <div style={{ padding: 32, color: "#64748b" }}>Loading scoring data…</div>
-    );
+    return <SkeletonLoader rows={6} fullPage label="Loading scoring data…" />;
   }
 
   return (

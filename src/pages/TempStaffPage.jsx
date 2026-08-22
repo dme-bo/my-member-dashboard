@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   collection,
+  db,
   query,
   onSnapshot,
   addDoc,
@@ -9,9 +10,9 @@ import {
   orderBy,
   serverTimestamp,
   Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+} from "../firestoreClient";
 import * as XLSX from "xlsx";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 export default function TempStaffPage() {
   const [selectedMember, setSelectedMember] = useState(null);
@@ -63,6 +64,16 @@ export default function TempStaffPage() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
+  // Both listeners below poll a full collection every 10s (see firestoreClient.js's
+  // onSnapshot). Their queries don't depend on viewMode, so a ref (rather than a
+  // [viewMode] dependency) lets the "which tab is loading" check stay current
+  // without tearing down and resubscribing (== an extra full refetch of both
+  // collections) on every tab toggle.
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
   // Fetch TCS Applications
   useEffect(() => {
     const q = query(collection(db, "tcsusersmaster"));
@@ -71,7 +82,7 @@ export default function TempStaffPage() {
       (snapshot) => {
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data(), type: "application" }));
         setMembersData(data);
-        if (viewMode === "applications") setLoading(false);
+        if (viewModeRef.current === "applications") setLoading(false);
       },
       (err) => {
         console.error("Firestore Error (applications):", err);
@@ -79,7 +90,7 @@ export default function TempStaffPage() {
       }
     );
     return () => unsubscribe();
-  }, [viewMode]);
+  }, []);
 
   // Fetch Coordinators
   useEffect(() => {
@@ -89,7 +100,7 @@ export default function TempStaffPage() {
       (snapshot) => {
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data(), type: "coordinator" }));
         setCoordinatorsData(data);
-        if (viewMode === "coordinators") setLoading(false);
+        if (viewModeRef.current === "coordinators") setLoading(false);
       },
       (err) => {
         console.error("Firestore Error (coordinators):", err);
@@ -97,7 +108,7 @@ export default function TempStaffPage() {
       }
     );
     return () => unsubscribe();
-  }, [viewMode]);
+  }, []);
 
   // Current data
   const currentData = viewMode === "applications" ? membersData : coordinatorsData;
@@ -400,9 +411,11 @@ export default function TempStaffPage() {
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", width: "100%",padding: "60px", textAlign: "center", fontSize: "18px", boxSizing: "border-box" }}>
-        Loading {viewMode === "applications" ? "TCS Applications" : "Coordinators"}...
-      </div>
+      <SkeletonLoader
+        rows={8}
+        fullPage
+        label={`Loading ${viewMode === "applications" ? "TCS Applications" : "Coordinators"}…`}
+      />
     );
   }
 

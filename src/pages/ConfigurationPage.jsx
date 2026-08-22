@@ -1,8 +1,8 @@
 // src/pages/ConfigurationPage.jsx
 import { useEffect, useState } from "react";
 import { FaTags, FaPlus, FaTrashAlt } from "react-icons/fa";
-import { collection, deleteDoc, doc, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, db, deleteDoc, doc, getDocs, setDoc, serverTimestamp } from "../firestoreClient";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 const SECTIONS = [{ id: "tags", label: "Add Tags", icon: FaTags }];
 
@@ -24,25 +24,32 @@ function TagsSection() {
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState("");
 
-  const loadTags = async () => {
-    setLoading(true);
-    try {
-      const snapshot = await getDocs(tagsCollectionRef());
-      const rows = snapshot.docs
-        .map((tagDoc) => ({ id: tagDoc.id, name: normalizeTagLabel({ id: tagDoc.id, ...tagDoc.data() }) }))
-        .filter((tag) => tag.name)
-        .sort((a, b) => a.name.localeCompare(b.name));
-      setTags(rows);
-    } catch (err) {
-      console.error("Error loading tags:", err);
-      setError("Failed to load tags.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let cancelled = false;
+
+    const loadTags = async () => {
+      setLoading(true);
+      try {
+        const snapshot = await getDocs(tagsCollectionRef());
+        if (cancelled) return;
+        const rows = snapshot.docs
+          .map((tagDoc) => ({ id: tagDoc.id, name: normalizeTagLabel({ id: tagDoc.id, ...tagDoc.data() }) }))
+          .filter((tag) => tag.name)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setTags(rows);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Error loading tags:", err);
+        setError("Failed to load tags.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
     loadTags();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleAddTag = async () => {
@@ -161,7 +168,7 @@ function TagsSection() {
         </div>
 
         {loading ? (
-          <div style={{ fontSize: "13px", color: "#94a3b8" }}>Loading tags...</div>
+          <SkeletonLoader rows={3} compact />
         ) : tags.length === 0 ? (
           <div style={{ fontSize: "13px", color: "#94a3b8" }}>No tags added yet.</div>
         ) : (

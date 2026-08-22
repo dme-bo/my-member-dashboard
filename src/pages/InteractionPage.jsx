@@ -1,9 +1,9 @@
 // src/pages/InteractionPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { FaTimes, FaPlus, FaExclamationTriangle, FaRegThumbsUp, FaCommentDots, FaMinusCircle } from "react-icons/fa";
-import { collection, collectionGroup, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, collectionGroup, db, addDoc, getDocs, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail, getMemberCategory } from "../utils/memberFields";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 const INTERACTION_TYPES = ["Lead or Project Related", "General"];
 const INTERACTION_RATINGS = ["Good", "Bad", "Neutral"];
@@ -45,6 +45,14 @@ const formatDateShort = (date) => {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+// getDocs(collectionGroup(db, "interactions")) below scans every user's
+// interactions subcollection — a full scan across ~12k users. React Router
+// unmounts this page on navigation, so without a cache every trip back here
+// re-ran that scan from scratch. A short TTL cache lets same-session revisits
+// reuse the last result (matches the pattern applied to MemberListPage.jsx).
+const INTERACTIONS_CACHE_TTL_MS = 60_000;
+let interactionsCache = null; // { timestamp, rows }
+
 export default function InteractionPage({ memberRecords = [], membersLoading = false }) {
   const [allInteractions, setAllInteractions] = useState([]);
   const [loadingInteractions, setLoadingInteractions] = useState(true);
@@ -65,6 +73,11 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
     const loadInteractions = async () => {
       setLoadingInteractions(true);
       try {
+        if (interactionsCache && Date.now() - interactionsCache.timestamp < INTERACTIONS_CACHE_TTL_MS) {
+          setAllInteractions(interactionsCache.rows);
+          return;
+        }
+
         const snapshot = await getDocs(collectionGroup(db, "interactions"));
         if (cancelled) return;
 
@@ -94,6 +107,7 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           .filter(Boolean)
           .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
 
+        interactionsCache = { timestamp: Date.now(), rows };
         setAllInteractions(rows);
       } catch (error) {
         console.error("Error loading escalations:", error);
@@ -239,23 +253,22 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
         createdBy: "admin",
       });
 
-      setAllInteractions((prev) => [
-        {
-          id: docRef.id,
-          memberId: selectedMember.id,
-          memberName: getMemberName(selectedMember),
-          direction: form.direction,
-          spocName: form.spocName.trim(),
-          interactionType: form.interactionType,
-          leadOrProjectName,
-          rating: form.rating,
-          category: form.category,
-          mode: form.mode,
-          notes: form.details.trim(),
-          createdAt: new Date(),
-        },
-        ...prev,
-      ]);
+      const newRow = {
+        id: docRef.id,
+        memberId: selectedMember.id,
+        memberName: getMemberName(selectedMember),
+        direction: form.direction,
+        spocName: form.spocName.trim(),
+        interactionType: form.interactionType,
+        leadOrProjectName,
+        rating: form.rating,
+        category: form.category,
+        mode: form.mode,
+        notes: form.details.trim(),
+        createdAt: new Date(),
+      };
+      setAllInteractions((prev) => [newRow, ...prev]);
+      if (interactionsCache) interactionsCache.rows = [newRow, ...interactionsCache.rows];
 
       showToast(`Interaction with ${getMemberName(selectedMember)} saved successfully!`, "success");
       closeAddModal();
@@ -676,7 +689,7 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
         <h3>Interactions ({filteredInteractions.length})</h3>
 
         {loadingInteractions ? (
-          <div className="escalation-empty">Loading interactions...</div>
+          <SkeletonLoader rows={5} label="Loading interactions…" />
         ) : filteredInteractions.length === 0 ? (
           <div className="escalation-empty">No escalations logged yet.</div>
         ) : (

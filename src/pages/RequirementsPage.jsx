@@ -16,18 +16,18 @@ import {
 import {
   collection,
   collectionGroup,
+  db,
   getDocs,
   query,
   onSnapshot,
   addDoc,
   serverTimestamp,
-  where,
   deleteDoc,
   doc,
-} from "firebase/firestore";
-import { db } from "../firebase";
+} from "../firestoreClient";
 import Papa from "papaparse";
 import { normalizeMemberRecord, getMemberCategory } from "../utils/memberFields";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 export default function RequirementsPage({ memberRecords: propMembers = [], membersLoading: propLoading = false }) {
   const [requirementsData, setRequirementsData] = useState([]);
@@ -62,7 +62,6 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const [applicantCounts, setApplicantCounts] = useState({});
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
-  const [allocatedMembers, setAllocatedMembers] = useState([]);
 
   // Member filters
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
@@ -233,22 +232,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     return () => unsubscribe();
   }, []);
 
-  /* FETCH ALLOCATED MEMBERS FOR SELECTED REQ */
-  useEffect(() => {
-    if (!selectedReq) {
-      setAllocatedMembers([]);
-      return;
-    }
-    const allocQuery = query(collection(db, "allocations"), where("jobId", "==", selectedReq.id));
-    const unsubscribe = onSnapshot(allocQuery, (snapshot) => {
-      const alloc = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setAllocatedMembers(alloc);
-    });
-    return () => unsubscribe();
-  }, [selectedReq]);
+  /* ALLOCATED MEMBERS FOR SELECTED REQ — derived from allAllocations above,
+     which already polls every allocation. A second onSnapshot here just for
+     this subset duplicated that same full/filtered read every 10s for no new
+     data, so it's filtered client-side instead. */
+  const allocatedMembers = useMemo(() => {
+    if (!selectedReq) return [];
+    return allAllocations.filter((alloc) => alloc.jobId === selectedReq.id);
+  }, [allAllocations, selectedReq]);
 
   /* FETCH MEMBERS — use pre-loaded data from App.jsx if available, otherwise fetch own copy */
   useEffect(() => {
@@ -572,11 +563,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   };
 
   if (loading) {
-    return (
-      <div style={{ height: "100vh", width: "87vw", padding: "60px", textAlign: "center", fontSize: "18px" }}>
-        Loading Requirements...
-      </div>
-    );
+    return <SkeletonLoader rows={6} fullPage label="Loading Requirements…" />;
   }
 
   if (error) {
@@ -2313,10 +2300,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               {/* Left: Applicant list */}
               <div style={{ width: selectedApplicant ? "340px" : "100%", flexShrink: 0, borderRight: selectedApplicant ? "1px solid #e5e7eb" : "none", overflowY: "auto", background: "#f8fafc" }}>
                 {applicantsLoading ? (
-                  <div style={{ padding: "48px", textAlign: "center", color: "#64748b" }}>
-                    <div style={{ width: "32px", height: "32px", border: "3px solid #e3f2fd", borderTopColor: "#1976d2", borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 12px" }} />
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                    Loading applicants…
+                  <div style={{ padding: "24px" }}>
+                    <SkeletonLoader rows={4} compact label="Loading applicants…" />
                   </div>
                 ) : applicants.length === 0 ? (
                   <div style={{ padding: "48px", textAlign: "center", color: "#9ca3af" }}>

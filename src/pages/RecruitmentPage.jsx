@@ -2,15 +2,16 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   collection,
+  db,
   getDocs,
   query,
   orderBy,
   addDoc,
   serverTimestamp,
   Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+} from "../firestoreClient";
 import * as XLSX from "xlsx";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState([]);
@@ -237,6 +238,10 @@ export default function RecruitmentPage() {
     return values.includes(filterValue);
   };
 
+  // Wrapped in useMemo: this re-filters+re-sorts the full candidate list, and
+  // without memoization it re-ran on every render — including every keystroke
+  // typed into the detail modal's notes field — causing visible input lag.
+  const filteredCandidates = useMemo(() => {
   let filteredCandidates = candidates.filter((c) => {
     // Handle multi-select arrays
     if (filters.city && filters.city !== "All") {
@@ -287,6 +292,9 @@ export default function RecruitmentPage() {
     if (nameB === "") return -1;
     return nameA.toLowerCase().localeCompare(nameB.toLowerCase());
   });
+
+  return filteredCandidates;
+  }, [candidates, filters, searchTerm]);
 
   // Pagination
   const totalItems = filteredCandidates.length;
@@ -507,8 +515,8 @@ export default function RecruitmentPage() {
       <div className="content-with-sidebar">
         <div className="table-container">
           {loading ? (
-            <div style={{ height: "100vh",width: "100%",padding: "60px", textAlign: "center", fontSize: "18px", boxSizing: "border-box" }}>
-              Loading candidates...
+            <div style={{ padding: "24px" }}>
+              <SkeletonLoader rows={8} label="Loading candidates…" />
             </div>
           ) : (
             <>

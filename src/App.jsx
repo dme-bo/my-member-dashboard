@@ -3,25 +3,26 @@ import React, { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import {
   collection,
+  db,
   documentId,
   getDocs,
-  getFirestore,
   limit,
   orderBy,
   query,
   startAfter,
-} from "firebase/firestore";
+} from "./firestoreClient";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MemberDetailModal from "./components/MemberDetailModal";
 import ErrorBoundary from "./components/ErrorBoundary";
+import SkeletonLoader from "./components/SkeletonLoader";
 import { normalizeMemberRecord } from "./utils/memberFields";
 import { membersData } from "./data/membersData";
 import { useFilters } from "./hooks/useFilters";
 import "./App.css";
+import DashboardPage from "./pages/DashboardPage";
 
-const DashboardPage       = lazy(() => import("./pages/DashboardPage"));
 const MemberListPage      = lazy(() => import("./pages/MemberListPage"));
 const MemberLocationPage  = lazy(() => import("./pages/MemberLocationPage"));
 const TempStaffPage       = lazy(() => import("./pages/TempStaffPage"));
@@ -39,30 +40,9 @@ const TagUploadPage       = lazy(() => import("./pages/TagUploadPage"));
 
 const preloadMemberListPage = () => import("./pages/MemberListPage");
 
-// Lightweight spinner shown while a page chunk is downloading
+// Shown while a page chunk is downloading
 function PageLoadingSpinner() {
-  return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      height: "calc(100vh - 56px)",
-      flexDirection: "column",
-      gap: "14px",
-      background: "#f5f7fa",
-    }}>
-      <div style={{
-        width: "38px",
-        height: "38px",
-        border: "3px solid #e3f2fd",
-        borderTopColor: "#1976d2",
-        borderRadius: "50%",
-        animation: "navSpin 0.7s linear infinite",
-      }} />
-      <span style={{ color: "#64748b", fontSize: "13px", fontWeight: 500 }}>Loading…</span>
-      <style>{`@keyframes navSpin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
+  return <SkeletonLoader rows={6} fullPage label="Loading…" />;
 }
 
 // ------------------------------------------------------------------
@@ -89,7 +69,6 @@ function Layout() {
 
     const loadMembers = async () => {
       try {
-        const db   = getFirestore();
         let lastDoc = null;
         const accumulated = [];
 
@@ -107,19 +86,13 @@ function Layout() {
             accumulated.push({ id: docSnap.id, ...normalizeMemberRecord(docSnap.data()) });
           }
 
-          // After first chunk: immediately show data and clear loading state
-          if (lastDoc === null) {
-            setMemberRecords(accumulated.slice());
-            setMembersLoading(false);
-          }
+          // Show data after every chunk (not just the first) so the count
+          // climbs progressively instead of jumping once at the very end,
+          // and clear the loading state as soon as the first chunk lands.
+          setMemberRecords(accumulated.slice());
+          if (lastDoc === null) setMembersLoading(false);
 
-          if (snapshot.docs.length < MEMBER_CHUNK) {
-            // Last page — final update (only needed if more than one chunk)
-            if (accumulated.length > MEMBER_CHUNK) {
-              setMemberRecords(accumulated.slice());
-            }
-            break;
-          }
+          if (snapshot.docs.length < MEMBER_CHUNK) break;
 
           lastDoc = snapshot.docs[snapshot.docs.length - 1];
         }
@@ -253,8 +226,22 @@ function Layout() {
                 </ErrorBoundary>
               }
             />
-            <Route path="/regimental-centers" element={<ErrorBoundary><RegimentalCenterPage /></ErrorBoundary>} />
-            <Route path="/training" element={<ErrorBoundary><TrainingPage /></ErrorBoundary>} />
+            <Route
+              path="/regimental-centers"
+              element={
+                <ErrorBoundary>
+                  <RegimentalCenterPage memberRecords={memberRecords} membersLoading={membersLoading} />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/training"
+              element={
+                <ErrorBoundary>
+                  <TrainingPage memberRecords={memberRecords} membersLoading={membersLoading} />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/configuration" element={<ErrorBoundary><ConfigurationPage /></ErrorBoundary>} />
             <Route path="/newsletter"    element={<ErrorBoundary><NewsLetterPage /></ErrorBoundary>} />
             <Route path="/partneragent"  element={<ErrorBoundary><PartnerAgentList /></ErrorBoundary>} />

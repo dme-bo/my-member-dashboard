@@ -1,9 +1,9 @@
 // src/pages/RegimentalCenterPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { FaPlus, FaTimes, FaDatabase, FaSearch, FaTag } from "react-icons/fa";
-import { collection, addDoc, doc, getDocs, updateDoc, writeBatch, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, db, addDoc, doc, getDocs, updateDoc, writeBatch, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, parseMemberSkills } from "../utils/memberFields";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 const REGIMENTAL_CENTRES_SEED = [
   { center: "Grenadiers Regimental Centre", city: "Jabalpur, Madhya Pradesh", regiment: "The Grenadiers" },
@@ -135,7 +135,7 @@ const CATEGORIES = [
 const createEmptyForm = (category) =>
   category.columns.reduce((acc, col) => ({ ...acc, [col.key]: "" }), {});
 
-export default function RegimentalCenterPage() {
+export default function RegimentalCenterPage({ memberRecords = [], membersLoading: membersLoadingProp = false }) {
   const [activeCategoryKey, setActiveCategoryKey] = useState(CATEGORIES[0].key);
   const activeCategory = CATEGORIES.find((c) => c.key === activeCategoryKey);
 
@@ -151,10 +151,11 @@ export default function RegimentalCenterPage() {
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Tag-members modal
+  // Tag-members modal — reuses the ~12k-doc "users" list App.jsx already
+  // loads once at the app shell level instead of re-fetching it here.
   const [tagModalItem, setTagModalItem] = useState(null);
-  const [allMembers, setAllMembers] = useState([]);
-  const [membersLoading, setMembersLoading] = useState(false);
+  const allMembers = memberRecords;
+  const membersLoading = membersLoadingProp;
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [tagSaving, setTagSaving] = useState(false);
@@ -280,24 +281,10 @@ export default function RegimentalCenterPage() {
   };
 
   // ------------------- Tag members to a centre/institution -------------------
-  const openTagModal = async (item) => {
+  const openTagModal = (item) => {
     setTagModalItem(item);
     setSelectedMemberIds(item.taggedMemberIds || []);
     setMemberSearchTerm("");
-
-    if (allMembers.length === 0) {
-      setMembersLoading(true);
-      try {
-        const snapshot = await getDocs(collection(db, "users"));
-        const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-        setAllMembers(rows);
-      } catch (error) {
-        console.error("Error loading members:", error);
-        showToast("Failed to load members list.", "error");
-      } finally {
-        setMembersLoading(false);
-      }
-    }
   };
 
   const closeTagModal = () => {
@@ -710,7 +697,7 @@ export default function RegimentalCenterPage() {
             <h3>{activeCategory.label} ({filteredItems.length})</h3>
 
             {loading ? (
-              <div className="regimental-empty">Loading {activeCategory.label.toLowerCase()}...</div>
+              <SkeletonLoader rows={5} label={`Loading ${activeCategory.label.toLowerCase()}…`} />
             ) : items.length === 0 ? (
               <div className="regimental-empty">No {activeCategory.label.toLowerCase()} added yet.</div>
             ) : filteredItems.length === 0 ? (
@@ -812,7 +799,7 @@ export default function RegimentalCenterPage() {
 
               <div className="regimental-member-list">
                 {membersLoading ? (
-                  <div className="regimental-empty">Loading members...</div>
+                  <SkeletonLoader rows={3} compact label="Loading members…" />
                 ) : filteredMembersForTagging.length === 0 ? (
                   <div className="regimental-empty">No members match your search.</div>
                 ) : (

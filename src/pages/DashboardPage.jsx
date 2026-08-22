@@ -13,6 +13,7 @@ import { Chart } from 'react-google-charts';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import DualRangeSlider from '../components/DualRangeSlider';
+import SkeletonLoader from '../components/SkeletonLoader';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { parseMemberDate } from '../utils/memberFields';
 
@@ -270,6 +271,14 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     };
   }, [filteredMembers, loading]);
 
+  // react-google-charts treats any new `data` array reference as new data and
+  // does a full SVG re-render of the India map, so this needs to be memoized
+  // rather than built inline in JSX on every render.
+  const geoChartData = useMemo(() => {
+    if (!analytics) return [['State', 'Members']];
+    return [['State', 'Members'], ...Object.entries(analytics.stateCounts)];
+  }, [analytics]);
+
   const registrationAnalytics = useMemo(() => {
     if (loading || !filteredMembersNoDateRange.length) return null;
 
@@ -351,43 +360,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const barOptions = BAR_CHART_OPTIONS;
 
   if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", width: "100%", padding: "20px", boxSizing: "border-box" }}>
-        <div style={{
-          width: "100%",
-          flex: "1 1 auto",
-          minHeight: "calc(100vh - 124px)",
-          background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-          borderRadius: "24px",
-          boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-          border: "1px solid rgba(148, 163, 184, 0.18)",
-          padding: "24px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "flex-start",
-          alignItems: "stretch",
-          gap: "16px",
-          boxSizing: "border-box",
-        }}>
-          <div style={{
-            height: "70px",
-            borderRadius: "18px",
-            background: "linear-gradient(90deg, #e2e8f0 0%, #f8fafc 50%, #e2e8f0 100%)",
-          }} />
-          <div style={{ color: "#475569", fontWeight: 600, fontSize: "18px", textAlign: "center" }}>Loading Dashboard ...</div>
-          <div style={{ width: "100%", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "16px" }}>
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} style={{ height: "128px", borderRadius: "18px", background: "#eef2f7" }} />
-            ))}
-          </div>
-          <div style={{ width: "100%", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} style={{ minHeight: "260px", borderRadius: "18px", background: "#eef2f7" }} />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <SkeletonLoader rows={8} fullPage label="Loading Dashboard…" />;
   }
 
   return (
@@ -1008,7 +981,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                 <div className="chart-container geo">
                   <Chart
                     chartType="GeoChart"
-                    data={[['State', 'Members'], ...Object.entries(analytics.stateCounts).map(([state, count]) => [state, count])]}
+                    data={geoChartData}
                     options={{
                       region: 'IN',
                       resolution: 'provinces',

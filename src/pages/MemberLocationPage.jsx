@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { FaMapMarkedAlt, FaSpinner, FaDirections, FaTimes, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
+import { FaMapMarkedAlt, FaDirections, FaTimes, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
 import { getMemberName, getMemberPhone, getMemberEmail, parseMemberLatLong, pickMemberText } from "../utils/memberFields";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
@@ -1400,40 +1401,8 @@ export default function MemberLocationPage({ memberRecords = [] }) {
 
         {mapLoading && !mapError && (
             <div className="loading-card">
-              <div className="loading-inner">
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
-                  <FaSpinner size={38} color="#2563eb" style={{ animation: "spin 1s linear infinite", flex: "0 0 auto" }} />
-                  <div style={{ flex: "1 1 auto" }}>
-                    <div style={{
-                      height: "18px",
-                      width: "42%",
-                      marginBottom: "10px",
-                      borderRadius: "999px",
-                      background: "#dbeafe",
-                    }} />
-                    <div style={{
-                      height: "12px",
-                      width: "78%",
-                      marginBottom: "8px",
-                      borderRadius: "999px",
-                      background: "#e2e8f0",
-                    }} />
-                    <div style={{
-                      height: "12px",
-                      width: "64%",
-                      borderRadius: "999px",
-                      background: "#eef2f7",
-                    }} />
-                  </div>
-                </div>
-                <div style={{
-                  width: "100%",
-                  height: "min(58vh, 520px)",
-                  borderRadius: "20px",
-                  background: "linear-gradient(135deg, #eef2f7 0%, #f8fafc 45%, #e2e8f0 100%)",
-                  border: "1px solid rgba(148, 163, 184, 0.16)",
-                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-                }} />
+              <div className="loading-inner" style={{ width: "min(420px, 100%)" }}>
+                <SkeletonLoader rows={5} label="Loading map…" />
               </div>
             </div>
           )}

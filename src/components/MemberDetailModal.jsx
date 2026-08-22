@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   collection,
+  db,
   addDoc,
   getDocs,
   query,
@@ -9,44 +10,9 @@ import {
   serverTimestamp,
   Timestamp,
   where,
-} from "firebase/firestore";
-import { db } from "../firebase";
+} from "../firestoreClient";
 import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberCategory, parseMemberDate } from "../utils/memberFields";
-
-function SkeletonLoader({ rows = 4, compact = false }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: compact ? "10px" : "14px", padding: compact ? "8px 0" : "16px 0" }}>
-      <style>{`
-        @keyframes skeletonPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.45; }
-        }
-      `}</style>
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <div style={{
-            height: compact ? "12px" : "14px",
-            width: `${60 + (i % 3) * 15}%`,
-            borderRadius: "6px",
-            background: "#e2e8f0",
-            animation: "skeletonPulse 1.4s ease-in-out infinite",
-            animationDelay: `${i * 0.1}s`,
-          }} />
-          {!compact && (
-            <div style={{
-              height: "10px",
-              width: `${40 + (i % 4) * 10}%`,
-              borderRadius: "6px",
-              background: "#eef2f7",
-              animation: "skeletonPulse 1.4s ease-in-out infinite",
-              animationDelay: `${i * 0.1 + 0.07}s`,
-            }} />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
+import SkeletonLoader from "./SkeletonLoader";
 
 const RATING_TYPES = {
   workRelated: "work_related",
@@ -93,6 +59,9 @@ export default function MemberDetailModal({ member, onClose }) {
   // State for BO Journey employment status
   const [currentEmployment, setCurrentEmployment] = useState(null); // null | "TCS" | { name: string }
   const [employmentLoading, setEmploymentLoading] = useState(false);
+
+  // BO employees — used to populate the "Logged By" / "Rated By" dropdowns
+  const [boEmployees, setBoEmployees] = useState([]);
 
   const normalizedMember = normalizeMemberRecord(member);
   const fullName = getMemberName(normalizedMember) || "N/A";
@@ -293,18 +262,28 @@ export default function MemberDetailModal({ member, onClose }) {
     const fields = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
     const phoneCandidates = uniquePhoneCandidates(phoneNumber);
 
-    for (const collectionName of names) {
-      for (const fieldName of fields) {
-        for (const candidate of phoneCandidates) {
-          const ref = collection(db, collectionName);
-          const snapshot = await getDocs(query(ref, where(fieldName, "==", candidate)));
-          if (!snapshot.empty) return snapshot.docs[0].data();
-        }
-      }
+    // Every (collection x field x phone-candidate) combination used to be queried
+    // one at a time with `await` in a loop — up to ~70 sequential round trips to
+    // /api/firestore before even reaching the fallback scans below, which is why
+    // opening "BO Journey" could hang for many seconds. Firing them together and
+    // taking the first hit turns that into one parallel batch.
+    const exactMatches = await Promise.all(
+      names.flatMap((collectionName) =>
+        fields.flatMap((fieldName) =>
+          phoneCandidates.map((candidate) =>
+            getDocs(query(collection(db, collectionName), where(fieldName, "==", candidate)))
+          )
+        )
+      )
+    );
+    for (const snapshot of exactMatches) {
+      if (!snapshot.empty) return snapshot.docs[0].data();
     }
 
-    for (const collectionName of names) {
-      const fallbackSnapshot = await getDocs(collection(db, collectionName));
+    const fallbackSnapshots = await Promise.all(
+      names.map((collectionName) => getDocs(collection(db, collectionName)))
+    );
+    for (const fallbackSnapshot of fallbackSnapshots) {
       const matchedDoc = fallbackSnapshot.docs.find((snapDoc) => {
         const data = snapDoc.data() || {};
         return fields.some((fieldName) => {
@@ -465,6 +444,25 @@ export default function MemberDetailModal({ member, onClose }) {
       setRatingDraft(createNewRating());
     }
   }, [activeTab]);
+
+  // Load the BO employee directory once, for the "Logged By" / "Rated By" dropdowns
+  useEffect(() => {
+    const loadBoEmployees = async () => {
+      try {
+        const response = await fetch("/api/hr-employees");
+        if (!response.ok) return;
+        const data = await response.json();
+        setBoEmployees(Array.isArray(data.employees) ? data.employees : []);
+      } catch (error) {
+        console.error("Error loading BO employees:", error);
+      }
+    };
+    void loadBoEmployees();
+  }, []);
+
+  const boEmployeeOptions = boEmployees
+    .map((employee) => `${employee.name}${employee.name && employee.email ? " - " : ""}${employee.email}`)
+    .filter(Boolean);
 
   const addNewNote = () => {
     setNewNotesList([...newNotesList, createNewNote()]);
@@ -900,18 +898,22 @@ export default function MemberDetailModal({ member, onClose }) {
                             </div>
                             <div>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Logged By</label>
-                              <input
-                                type="text"
+                              <select
                                 value={note.loggedBy}
                                 onChange={(e) => updateNewNote(note.id, "loggedBy", e.target.value)}
-                                placeholder="Who is logging this interaction?"
                                 style={{
                                   width: "100%",
                                   padding: "10px",
                                   borderRadius: "6px",
                                   border: "1px solid #d1d5db",
+                                  backgroundColor: "#fff",
                                 }}
-                              />
+                              >
+                                <option value="">Who is logging this interaction?</option>
+                                {boEmployeeOptions.map((option) => (
+                                  <option key={option} value={option}>{option}</option>
+                                ))}
+                              </select>
                             </div>
                           </div>
 
@@ -1280,18 +1282,22 @@ export default function MemberDetailModal({ member, onClose }) {
 
                         <div>
                           <label style={{ fontSize: "13px", color: "#6b7280" }}>Rated By</label>
-                          <input
-                            type="text"
+                          <select
                             value={ratingDraft.ratedBy}
                             onChange={(e) => updateRatingDraft("ratedBy", e.target.value)}
-                            placeholder="Who is giving this rating?"
                             style={{
                               width: "100%",
                               padding: "11px 12px",
                               borderRadius: "8px",
                               border: "1px solid #cbd5e1",
+                              backgroundColor: "#fff",
                             }}
-                          />
+                          >
+                            <option value="">Who is giving this rating?</option>
+                            {boEmployeeOptions.map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
 

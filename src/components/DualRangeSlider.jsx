@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import Slider from "@mui/material/Slider";
 
 export default function DualRangeSlider({
@@ -11,7 +12,18 @@ export default function DualRangeSlider({
   suffix = "",
   className = "",
 }) {
-  const [lowerValue, upperValue] = value;
+  // MUI's Slider onChange fires on every pointer-move tick during a drag, not
+  // just on release. onChange here drives an expensive filter (re-filtering
+  // thousands of member records and redrawing charts/lists), so committing
+  // that on every tick froze the page mid-drag. Track the drag position in
+  // local state for a smooth, responsive thumb + live label, and only call
+  // the parent's onChange once the drag actually ends (onChangeCommitted).
+  const [localValue, setLocalValue] = useState(value);
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const [lowerValue, upperValue] = localValue;
   const safeMin = Number.isFinite(min) ? min : 0;
   const safeMax = Number.isFinite(max) ? max : safeMin + 1;
 
@@ -70,7 +82,8 @@ export default function DualRangeSlider({
           min={safeMin}
           max={safeMax}
           step={step}
-          onChange={(_, nextValue) => onChange(nextValue)}
+          onChange={(_, nextValue) => setLocalValue(nextValue)}
+          onChangeCommitted={(_, nextValue) => onChange(nextValue)}
           valueLabelDisplay="auto"
           disableSwap
           marks={[

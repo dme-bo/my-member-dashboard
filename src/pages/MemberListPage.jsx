@@ -2,10 +2,10 @@
 import React, { useState, useMemo, useEffect, useRef, useTransition, useCallback } from "react";
 import * as ReactWindow from "react-window";
 const List = ReactWindow.FixedSizeList;
-import { collection, collectionGroup, doc, getDocs, query, updateDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, collectionGroup, db, doc, getDocs, query, updateDoc } from "../firestoreClient";
 import DualRangeSlider from "../components/DualRangeSlider";
 import MultiSelectDropdown from "../components/MultiSelectDropdown";
+import SkeletonLoader from "../components/SkeletonLoader";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import DatePicker from "react-datepicker";
@@ -44,6 +44,18 @@ const parseDateBoundary = (value, endOfDay) => {
   const boundary = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00"}`);
   return Number.isNaN(boundary.getTime()) ? null : boundary;
 };
+
+// ─── Module-level cache for this page's supporting fetches ───────────────────
+// projectusersmaster, the full "interactions" collectionGroup, and "tags" are
+// each a full collection scan. React Router unmounts this page on navigation,
+// so without a cache every trip back to /memberlist re-ran all three from
+// scratch — the collectionGroup scan alone touches every user's interactions
+// subcollection. A short in-memory TTL cache lets same-session revisits reuse
+// the last result instead of re-paying that cost.
+const SUPPORTING_DATA_TTL_MS = 60_000;
+let projectLinksCache = null; // { timestamp, phoneToProjects, projectList }
+let ratedMembersCache = null; // { timestamp, ratedIds }
+let tagsCache = null; // { timestamp, tags }
 
 // ─── Virtual list constants ───────────────────────────────────────────────────
 const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 200px";
@@ -222,6 +234,12 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   useEffect(() => {
     const loadProjectLinks = async () => {
       try {
+        if (projectLinksCache && Date.now() - projectLinksCache.timestamp < SUPPORTING_DATA_TTL_MS) {
+          setMemberProjectsByPhone(projectLinksCache.phoneToProjects);
+          setAvailableProjects(projectLinksCache.projectList);
+          return;
+        }
+
         const snapshot = await getDocs(collection(db, "projectusersmaster"));
         const phoneToProjects = {};
         const projectSet = new Set();
@@ -252,8 +270,11 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           phoneToProjects[phone] = Array.from(new Set(phoneToProjects[phone]));
         });
 
+        const projectList = ["All", ...Array.from(projectSet).sort((a, b) => a.localeCompare(b))];
+        projectLinksCache = { timestamp: Date.now(), phoneToProjects, projectList };
+
         setMemberProjectsByPhone(phoneToProjects);
-        setAvailableProjects(["All", ...Array.from(projectSet).sort((a, b) => a.localeCompare(b))]);
+        setAvailableProjects(projectList);
       } catch (error) {
         console.error("Error loading project links:", error);
       }
@@ -265,6 +286,11 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   useEffect(() => {
     const loadRatedMembers = async () => {
       try {
+        if (ratedMembersCache && Date.now() - ratedMembersCache.timestamp < SUPPORTING_DATA_TTL_MS) {
+          setRatedMemberIds(ratedMembersCache.ratedIds);
+          return;
+        }
+
         const snapshot = await getDocs(query(collectionGroup(db, "interactions")));
         const ratedIds = new Set();
 
@@ -280,6 +306,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           if (userId) ratedIds.add(userId);
         });
 
+        ratedMembersCache = { timestamp: Date.now(), ratedIds };
         setRatedMemberIds(ratedIds);
       } catch (error) {
         console.error("Error loading rated members:", error);
@@ -464,11 +491,17 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
   useEffect(() => {
     const loadTags = async () => {
+      if (tagsCache && Date.now() - tagsCache.timestamp < SUPPORTING_DATA_TTL_MS) {
+        setAvailableTags(tagsCache.tags);
+        return;
+      }
+
       const snapshot = await getDocs(collection(db, "tags"));
       const tags = snapshot.docs
         .map((tagDoc) => normalizeTagLabel({ id: tagDoc.id, ...tagDoc.data() }))
         .filter(Boolean);
       const uniqueTags = Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b));
+      tagsCache = { timestamp: Date.now(), tags: uniqueTags };
       setAvailableTags(uniqueTags);
     };
 
@@ -891,95 +924,11 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   // Loading state
   if (!isMembersLoaded) {
     return (
-      <div className="member-list-page" style={pageShellStyle}>
-        <style>{`
-          @media (min-width: 768px) {
-            .member-list-page {
-              padding: 36px;
-            }
-          }
-        `}</style>
-        <div style={{
-          width: "100%",
-          backgroundColor: "#fff",
-          borderRadius: "12px",
-          padding: "16px",
-          marginBottom: "20px",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.06)",
-          boxSizing: "border-box",
-        }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
-            <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
-              <div style={{ height: "42px", borderRadius: "8px", background: "#eef2f7" }} />
-            </div>
-            <div style={{ width: "150px", height: "34px", borderRadius: "999px", background: "#dcfce7", marginLeft: "auto" }} />
-            <div style={{ width: "110px", height: "40px", borderRadius: "8px", background: "#eef2f7" }} />
-            <div style={{ width: "110px", height: "40px", borderRadius: "8px", background: "#eef2f7" }} />
-          </div>
-        </div>
-
-        <div style={{
-          width: "100%",
-          height: "70vh",
-          minHeight: "460px",
-          backgroundColor: "#fff",
-          borderRadius: "12px",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.06)",
-          display: "flex",
-          justifyContent: "flex-start",
-          alignItems: "stretch",
-          overflow: "hidden",
-          boxSizing: "border-box",
-        }}>
-          <div style={{ width: "100%", maxWidth: "none", display: "flex", flexDirection: "column", gap: "18px", height: "100%" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "40px", marginBottom: "12px", animation: "spin 1s linear infinite" }}>⏳</div>
-              <p style={{ fontSize: "16px", color: "#666", margin: "0 0 8px" }}>Loading members...</p>
-              <div style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 600 }}>
-                {loadProgress > 0 ? `Loading data ${loadProgress}%` : "Connecting..."}
-              </div>
-            </div>
-            <div style={{
-              width: "100%",
-              display: "grid",
-              gridTemplateColumns: "1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",
-              gap: "10px",
-              marginBottom: "12px",
-            }}>
-              {Array.from({ length: 7 }).map((_, index) => (
-                <div key={index} style={{ height: "16px", borderRadius: "999px", background: "#e2e8f0" }} />
-              ))}
-            </div>
-            <div style={{ width: "100%", display: "grid", gap: "10px" }}>
-              {Array.from({ length: 8 }).map((_, rowIndex) => (
-                <div key={rowIndex} style={{
-                  width: "100%",
-                  display: "grid",
-                  gridTemplateColumns: "1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",
-                  gap: "10px",
-                }}>
-                  {Array.from({ length: 7 }).map((__, cellIndex) => (
-                    <div
-                      key={cellIndex}
-                      style={{
-                        height: "18px",
-                        borderRadius: "999px",
-                        background: cellIndex === 0 ? "#dbeafe" : "#eef2f7",
-                      }}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-            <style>{`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            `}</style>
-          </div>
-        </div>
-      </div>
+      <SkeletonLoader
+        rows={10}
+        fullPage
+        label={loadProgress > 0 ? `Loading members — ${loadProgress}%` : "Loading members…"}
+      />
     );
   }
 

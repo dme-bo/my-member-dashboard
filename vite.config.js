@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import nodemailer from 'nodemailer'
+import { handleFirestoreRequest } from './api/_lib/firestoreHandler.js'
 
 function allocationEmailDevApi() {
   return {
@@ -148,8 +149,97 @@ function whatsappDevApi() {
   }
 }
 
+function hrEmployeesDevApi() {
+  const HR_EMPLOYEES_API_URL = 'https://hr.briskolive.com/api/external/employees'
+
+  return {
+    name: 'hr-employees-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'GET' || req.url !== '/api/hr-employees') {
+          return next()
+        }
+
+        res.setHeader('Content-Type', 'application/json')
+        try {
+          const env = loadEnv(server.config.mode, process.cwd(), '')
+          const apiKey = env.HR_EMPLOYEES_API_KEY
+
+          if (!apiKey) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: 'Missing HR_EMPLOYEES_API_KEY environment variable.' }))
+            return
+          }
+
+          const response = await fetch(HR_EMPLOYEES_API_URL, {
+            method: 'GET',
+            headers: { 'x-api-key': apiKey },
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('HR employees API error (dev):', response.status, errorText)
+            res.statusCode = 502
+            res.end(JSON.stringify({ error: 'Failed to fetch employees from HR API.' }))
+            return
+          }
+
+          const data = await response.json()
+          const rawEmployees = Array.isArray(data) ? data : data?.employees || data?.data || []
+          const employees = rawEmployees
+            .filter((employee) => employee.is_current === true)
+            .map((employee) => ({
+              name: employee.name || employee.full_name || employee.employee_name || '',
+              email: employee.email || employee.email_id || employee.work_email || '',
+            }))
+            .filter((employee) => employee.name || employee.email)
+            .sort((a, b) => a.name.localeCompare(b.name))
+
+          res.statusCode = 200
+          res.end(JSON.stringify({ employees }))
+        } catch (error) {
+          console.error('hr-employees (dev) error:', error)
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: 'Failed to fetch employees.' }))
+        }
+      })
+    },
+  }
+}
+
+function firestoreDevApi() {
+  return {
+    name: 'firestore-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'POST' || req.url !== '/api/firestore') {
+          return next()
+        }
+
+        let rawBody = ''
+        req.on('data', (chunk) => { rawBody += chunk })
+
+        req.on('end', async () => {
+          res.setHeader('Content-Type', 'application/json')
+          try {
+            const body = rawBody ? JSON.parse(rawBody) : {}
+            const env = loadEnv(server.config.mode, process.cwd(), '')
+            const result = await handleFirestoreRequest(body, env)
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (error) {
+            console.error('firestore (dev) error:', error)
+            res.statusCode = error.statusCode || 500
+            res.end(JSON.stringify({ error: error.message || 'Firestore request failed.' }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), allocationEmailDevApi(), whatsappDevApi()],
+  plugins: [react(), allocationEmailDevApi(), whatsappDevApi(), hrEmployeesDevApi(), firestoreDevApi()],
   optimizeDeps: {
     include: ['react-window'],
   },

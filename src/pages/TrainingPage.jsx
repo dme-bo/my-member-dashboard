@@ -1,5 +1,5 @@
 // src/pages/TrainingPage.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaPlus,
   FaTimes,
@@ -18,9 +18,9 @@ import {
   FaSearch,
   FaWhatsapp,
 } from "react-icons/fa";
-import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, db, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail } from "../utils/memberFields";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 const COLLECTION_NAME = "trainingsessions";
 const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
@@ -72,7 +72,7 @@ const formatDateDisplay = (dateStr) => {
 // Trainees are stored as {id, name, phone}; older sessions may still have plain name strings.
 const getTraineeName = (trainee) => (typeof trainee === "string" ? trainee : trainee?.name || "Unknown");
 
-export default function TrainingPage() {
+export default function TrainingPage({ memberRecords = [], membersLoading = false }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -93,8 +93,17 @@ export default function TrainingPage() {
   const [addTraineesSearch, setAddTraineesSearch] = useState("");
   const [savingTrainees, setSavingTrainees] = useState(false);
 
-  // Members list (used to resolve workshop applicant ids to names/phones/emails)
-  const [allMembers, setAllMembers] = useState([]);
+  // Members list (used to resolve workshop applicant ids to names/phones/emails).
+  // Sourced from the ~12k-doc "users" collection App.jsx already loads once at
+  // the app shell level — refs keep ensureMembersLoaded's poll below reading
+  // the latest prop values without re-creating that closure on every render.
+  const allMembers = memberRecords;
+  const memberRecordsRef = useRef(memberRecords);
+  const membersLoadingRef = useRef(membersLoading);
+  useEffect(() => {
+    memberRecordsRef.current = memberRecords;
+    membersLoadingRef.current = membersLoading;
+  }, [memberRecords, membersLoading]);
   const [selectedTrainees, setSelectedTrainees] = useState([]); // [{id, name, phone}] — sourced from workshop applicants
   const [priorConfirmedIds, setPriorConfirmedIds] = useState([]); // trainee ids already sent a WhatsApp confirmation for this session
 
@@ -150,18 +159,15 @@ export default function TrainingPage() {
     loadSessions();
   }, []);
 
-  const ensureMembersLoaded = async () => {
-    if (allMembers.length > 0) return allMembers;
-    try {
-      const snapshot = await getDocs(collection(db, "users"));
-      const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      setAllMembers(rows);
-      return rows;
-    } catch (error) {
-      console.error("Error loading members:", error);
-      showToast("Failed to load members list.", "error");
-      return [];
-    }
+  const ensureMembersLoaded = () => {
+    if (!membersLoadingRef.current) return Promise.resolve(memberRecordsRef.current);
+    return new Promise((resolve) => {
+      const check = () => {
+        if (!membersLoadingRef.current) resolve(memberRecordsRef.current);
+        else setTimeout(check, 200);
+      };
+      check();
+    });
   };
 
   const ensureWorkshopsLoaded = async () => {
@@ -1839,7 +1845,7 @@ Please don't miss it — we look forward to your participation!`;
         <h3>Training Sessions ({filteredSessions.length})</h3>
 
         {loading ? (
-          <div className="training-empty">Loading training sessions...</div>
+          <SkeletonLoader rows={5} label="Loading training sessions…" />
         ) : sessions.length === 0 ? (
           <div className="training-empty">No training sessions added yet.</div>
         ) : filteredSessions.length === 0 ? (
@@ -1953,7 +1959,7 @@ Please don't miss it — we look forward to your participation!`;
         <h3>Workshops ({workshops.length})</h3>
 
         {workshopsLoading ? (
-          <div className="training-empty">Loading workshops...</div>
+          <SkeletonLoader rows={5} label="Loading workshops…" />
         ) : workshops.length === 0 ? (
           <div className="training-empty">No workshops with applicants found.</div>
         ) : (
@@ -2062,7 +2068,7 @@ Please don't miss it — we look forward to your participation!`;
         <h3>Documents Library ({filtereddocuments.length})</h3>
 
         {loading ? (
-          <div className="training-empty">Loading documents...</div>
+          <SkeletonLoader rows={5} label="Loading documents…" />
         ) : alldocuments.length === 0 ? (
           <div className="training-empty">No documents added to any training yet.</div>
         ) : filtereddocuments.length === 0 ? (
@@ -2118,7 +2124,7 @@ Please don't miss it — we look forward to your participation!`;
           <h3>Training History ({filteredHistoryRows.length})</h3>
 
           {loading ? (
-            <div className="training-empty">Loading history...</div>
+            <SkeletonLoader rows={5} label="Loading history…" />
           ) : filteredHistoryRows.length === 0 ? (
             <div className="training-empty">No training history yet.</div>
           ) : (
@@ -2229,7 +2235,7 @@ Please don't miss it — we look forward to your participation!`;
                   </div>
                   <div className="training-attendees-list" style={{ marginBottom: 0 }}>
                     {loadingApplicants ? (
-                      <div className="training-empty">Loading applicants...</div>
+                      <SkeletonLoader rows={3} compact label="Loading applicants…" />
                     ) : selectedTrainees.length === 0 ? (
                       <div className="training-empty">No applicants found for this workshop.</div>
                     ) : (
@@ -2365,7 +2371,7 @@ Please don't miss it — we look forward to your participation!`;
               </div>
               <div className="training-member-list" style={{ maxHeight: "360px" }}>
                 {workshopsLoading ? (
-                  <div className="training-empty">Loading workshops...</div>
+                  <SkeletonLoader rows={3} compact label="Loading workshops…" />
                 ) : filteredWorkshopsForPicker.length === 0 ? (
                   <div className="training-empty">No workshops with applicants found.</div>
                 ) : (

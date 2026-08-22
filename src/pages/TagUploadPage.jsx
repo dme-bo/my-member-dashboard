@@ -1,8 +1,7 @@
 // src/pages/TagUploadPage.jsx
 import { useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import { doc, writeBatch } from "firebase/firestore";
-import { db } from "../firebase";
+import { doc, writeBatch, db } from "../firestoreClient";
 import { FaFileUpload, FaCheckCircle } from "react-icons/fa";
 
 const BATCH_CHUNK_SIZE = 400;

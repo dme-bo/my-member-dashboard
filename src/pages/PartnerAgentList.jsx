@@ -2,15 +2,16 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   collection,
+  db,
   getDocs,
   query,
   orderBy,
   addDoc,
   serverTimestamp,
   Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+} from "../firestoreClient";
 import FilterSidebar from "../components/FilterSidebar";
+import SkeletonLoader from "../components/SkeletonLoader";
 
 export default function PartnerAgentListPage() {
   const [agents, setAgents] = useState([]);
@@ -115,7 +116,10 @@ export default function PartnerAgentListPage() {
     setCurrentPage(1);
   };
 
-  // Filtering Logic
+  // Filtering Logic — wrapped in useMemo: without it, this re-filtered+re-sorted
+  // the full agents list on every render, including every keystroke typed into
+  // the detail modal's notes field, causing visible input lag.
+  const filteredAgents = useMemo(() => {
   let filteredAgents = agents.filter(agent => {
     if (filters.city && agent.city !== filters.city) return false;
     if (filters.district && agent.district !== filters.district) return false;
@@ -142,6 +146,9 @@ export default function PartnerAgentListPage() {
   filteredAgents.sort((a, b) =>
     (a.full_name || "").trim().toLowerCase().localeCompare((b.full_name || "").trim().toLowerCase())
   );
+
+  return filteredAgents;
+  }, [agents, filters, searchTerm]);
 
   // Pagination
   const totalItems = filteredAgents.length;
@@ -322,8 +329,8 @@ export default function PartnerAgentListPage() {
       <div className="content-with-sidebar">
         <div className="table-container">
           {loading ? (
-            <div style={{ padding: "60px", textAlign: "center", fontSize: "18px" }}>
-              Loading agents...
+            <div style={{ padding: "24px" }}>
+              <SkeletonLoader rows={8} label="Loading agents…" />
             </div>
           ) : (
             <>
