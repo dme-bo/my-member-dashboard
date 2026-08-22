@@ -387,6 +387,10 @@ export default function RecruitmentPage() {
     }
   };
 
+  if (loading) {
+    return <SkeletonLoader rows={8} fullPage label="Loading candidates…" />;
+  }
+
   return (
     <div className="member-list-page">
       {/* Header Card with Search, Total Badge, Filters, Export */}
@@ -514,12 +518,7 @@ export default function RecruitmentPage() {
 
       <div className="content-with-sidebar">
         <div className="table-container">
-          {loading ? (
-            <div style={{ padding: "24px" }}>
-              <SkeletonLoader rows={8} label="Loading candidates…" />
-            </div>
-          ) : (
-            <>
+          <>
               <div
                 style={{
                   height: "70vh",
@@ -643,8 +642,7 @@ export default function RecruitmentPage() {
                   </button>
                 </div>
               </div>
-            </>
-          )}
+          </>
         </div>
       </div>
 

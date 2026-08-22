@@ -327,6 +327,10 @@ export default function ProjectsPage() {
 
   const filterData = { filters, handleFilterChange, clearFilters, options };
 
+  if (loading) {
+    return <SkeletonLoader rows={8} fullPage label="Loading applications…" />;
+  }
+
   return (
     <div className="member-list-page">
       {/* Header Card with Search, Total Badge, Filters, Export */}
@@ -453,12 +457,7 @@ export default function ProjectsPage() {
 
       <div className="content-with-sidebar">
         <div className="table-container">
-          {loading ? (
-            <div style={{ padding: "24px" }}>
-              <SkeletonLoader rows={8} label="Loading applications…" />
-            </div>
-          ) : (
-            <>
+          <>
               <div style={{
                 height: "70vh",
                 minHeight: "400px",
@@ -569,8 +568,7 @@ export default function ProjectsPage() {
                   </button>
                 </div>
               </div>
-            </>
-          )}
+          </>
         </div>
       </div>
 
