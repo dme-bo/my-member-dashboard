@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Select, { components } from 'react-select';
 import {
   Page,
@@ -119,6 +119,12 @@ const fetchOpenProjects = async () => {
   return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 };
 
+const fetchScheduledWorkshops = async () => {
+  const q = query(collection(db, 'workshopsmaster'), where('workshop_status', '==', 'Scheduled'));
+  const snap = await getDocs(q);
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+};
+
 const fetchRegionalPartners = async () => {
   const snap = await getDocs(collection(db, 'partneragentusersmaster'));
   const counts = snap.docs.reduce((acc, doc) => {
@@ -230,7 +236,7 @@ const customSelectStyles = {
 
 // ── PDF Document Component (full structure) ────────────────────────────────
 // The document component assembles jobs, projects, partner stats, and config content.
-const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
+const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, content }) => {
   const {
     companyName = 'Brisk Olive Business Solutions Pvt Ltd',
     mainTitle = 'Jobs & Earning Opportunities for Members',
@@ -240,6 +246,7 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
     jobsSection = {},
     tempStaffing = {},
     projectsSection = {},
+    workshopsSection = {},
     regionalPartners: rpSettings = {},
     defence = {},
     footer = {},
@@ -410,6 +417,44 @@ const NewsletterDocument = ({ jobs, projects, regionalPartners, content }) => {
             {images.defenceProject && <Image style={styles.image} src={images.defenceProject} />}
           </View>
 
+          {/* Workshops */}
+          {workshops?.length > 0 && (
+            <View>
+              <Text style={styles.subsectionTitle}>
+                {workshopsSection.title || '6. Upcoming Workshops'}
+              </Text>
+              <Text style={styles.bodyText}>{workshopsSection.intro}</Text>
+              <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                  <Text style={styles.tableCell}>Workshop</Text>
+                  <Text style={styles.tableCell}>Organizer</Text>
+                  <Text style={styles.tableCell}>Location</Text>
+                  <Text style={styles.tableCell}>Date</Text>
+                  <Text style={styles.tableCell}>Fee</Text>
+                </View>
+                {workshops.map((workshop, i) => (
+                  <View key={i} style={styles.tableRow}>
+                    <Text style={styles.tableCell}>{workshop.workshop_title || '-'}</Text>
+                    <Text style={styles.tableCell}>{workshop.workshop_organizer || '-'}</Text>
+                    <Text style={styles.tableCell}>{workshop.workshop_location || '-'}</Text>
+                    <Text style={styles.tableCell}>{workshop.workshop_start_date || '-'}</Text>
+                    <Text style={styles.tableCell}>
+                      {workshop.workshop_fee || workshop.workshop_fee === 0 ? `₹${workshop.workshop_fee}` : '-'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              {workshopsSection.registrationLink && (
+                <Text style={styles.bodyText}>
+                  To register:{' '}
+                  <Link style={styles.link} src={workshopsSection.registrationLink}>
+                    {workshopsSection.registrationLink}
+                  </Link>
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* About Us */}
           <View wrap={false}>
             <View style={{ marginTop: 25, marginBottom: 20 }}>
@@ -490,11 +535,13 @@ const EditableField = ({ label, value, onChange, type = 'text', rows = 4 }) => (
 export default function BriskOliveNewsletterApp() {
   const [jobs, setJobs] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [workshops, setWorkshops] = useState([]);
   const [regionalPartners, setRegionalPartners] = useState([]);
   const [content, setContent] = useState({});
   const [editedContent, setEditedContent] = useState({});
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedProjects, setSelectedProjects] = useState([]);
+  const [selectedWorkshops, setSelectedWorkshops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -507,9 +554,10 @@ export default function BriskOliveNewsletterApp() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [jobsData, projectsData, partnersData, contentData] = await Promise.all([
+        const [jobsData, projectsData, workshopsData, partnersData, contentData] = await Promise.all([
           fetchOpenJobs(),
           fetchOpenProjects(),
+          fetchScheduledWorkshops(),
           fetchRegionalPartners(),
           fetchNewsletterContent(),
         ]);
@@ -529,6 +577,7 @@ export default function BriskOliveNewsletterApp() {
         const fullContent = { ...contentData, images: processedImages };
         setJobs(jobsData);
         setProjects(projectsData);
+        setWorkshops(workshopsData);
         setRegionalPartners(partnersData);
         setContent(fullContent);
         setEditedContent(structuredClone(contentData || {}));
@@ -693,8 +742,41 @@ export default function BriskOliveNewsletterApp() {
     label: `${p.project_company || '?'} • ${p.project_title || 'Project'}`,
   }));
 
-  const filteredJobs = jobs.filter((j) => selectedJobs.some((s) => s.value === j.id));
-  const filteredProjects = projects.filter((p) => selectedProjects.some((s) => s.value === p.id));
+  const workshopOptions = workshops.map((w) => ({
+    value: w.id,
+    label: `${w.workshop_title || 'Workshop'}${w.workshop_start_date ? ' • ' + w.workshop_start_date : ''}`,
+  }));
+
+  // PDFViewer/PDFDownloadLink regenerate the entire PDF whenever the `document`
+  // element's props change reference — without memoizing these, every render
+  // (e.g. the toast auto-dismiss timer, any unrelated state update) produced a
+  // brand-new filtered array, so the preview kept rebuilding itself every couple
+  // of seconds.
+  const filteredJobs = useMemo(
+    () => jobs.filter((j) => selectedJobs.some((s) => s.value === j.id)),
+    [jobs, selectedJobs]
+  );
+  const filteredProjects = useMemo(
+    () => projects.filter((p) => selectedProjects.some((s) => s.value === p.id)),
+    [projects, selectedProjects]
+  );
+  const filteredWorkshops = useMemo(
+    () => workshops.filter((w) => selectedWorkshops.some((s) => s.value === w.id)),
+    [workshops, selectedWorkshops]
+  );
+
+  const newsletterDocumentElement = useMemo(
+    () => (
+      <NewsletterDocument
+        jobs={filteredJobs}
+        projects={filteredProjects}
+        workshops={filteredWorkshops}
+        regionalPartners={regionalPartners}
+        content={content}
+      />
+    ),
+    [filteredJobs, filteredProjects, filteredWorkshops, regionalPartners, content]
+  );
 
     if (loading) {
     return <SkeletonLoader rows={6} fullPage label="Loading Newsletter…" />;
@@ -744,29 +826,31 @@ export default function BriskOliveNewsletterApp() {
             styles={customSelectStyles}
           />
         </div>
+
+        <div className="select-group">
+          <label>Select Workshops ({selectedWorkshops.length}/{workshopOptions.length})</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
+            options={workshopOptions}
+            value={selectedWorkshops}
+            onChange={setSelectedWorkshops}
+            placeholder="Select workshops to include..."
+            styles={customSelectStyles}
+          />
+        </div>
       </div>
 
       <div className="pdf-preview-container">
         <PDFViewer className="pdf-viewer">
-          <NewsletterDocument
-            jobs={filteredJobs}
-            projects={filteredProjects}
-            regionalPartners={regionalPartners}
-            content={content}
-          />
+          {newsletterDocumentElement}
         </PDFViewer>
       </div>
 
       <div className="download-section">
         <PDFDownloadLink
-          document={
-            <NewsletterDocument
-              jobs={filteredJobs}
-              projects={filteredProjects}
-              regionalPartners={regionalPartners}
-              content={content}
-            />
-          }
+          document={newsletterDocumentElement}
           fileName={`Newsletter_${formatNewsletterDate().replace(/ /g, '_')}.pdf`}
         >
           {({ loading }) => (

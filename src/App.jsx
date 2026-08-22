@@ -23,22 +23,49 @@ import { useFilters } from "./hooks/useFilters";
 import "./App.css";
 import DashboardPage from "./pages/DashboardPage";
 
-const MemberListPage      = lazy(() => import("./pages/MemberListPage"));
-const MemberLocationPage  = lazy(() => import("./pages/MemberLocationPage"));
-const TempStaffPage       = lazy(() => import("./pages/TempStaffPage"));
-const RecruitmentPage     = lazy(() => import("./pages/RecruitmentPage"));
-const ProjectsPage        = lazy(() => import("./pages/ProjectsPage"));
-const RequirementsPage    = lazy(() => import("./pages/RequirementsPage"));
-const InteractionPage     = lazy(() => import("./pages/InteractionPage"));
-const RegimentalCenterPage = lazy(() => import("./pages/RegimentalCenterPage"));
-const TrainingPage        = lazy(() => import("./pages/TrainingPage"));
-const ConfigurationPage   = lazy(() => import("./pages/ConfigurationPage"));
-const NewsLetterPage      = lazy(() => import("./pages/NewsLetterPage"));
-const PartnerAgentList    = lazy(() => import("./pages/PartnerAgentList"));
-const ScoringPage         = lazy(() => import("./pages/ScoringPage"));
-const TagUploadPage       = lazy(() => import("./pages/TagUploadPage"));
+// Each lazy chunk is fetched by a content-hashed filename (e.g.
+// "MemberLocationPage-Bz9_153Z.js"). A tab left open across a new Vercel
+// deploy still has the OLD index.html cached, pointing at hashes the new
+// deployment no longer serves; vercel.json's catch-all rewrite then hands
+// back index.html itself for that missing asset, which fails to parse as a
+// JS module ("Failed to fetch dynamically imported module"). Retrying can't
+// fix that — the file is really gone — so the only way out is to reload and
+// pick up the current index.html/hashes. Guard with sessionStorage so a
+// genuinely broken module (not a stale deploy) doesn't reload-loop forever.
+function lazyWithReloadOnStaleChunk(importer) {
+  return lazy(() =>
+    importer().catch((error) => {
+      const key = "chunk-reload-attempted";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+        // Never resolves — the reload is already navigating away.
+        return new Promise(() => {});
+      }
+      throw error;
+    })
+  );
+}
 
-const preloadMemberListPage = () => import("./pages/MemberListPage");
+const MemberListPage      = lazyWithReloadOnStaleChunk(() => import("./pages/MemberListPage"));
+const MemberLocationPage  = lazyWithReloadOnStaleChunk(() => import("./pages/MemberLocationPage"));
+const TempStaffPage       = lazyWithReloadOnStaleChunk(() => import("./pages/TempStaffPage"));
+const RecruitmentPage     = lazyWithReloadOnStaleChunk(() => import("./pages/RecruitmentPage"));
+const ProjectsPage        = lazyWithReloadOnStaleChunk(() => import("./pages/ProjectsPage"));
+const RequirementsPage    = lazyWithReloadOnStaleChunk(() => import("./pages/RequirementsPage"));
+const InteractionPage     = lazyWithReloadOnStaleChunk(() => import("./pages/InteractionPage"));
+const RegimentalCenterPage = lazyWithReloadOnStaleChunk(() => import("./pages/RegimentalCenterPage"));
+const TrainingPage        = lazyWithReloadOnStaleChunk(() => import("./pages/TrainingPage"));
+const ConfigurationPage   = lazyWithReloadOnStaleChunk(() => import("./pages/ConfigurationPage"));
+const NewsLetterPage      = lazyWithReloadOnStaleChunk(() => import("./pages/NewsLetterPage"));
+const PartnerAgentList    = lazyWithReloadOnStaleChunk(() => import("./pages/PartnerAgentList"));
+const ScoringPage         = lazyWithReloadOnStaleChunk(() => import("./pages/ScoringPage"));
+const TagUploadPage       = lazyWithReloadOnStaleChunk(() => import("./pages/TagUploadPage"));
+
+// Best-effort prefetch — if it fails (e.g. a stale chunk hash after a new
+// deploy), the actual route render below will catch it and reload, so this
+// just needs to not leave an unhandled rejection in the console.
+const preloadMemberListPage = () => import("./pages/MemberListPage").catch(() => {});
 
 // Shown while a page chunk is downloading
 function PageLoadingSpinner() {
