@@ -62,6 +62,7 @@ export default function MemberDetailModal({ member, onClose }) {
 
   // BO employees — used to populate the "Logged By" / "Rated By" dropdowns
   const [boEmployees, setBoEmployees] = useState([]);
+  const [boEmployeesLoadFailed, setBoEmployeesLoadFailed] = useState(false);
 
   const normalizedMember = normalizeMemberRecord(member);
   const fullName = getMemberName(normalizedMember) || "N/A";
@@ -445,16 +446,23 @@ export default function MemberDetailModal({ member, onClose }) {
     }
   }, [activeTab]);
 
-  // Load the BO employee directory once, for the "Logged By" / "Rated By" dropdowns
+  // Load the BO employee directory once, for the "Logged By" / "Rated By" fields.
+  // The directory is a convenience (autocomplete) — if it fails to load (e.g. the
+  // upstream HR API rejects the configured key), staff must still be able to type
+  // a name by hand rather than being left with an unusable empty dropdown.
   useEffect(() => {
     const loadBoEmployees = async () => {
       try {
         const response = await fetch("/api/hr-employees");
-        if (!response.ok) return;
+        if (!response.ok) {
+          setBoEmployeesLoadFailed(true);
+          return;
+        }
         const data = await response.json();
         setBoEmployees(Array.isArray(data.employees) ? data.employees : []);
       } catch (error) {
         console.error("Error loading BO employees:", error);
+        setBoEmployeesLoadFailed(true);
       }
     };
     void loadBoEmployees();
@@ -612,6 +620,15 @@ export default function MemberDetailModal({ member, onClose }) {
 
   return (
     <>
+      {/* Shared autocomplete source for the "Logged By" / "Rated By" text inputs.
+          Rendered once here (not inside the notes .map()) so both fields — and
+          every note row — reference a single, valid, non-duplicated id. */}
+      <datalist id="bo-employees-datalist">
+        {boEmployeeOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+
       {/* Toast Notification */}
       {toast.show && (
         <div
@@ -898,9 +915,12 @@ export default function MemberDetailModal({ member, onClose }) {
                             </div>
                             <div>
                               <label style={{ fontSize: "13px", color: "#6b7280" }}>Logged By</label>
-                              <select
+                              <input
+                                type="text"
+                                list="bo-employees-datalist"
                                 value={note.loggedBy}
                                 onChange={(e) => updateNewNote(note.id, "loggedBy", e.target.value)}
+                                placeholder="Who is logging this interaction?"
                                 style={{
                                   width: "100%",
                                   padding: "10px",
@@ -908,12 +928,12 @@ export default function MemberDetailModal({ member, onClose }) {
                                   border: "1px solid #d1d5db",
                                   backgroundColor: "#fff",
                                 }}
-                              >
-                                <option value="">Who is logging this interaction?</option>
-                                {boEmployeeOptions.map((option) => (
-                                  <option key={option} value={option}>{option}</option>
-                                ))}
-                              </select>
+                              />
+                              {boEmployeesLoadFailed && (
+                                <div style={{ fontSize: "11px", color: "#b45309", marginTop: "4px" }}>
+                                  Employee directory unavailable — type the name manually.
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -1282,9 +1302,12 @@ export default function MemberDetailModal({ member, onClose }) {
 
                         <div>
                           <label style={{ fontSize: "13px", color: "#6b7280" }}>Rated By</label>
-                          <select
+                          <input
+                            type="text"
+                            list="bo-employees-datalist"
                             value={ratingDraft.ratedBy}
                             onChange={(e) => updateRatingDraft("ratedBy", e.target.value)}
+                            placeholder="Who is giving this rating?"
                             style={{
                               width: "100%",
                               padding: "11px 12px",
@@ -1292,12 +1315,12 @@ export default function MemberDetailModal({ member, onClose }) {
                               border: "1px solid #cbd5e1",
                               backgroundColor: "#fff",
                             }}
-                          >
-                            <option value="">Who is giving this rating?</option>
-                            {boEmployeeOptions.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
-                          </select>
+                          />
+                          {boEmployeesLoadFailed && (
+                            <div style={{ fontSize: "11px", color: "#b45309", marginTop: "4px" }}>
+                              Employee directory unavailable — type the name manually.
+                            </div>
+                          )}
                         </div>
                       </div>
 
