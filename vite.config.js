@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import nodemailer from 'nodemailer'
 import { handleFirestoreRequest } from './api/_lib/firestoreHandler.js'
 
 function allocationEmailDevApi() {
@@ -16,51 +15,31 @@ function allocationEmailDevApi() {
         req.on('data', (chunk) => { rawBody += chunk })
 
         req.on('end', async () => {
+          res.setHeader('Content-Type', 'application/json')
           try {
-            const { to, subject, body } = rawBody ? JSON.parse(rawBody) : {}
-            if (!to || !subject || !body) {
-              res.statusCode = 400
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ error: 'Missing to, subject, or body.' }))
-              return
-            }
-
+            // Delegates to the real handler so dev testing exercises the same
+            // template/formatting logic as production.
             const env = loadEnv(server.config.mode, process.cwd(), '')
-            const gmailUser = env.GMAIL_USER
-            const gmailAppPassword = env.GMAIL_APP_PASSWORD
+            Object.assign(process.env, env)
 
-            res.setHeader('Content-Type', 'application/json')
-
-            if (!gmailUser || !gmailAppPassword) {
-              res.statusCode = 500
-              res.end(JSON.stringify({ error: 'Missing GMAIL_USER or GMAIL_APP_PASSWORD environment variable.' }))
-              return
+            req.body = rawBody ? JSON.parse(rawBody) : {}
+            const { default: handler } = await import('./api/send-allocation-email.js')
+            const shimRes = {
+              statusCode: 200,
+              setHeader: (...args) => res.setHeader(...args),
+              status(code) {
+                this.statusCode = code
+                return this
+              },
+              json(payload) {
+                res.statusCode = this.statusCode
+                res.end(JSON.stringify(payload))
+              },
             }
-
-            const transporter = nodemailer.createTransport({
-              service: 'gmail',
-              auth: { user: gmailUser, pass: gmailAppPassword },
-            })
-
-            await transporter.sendMail({
-              from: `Brisk Olive <${gmailUser}>`,
-              to,
-              subject,
-              text: body,
-              html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${String(body)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;')}</pre>`,
-            })
-
-            res.statusCode = 200
-            res.end(JSON.stringify({ ok: true }))
+            await handler(req, shimRes)
           } catch (error) {
             console.error('send-allocation-email (dev) error:', error)
             res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify({ error: 'Failed to send allocation email.' }))
           }
         })
@@ -207,6 +186,48 @@ function hrEmployeesDevApi() {
   }
 }
 
+function sendFollowupRemindersDevApi() {
+  return {
+    name: 'send-followup-reminders-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url !== '/api/send-followup-reminders') {
+          return next()
+        }
+
+        try {
+          // Reuses the real production handler so dev testing exercises the same
+          // logic; it only needs the loaded env vars visible on process.env since
+          // firebase-admin/nodemailer there read from process.env directly.
+          const env = loadEnv(server.config.mode, process.cwd(), '')
+          Object.assign(process.env, env)
+
+          const { default: handler } = await import('./api/send-followup-reminders.js')
+          const shimRes = {
+            statusCode: 200,
+            setHeader: (...args) => res.setHeader(...args),
+            status(code) {
+              this.statusCode = code
+              return this
+            },
+            json(payload) {
+              res.statusCode = this.statusCode
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify(payload))
+            },
+          }
+          await handler(req, shimRes)
+        } catch (error) {
+          console.error('send-followup-reminders (dev) error:', error)
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Failed to run send-followup-reminders.' }))
+        }
+      })
+    },
+  }
+}
+
 function firestoreDevApi() {
   return {
     name: 'firestore-dev-api',
@@ -239,7 +260,7 @@ function firestoreDevApi() {
 }
 
 export default defineConfig({
-  plugins: [react(), allocationEmailDevApi(), whatsappDevApi(), hrEmployeesDevApi(), firestoreDevApi()],
+  plugins: [react(), allocationEmailDevApi(), whatsappDevApi(), hrEmployeesDevApi(), firestoreDevApi(), sendFollowupRemindersDevApi()],
   optimizeDeps: {
     include: ['react-window'],
   },

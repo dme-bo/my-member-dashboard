@@ -173,23 +173,6 @@ export default function MemberDetailModal({ member, onClose }) {
     referrerName: "",
   });
 
-  const getNoteRatingSummary = (note) => {
-    const ratingType = note.ratingType || RATING_TYPES.notRated;
-
-    if (ratingType === RATING_TYPES.workRelated) {
-      return note.workRating ? `${note.workRating}/5` : "Work related";
-    }
-
-    if (ratingType === RATING_TYPES.boEmployee) {
-      return note.boRating ? `${note.boRating}/5` : "BO employee";
-    }
-
-    if (ratingType === RATING_TYPES.referrer) {
-      return note.referrerRating ? `${note.referrerRating}/5` : "Referrer";
-    }
-
-    return "Not rated yet";
-  };
 
   // Helper: Format date to "27 Dec 2025"
   const formatDateDDMMMYYYY = (dateInput) => {
@@ -472,6 +455,49 @@ export default function MemberDetailModal({ member, onClose }) {
     .map((employee) => `${employee.name}${employee.name && employee.email ? " - " : ""}${employee.email}`)
     .filter(Boolean);
 
+  // "Logged By" is a free-text field backed by a datalist of "Name - email" options,
+  // so a selection carries the email inline; a hand-typed name doesn't. Resolve either
+  // shape back to a real address so we know who to notify/remind.
+  const resolveEmployeeEmail = (loggedByValue) => {
+    const raw = String(loggedByValue || "").trim();
+    if (!raw) return null;
+
+    const inlineEmailMatch = raw.match(/[^\s]+@[^\s]+\.[^\s]+/);
+    if (inlineEmailMatch) return inlineEmailMatch[0];
+
+    const namePart = raw.split(" - ")[0].trim().toLowerCase();
+    const matchedEmployee = boEmployees.find(
+      (employee) => employee.name && employee.name.trim().toLowerCase() === namePart
+    );
+    return matchedEmployee?.email || null;
+  };
+
+  const sendInteractionEmail = async ({ to, note }) => {
+    if (!to) return;
+    try {
+      await fetch("/api/send-allocation-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to,
+          subject: `New Interaction Logged for ${fullName}`,
+          heading: "New Interaction Logged",
+          subheading: fullName,
+          accentColor: "#1976d2",
+          fields: [
+            { label: "Member", value: fullName },
+            { label: "Notes", value: note.notes.trim() || "-" },
+            { label: "Next Action", value: note.nextAction.trim() || "-" },
+            { label: "Follow-up Date", value: note.followUpDate ? formatDateDDMMMYYYY(note.followUpDate) : "-" },
+          ],
+          footerNote: "Brisk Olive Dashboard",
+        }),
+      });
+    } catch (error) {
+      console.error("Error sending interaction email:", error);
+    }
+  };
+
   const addNewNote = () => {
     setNewNotesList([...newNotesList, createNewNote()]);
   };
@@ -542,8 +568,9 @@ export default function MemberDetailModal({ member, onClose }) {
     try {
       const interactionsRef = collection(db, "users", userId, "interactions");
 
-      const savePromises = validNotes.map((note) =>
-        addDoc(interactionsRef, {
+      const savePromises = validNotes.map((note) => {
+        const loggedByEmail = resolveEmployeeEmail(note.loggedBy);
+        return addDoc(interactionsRef, {
           entryType: "note",
           contactPerson: note.contactPerson,
           notes: note.notes.trim(),
@@ -552,12 +579,23 @@ export default function MemberDetailModal({ member, onClose }) {
             ? Timestamp.fromDate(new Date(note.followUpDate + "T00:00:00"))
             : null,
           loggedBy: String(note.loggedBy || "").trim() || "-",
+          loggedByEmail: loggedByEmail || null,
+          reminderSent: false,
           createdAt: serverTimestamp(),
           createdBy: "admin",
-        })
-      );
+        });
+      });
 
       await Promise.all(savePromises);
+
+      // Notify whoever is logged as "Logged By" right away — non-blocking, since a
+      // failed notification email shouldn't undo an already-saved interaction. The
+      // follow-up reminder itself (if a follow-up date was set) is sent later by the
+      // /api/send-followup-reminders cron job, using the loggedByEmail saved above.
+      validNotes.forEach((note) => {
+        const loggedByEmail = resolveEmployeeEmail(note.loggedBy);
+        void sendInteractionEmail({ to: loggedByEmail, note });
+      });
 
       showToast("All notes saved successfully!", "success");
       setNewNotesList([]);
@@ -1135,10 +1173,7 @@ export default function MemberDetailModal({ member, onClose }) {
                             </div>
                           )}
 
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px" }}>
-                            <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                              {getRatingTypeLabel(note.ratingType)}{getNoteRatingSummary(note)}
-                            </div>
+                          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: "16px" }}>
                             <button
                               onClick={() => deleteNewNote(note.id)}
                               style={{

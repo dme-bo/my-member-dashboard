@@ -1,12 +1,5 @@
 import nodemailer from "nodemailer";
-
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+import { renderCardEmail, renderPlainEmail } from "./_lib/emailTemplate.js";
 
 let cachedTransporter = null;
 const getTransporter = () => {
@@ -29,10 +22,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { to, subject, body } = req.body || {};
+    const { to, subject, body, fields, heading, subheading, accentColor, footerNote } = req.body || {};
 
-    if (!to || !subject || !body) {
-      return res.status(400).json({ error: "Missing to, subject, or body." });
+    if (!to || !subject || (!body && !fields)) {
+      return res.status(400).json({ error: "Missing to, subject, or body/fields." });
     }
 
     const gmailUser = process.env.GMAIL_USER;
@@ -44,12 +37,17 @@ export default async function handler(req, res) {
       });
     }
 
+    const textFallback = body || fields.map(({ label, value }) => `${label}: ${value}`).join("\n");
+    const html = Array.isArray(fields)
+      ? renderCardEmail({ heading: heading || subject, subheading, fields, accentColor, footerNote })
+      : renderPlainEmail(body);
+
     await getTransporter().sendMail({
       from: `Brisk Olive <${gmailUser}>`,
       to,
       subject,
-      text: body,
-      html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${escapeHtml(body)}</pre>`,
+      text: textFallback,
+      html,
     });
 
     return res.status(200).json({ ok: true });
