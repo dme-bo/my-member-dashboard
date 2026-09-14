@@ -47,9 +47,13 @@ export default async function handler(req, res) {
     const startOfTomorrow = new Date(startOfToday);
     startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
+    // Deliberately no lower bound: a follow-up date is "due" once it reaches
+    // today, and stays due (an overdue reminder is still worth sending) until
+    // it's actually delivered. A lower bound of "today" would permanently skip
+    // anything set after that day's single daily cron run, since a past date
+    // never again matches a future "today".
     const snapshot = await db
       .collectionGroup("interactions")
-      .where("followUpDate", ">=", startOfToday)
       .where("followUpDate", "<", startOfTomorrow)
       .get();
 
@@ -83,7 +87,7 @@ export default async function handler(req, res) {
             subheading: data.contactPerson || "-",
             fields,
             accentColor: "#f59e0b",
-            footerNote: "You're receiving this because you were logged as \"Logged By\" on this interaction — Brisk Olive Dashboard",
+            footerNote: "Brisk Olive Dashboard",
           }),
         });
         await doc.ref.update({ reminderSent: true });

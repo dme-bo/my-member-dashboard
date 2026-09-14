@@ -181,7 +181,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
           const applicantsSnap = await getDocs(
             collection(db, WORKSHOP_COLLECTION_NAME, docSnap.id, WORKSHOP_APPLICANTS_SUBCOLLECTION)
           );
-          if (applicantsSnap.size === 0) return null;
           return { id: docSnap.id, ...docSnap.data(), applicantCount: applicantsSnap.size };
         })
       );
@@ -2373,7 +2372,7 @@ Please don't miss it — we look forward to your participation!`;
                 {workshopsLoading ? (
                   <SkeletonLoader rows={3} compact label="Loading workshops…" />
                 ) : filteredWorkshopsForPicker.length === 0 ? (
-                  <div className="training-empty">No workshops with applicants found.</div>
+                  <div className="training-empty">No workshops found.</div>
                 ) : (
                   filteredWorkshopsForPicker.map((workshop) => (
                     <div key={workshop.id} className="training-member-row" onClick={() => handlePickWorkshop(workshop)}>
