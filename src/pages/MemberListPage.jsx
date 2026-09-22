@@ -164,8 +164,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const tagsPopoverRef = useRef(null);
   const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
-  const [registrationDateFrom, setRegistrationDateFrom] = useState("");
-  const [registrationDateTo, setRegistrationDateTo] = useState("");
+  // Deep-link support (e.g. from the daily report email): ?from=YYYY-MM-DD&to=YYYY-MM-DD
+  // pre-fills the registration date range, ?tagged=yes pre-selects "Is Tagged? = Yes" below.
+  const [registrationDateFrom, setRegistrationDateFrom] = useState(
+    () => new URLSearchParams(window.location.search).get("from") || ""
+  );
+  const [registrationDateTo, setRegistrationDateTo] = useState(
+    () => new URLSearchParams(window.location.search).get("to") || ""
+  );
   const [ageRange, setAgeRange] = useState([0, 100]);
   const [tagModalMember, setTagModalMember] = useState(null);
   const [availableTags, setAvailableTags] = useState([]);
@@ -182,7 +188,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [tagsPopover, setTagsPopover] = useState(null);
   const [loadProgress, setLoadProgress] = useState(0);
 
-  const [sidebarFilters, setSidebarFilters] = useState({
+  const [sidebarFilters, setSidebarFilters] = useState(() => ({
     Gender: [],
     Category: [],
     Service: [],
@@ -199,8 +205,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     Tags: [],
     "BO Tags": [],
     "Is Rated?": [],
-    "Is Tagged?": [],
-  });
+    "Is Tagged?": new URLSearchParams(window.location.search).get("tagged") === "yes" ? ["Yes"] : [],
+  }));
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
 

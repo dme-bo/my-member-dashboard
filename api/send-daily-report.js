@@ -50,16 +50,20 @@ export default async function handler(req, res) {
     const report = await buildDailyReport(db);
     const todayStr = formatDate(new Date());
 
+    const dashboardUrl = "https://my-member-dashboard.vercel.app/";
+
     const sections = [
       { title: "Members & Regional Partner Overview", table: report.overview },
       { title: "Today's Report", table: report.todaysReport },
-      { title: "Status of Jobs / Projects / TCS", table: report.status },
+      { title: "Status of Jobs / Projects / TCS on Mobile App", table: report.status },
+      { title: "Regional Partner Report", table: report.regionalPartnerReport },
     ];
 
+    const cellText = (cell) => (cell && typeof cell === "object" && cell.linkPath ? `${dashboardUrl.replace(/\/$/, "")}${cell.linkPath}` : cell ?? "");
     const textFallback = sections
       .map(
         ({ title, table }) =>
-          `${title}\n${table.headers.join(" | ")}\n${table.rows.map((r) => r.join(" | ")).join("\n")}`
+          `${title}\n${table.headers.join(" | ")}\n${table.rows.map((r) => r.map(cellText).join(" | ")).join("\n")}`
       )
       .join("\n\n");
 
@@ -70,7 +74,7 @@ export default async function handler(req, res) {
       text: textFallback,
       html: renderDailyReportEmail({
         managerName: "Jainendra Kumar Sachan",
-        dashboardUrl: "https://my-member-dashboard.vercel.app/",
+        dashboardUrl,
         sections,
         queryTeamLabel: "Members",
         signOffName: "Jainendra Kumar Sachan",

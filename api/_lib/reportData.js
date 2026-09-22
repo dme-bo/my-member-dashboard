@@ -118,29 +118,36 @@ async function safe(promise, label, fallback = BLANK) {
   }
 }
 
-// Distinct members with at least one interaction logged today. Needs a
-// COLLECTION_GROUP index on interactions.createdAt that doesn't exist in
-// this project yet — falls back to blank via `safe` until one is created.
+// Distinct members with at least one interaction logged today. A `where` on
+// createdAt here would need a COLLECTION_GROUP index this project doesn't
+// have — the collection is small (low hundreds of docs), so an unfiltered
+// scan + client-side date filter avoids needing that index at all.
 async function countMembersInteractedToday(db, today, tomorrow) {
-  const snapshot = await db
-    .collectionGroup("interactions")
-    .where("createdAt", ">=", today)
-    .where("createdAt", "<", tomorrow)
-    .select()
-    .get();
+  const snapshot = await db.collectionGroup("interactions").select("createdAt").get();
   const memberIds = new Set();
   snapshot.forEach((doc) => {
+    const createdAt = parseLooseDate(doc.data().createdAt);
+    if (!createdAt || createdAt < today || createdAt >= tomorrow) return;
     const userId = doc.ref.parent.parent?.id;
     if (userId) memberIds.add(userId);
   });
   return memberIds.size;
 }
 
-// `taggedAt` is only written going forward (added to the tagging code paths
-// in RegimentalCenterPage/TagUploadPage alongside this report) — historical
-// tagging events have no timestamp, so this starts at 0 and grows from here.
-async function countMembersTaggedToday(db, today, tomorrow) {
-  return countOf(db.collection("users").where("taggedAt", ">=", today).where("taggedAt", "<", tomorrow));
+// Mirrors MemberListPage's "Is Tagged?" filter exactly: a member counts as
+// tagged if `skills`/`Skills` has any non-empty entry. There's no timestamp
+// on tagging anywhere in this data, so this is a running total, not a
+// same-day count — labeled accordingly wherever it's shown.
+async function countMembersTagged(db) {
+  const snapshot = await db.collection("users").select("skills", "Skills").get();
+  let count = 0;
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    const raw = data.skills !== undefined && data.skills !== null && String(data.skills).trim() !== "" ? data.skills : data.Skills;
+    const parsed = Array.isArray(raw) ? raw.map((s) => String(s).trim()).filter(Boolean) : String(raw || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (parsed.length > 0) count += 1;
+  });
+  return count;
 }
 
 // Builds the daily report as a set of grid-table sections: an overview
@@ -157,7 +164,7 @@ export async function buildDailyReport(db) {
     newMembersToday,
     totalPartners,
     newPartnersToday,
-    membersTaggedToday,
+    membersTagged,
     membersInteractedToday,
     workshopsPostedToday,
     communityJobsPostedToday,
@@ -174,7 +181,7 @@ export async function buildDailyReport(db) {
       ),
       "New Regional Partners Today"
     ),
-    safe(countMembersTaggedToday(db, today, tomorrow), "Members Tagged Today"),
+    safe(countMembersTagged(db), "Members Tagged"),
     safe(countMembersInteractedToday(db, today, tomorrow), "Members Interacted Today"),
     safe(countWorkshopsPostedToday(db, today), "Workshops Posted Today"),
     safe(countCommunityJobsPostedToday(db, today), "Community Jobs Posted Today"),
@@ -191,27 +198,45 @@ export async function buildDailyReport(db) {
     rows: [[totalMembers, totalPartners]],
   };
 
+  const link = (linkPath) => ({ linkPath, label: "View" });
+
+  // Deep links: only wired to an actual filter where the target page already
+  // has one (MemberListPage's date range / "Is Tagged?" filter, and our own
+  // Community Jobs page's postedOn filter). The other pages this report
+  // links to (Escalations, Training, Requirements, TCS/Projects/Recruitment)
+  // have no date-based filtering to link into yet, so those still land on
+  // the general page rather than a pre-filtered view.
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+  const todayIso = `${y}-${m}-${d}`;
+
   const todaysReport = {
-    headers: ["Metric", "Count"],
+    headers: ["Metric", "Count", "Link"],
     rows: [
-      ["New Members Added", newMembersToday],
-      ["New Regional Partners Added", newPartnersToday],
-      ["Members Tagged", membersTaggedToday],
-      ["Members Interacted", membersInteractedToday],
-      ["Workshop Posted", workshopsPostedToday],
-      ["Community Job Posted", communityJobsPostedToday],
-      ["CV Recommended", cvRecommendedToday],
+      ["New Members Added", newMembersToday, link(`/memberlist?from=${todayIso}&to=${todayIso}`)],
+      ["New Regional Partners Added", newPartnersToday, link("/partneragent")],
+      ["Members Tagged (Total) ★", membersTagged, link("/memberlist?tagged=yes")],
+      ["Members Interacted", membersInteractedToday, link("/interactions")],
+      ["Workshop Posted", workshopsPostedToday, link("/training")],
+      ["Community Job Posted", communityJobsPostedToday, link(`/community-jobs?postedOn=${todayIso}`)],
+      ["CV Recommended", cvRecommendedToday, link("/requirements")],
     ],
   };
 
   const status = {
-    headers: ["Item", "Value"],
+    headers: ["Item", "Value", "Link"],
     rows: [
-      ["TCS City Requirement", "To be added soon"],
-      ["Project Requirement (Open)", projectsOpen],
-      ["No. of Recruitment Profile Working (Open Jobs)", jobsOpen],
+      ["TCS City Requirement", "To be added soon", link(`/requirements?filter=${encodeURIComponent("Temp Staffing")}`)],
+      ["Project Requirement (Open)", projectsOpen, link(`/requirements?filter=${encodeURIComponent("Projects")}`)],
+      ["No. of Recruitment Profile Working (Open Jobs)", jobsOpen, link(`/requirements?filter=${encodeURIComponent("Recruitment")}`)],
     ],
   };
 
-  return { overview, todaysReport, status };
+  const regionalPartnerReport = {
+    headers: ["Status", "Link"],
+    rows: [["To be added soon", link("/partneragent")]],
+  };
+
+  return { overview, todaysReport, status, regionalPartnerReport };
 }

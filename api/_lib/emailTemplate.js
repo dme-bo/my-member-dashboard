@@ -128,7 +128,18 @@ export function renderAllocationEmail({
 </div>`;
 }
 
-function renderGridTable({ headers, rows }) {
+// A cell is normally a plain value; a `{ linkPath, label }` shape renders as
+// a link to that path resolved against the report's dashboardUrl instead.
+function renderGridCell(cell, dashboardUrl) {
+  if (cell && typeof cell === "object" && cell.linkPath) {
+    const href = `${String(dashboardUrl || "").replace(/\/$/, "")}${cell.linkPath}`;
+    return `<td style="padding:8px 10px;font-size:13px;"><a href="${escapeHtml(href)}" style="color:#1976d2;font-weight:600;">${escapeHtml(cell.label || "View")}</a></td>`;
+  }
+  const text = cell === "" || cell === undefined || cell === null ? "" : String(cell);
+  return `<td style="padding:8px 10px;font-size:13px;color:#000000;">${escapeHtml(text)}</td>`;
+}
+
+function renderGridTable({ headers, rows }, dashboardUrl) {
   const headerRow = headers
     .map(
       (h) =>
@@ -136,25 +147,17 @@ function renderGridTable({ headers, rows }) {
     )
     .join("");
   const bodyRows = rows
-    .map(
-      (row) => `
-        <tr>${row
-          .map(
-            (cell) =>
-              `<td style="padding:8px 10px;font-size:13px;color:#000000;">${escapeHtml(cell === "" || cell === undefined || cell === null ? "" : String(cell))}</td>`
-          )
-          .join("")}</tr>`
-    )
+    .map((row) => `<tr>${row.map((cell) => renderGridCell(cell, dashboardUrl)).join("")}</tr>`)
     .join("");
   return `<table style="width:100%;border-collapse:collapse;"><tr>${headerRow}</tr>${bodyRows}</table>`;
 }
 
-function renderSection({ title, subheading, table, note }) {
+function renderSection({ title, subheading, table, note }, dashboardUrl) {
   return `
     <div style="margin:0 0 22px 0;">
       <div style="font-size:14px;font-weight:700;color:#000000;margin-bottom:2px;">${escapeHtml(title)}</div>
       ${subheading ? `<div style="font-size:11px;color:#6b7280;margin-bottom:8px;">${escapeHtml(subheading)}</div>` : `<div style="margin-bottom:8px;"></div>`}
-      ${renderGridTable(table)}
+      ${renderGridTable(table, dashboardUrl)}
       ${note ? `<div style="margin-top:6px;font-size:12px;color:#b45309;">${escapeHtml(note)}</div>` : ""}
     </div>`;
 }
@@ -174,7 +177,7 @@ export function renderDailyReportEmail({
   signOffTitle,
   footerNote,
 }) {
-  const sectionsHtml = sections.map(renderSection).join("");
+  const sectionsHtml = sections.map((section) => renderSection(section, dashboardUrl)).join("");
 
   const infoRow =
     managerName || dashboardUrl

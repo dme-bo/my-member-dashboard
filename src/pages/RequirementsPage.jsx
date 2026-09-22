@@ -34,6 +34,8 @@ import SkeletonLoader from "../components/SkeletonLoader";
 // their display category changes here.
 const TCS_TEMP_STAFFING_COMPANY = "Tata Consultancy Services Pvt Ltd";
 
+const REQUIREMENTS_FILTERS = ["All", "Open", "Closed", "Projects", "Recruitment", "Temp Staffing"];
+
 const getTypeLabel = (type) => (type === "project" ? "Project" : type === "tempstaffing" ? "Temp Staffing" : "Job");
 const getTypeBadgeColors = (type) =>
   type === "project"
@@ -52,7 +54,12 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const [allocationCompanyFilter, setAllocationCompanyFilter] = useState("");
   const [allAllocations, setAllAllocations] = useState([]);
   const [allocatedCounts, setAllocatedCounts] = useState({});
-  const [activeFilter, setActiveFilter] = useState("All");
+  // Deep-link support (e.g. from the daily report email): ?filter=Recruitment,
+  // ?filter=Projects or ?filter=Temp Staffing pre-selects that tab.
+  const [activeFilter, setActiveFilter] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("filter");
+    return REQUIREMENTS_FILTERS.includes(requested) ? requested : "All";
+  });
   const [requirementsSearchTerm, setRequirementsSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "postedOn", direction: "desc" });
 
@@ -654,7 +661,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       {/* HEADER */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", paddingBottom: "10px" }}>
         <div style={{ display: "flex", gap: "10px" }}>
-          {["All", "Open", "Closed", "Projects", "Recruitment", "Temp Staffing"].map((filter) => (
+          {REQUIREMENTS_FILTERS.map((filter) => (
             <button
               key={filter}
               className={`filter-btn ${activeFilter === filter ? "active" : ""}`}

@@ -73,6 +73,11 @@ export default function CommunityJobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  // Deep-link support (e.g. from the daily report email): ?postedOn=YYYY-MM-DD
+  // filters the list down to jobs posted on that exact date.
+  const [postedOnFilter, setPostedOnFilter] = useState(
+    () => new URLSearchParams(window.location.search).get("postedOn") || ""
+  );
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [formMode, setFormMode] = useState("create"); // "create" | "edit" | "view"
@@ -115,14 +120,29 @@ export default function CommunityJobsPage() {
   }, []);
 
   const filteredJobs = useMemo(() => {
+    let list = jobs;
+
+    if (postedOnFilter) {
+      const target = parsePostedOn(postedOnFilter.length === 10 ? formatPostedOn(new Date(`${postedOnFilter}T00:00:00`)) : postedOnFilter);
+      if (target) {
+        list = list.filter((job) => {
+          const posted = parsePostedOn(job.job_postedon);
+          return posted && posted.getTime() === target.getTime();
+        });
+      }
+    }
+
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return jobs;
-    return jobs.filter((job) =>
-      [job.job_designation, job.job_company, job.job_location]
-        .filter(Boolean)
-        .some((field) => String(field).toLowerCase().includes(term))
-    );
-  }, [jobs, searchTerm]);
+    if (term) {
+      list = list.filter((job) =>
+        [job.job_designation, job.job_company, job.job_location]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(term))
+      );
+    }
+
+    return list;
+  }, [jobs, searchTerm, postedOnFilter]);
 
   const openCreateForm = (prefill) => {
     setForm(prefill ? { ...emptyForm(), ...prefill } : emptyForm());
@@ -356,6 +376,18 @@ export default function CommunityJobsPage() {
           </button>
         </div>
       </header>
+
+      {postedOnFilter && (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#eff6ff", color: "#1e40af", padding: "10px 18px", borderRadius: "10px", marginBottom: "16px", fontSize: "13px", fontWeight: "600" }}>
+          Showing jobs posted on {postedOnFilter}
+          <button
+            onClick={() => setPostedOnFilter("")}
+            style={{ background: "none", border: "none", color: "#1e40af", textDecoration: "underline", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* TABLE LIST */}
       {filteredJobs.length === 0 ? (
