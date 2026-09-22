@@ -29,6 +29,20 @@ import Papa from "papaparse";
 import { normalizeMemberRecord, getMemberCategory } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
 
+// Projects run by TCS are shown/filtered as "Temp Staffing" instead of
+// "Project" in this dashboard — they still live in `projectsmaster`, only
+// their display category changes here.
+const TCS_TEMP_STAFFING_COMPANY = "Tata Consultancy Services Pvt Ltd";
+
+const getTypeLabel = (type) => (type === "project" ? "Project" : type === "tempstaffing" ? "Temp Staffing" : "Job");
+const getTypeBadgeColors = (type) =>
+  type === "project"
+    ? { bg: "#e9d5ff", color: "#6b21a8" }
+    : type === "tempstaffing"
+    ? { bg: "#fed7aa", color: "#9a3412" }
+    : { bg: "#dbeafe", color: "#0c4a6e" };
+const getTypeSolidColor = (type) => (type === "project" ? "#9333ea" : type === "tempstaffing" ? "#ea580c" : "#2563eb");
+
 export default function RequirementsPage({ memberRecords: propMembers = [], membersLoading: propLoading = false }) {
   const [requirementsData, setRequirementsData] = useState([]);
   const [members, setMembers] = useState([]);
@@ -146,6 +160,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
         const transformed = combined.map((item) => {
           let title, jd, salary, location, company, logo, postedOn, status, benefits;
+          let displayType = item.type;
           if (item.type === "job") {
             const min = item.job_salaryrange_minimum ?? 0;
             const max = item.job_salaryrange_maximum ?? 0;
@@ -175,11 +190,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             postedOn = item.project_postedon ?? "—";
             benefits = item.project_benefit ?? null;
             status = item.project_status === "Active" ? "active" : "completed";
+            if (String(item.project_company || "").trim() === TCS_TEMP_STAFFING_COMPANY) {
+              displayType = "tempstaffing";
+            }
           }
           return {
             id: item.id,
             collection: item.collection,
-            type: item.type,
+            type: displayType,
             title,
             jd,
             salary,
@@ -328,6 +346,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     if (activeFilter === "Closed") return list.filter((r) => r.status === "completed");
     if (activeFilter === "Projects") return list.filter((r) => r.type === "project");
     if (activeFilter === "Recruitment") return list.filter((r) => r.type === "job");
+    if (activeFilter === "Temp Staffing") return list.filter((r) => r.type === "tempstaffing");
     return list;
   }, [requirementsData, activeFilter]);
 
@@ -429,7 +448,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     try {
       // Structure: users/{uid}/job_applied/{jobId} or users/{uid}/projects_applied/{projectId}
       // The document ID itself is the job/project ID
-      const subcol = req.type === "project" ? "projects_applied" : "jobs_applied";
+      const subcol = req.type === "project" || req.type === "tempstaffing" ? "projects_applied" : "jobs_applied";
 
       const snap = await getDocs(collectionGroup(db, subcol));
       const results = snap.docs.filter((d) => d.id === req.id).map((d) => {
@@ -484,45 +503,29 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  const buildAllocationEmailBody = ({ requirement, allocatedMembersList }) => {
-    const lines = [];
-    lines.push(`Hello DME Team,`);
-    lines.push("");
-    lines.push(`A member allocation has been completed in the Requirements page.`);
-    lines.push("");
-    lines.push(`Requirement Details:`);
-    lines.push(`- Type: ${requirement?.type === "project" ? "Project" : "Job"}`);
-    lines.push(`- Title: ${requirement?.title || "N/A"}`);
-    lines.push(`- Company: ${requirement?.company || "N/A"}`);
-    lines.push(`- Location: ${requirement?.location || "N/A"}`);
-    lines.push(`- Compensation: ${requirement?.salary || "N/A"}`);
-    lines.push(`- Status: ${requirement?.status === "active" ? "Open" : "Closed"}`);
-    lines.push("");
-    lines.push(`Allocated Member Details:`);
+  const ALLOCATION_TABLE_HEADERS = ["Name", "Email", "Phone", "Designation", "State", "City", "Category", "Resume"];
 
-    if (!allocatedMembersList.length) {
-      lines.push(`- No members were allocated.`);
-    } else {
-      allocatedMembersList.forEach((member, index) => {
-        lines.push(`Member ${index + 1}:`);
-        lines.push(`- Name: ${member?.name || "N/A"}`);
-        lines.push(`- Email: ${member?.email || "N/A"}`);
-        lines.push(`- Phone: ${member?.phone || "N/A"}`);
-        lines.push(`- Designation: ${member?.designation || "N/A"}`);
-        lines.push(`- State: ${member?.state || "N/A"}`);
-        lines.push(`- City: ${member?.city || "N/A"}`);
-        lines.push(`- Category: ${member?.category || "N/A"}`);
-        lines.push("");
-      });
-    }
+  const buildAllocationEmailFields = (requirement) => [
+    { label: "Type", value: getTypeLabel(requirement?.type) },
+    { label: "Title", value: requirement?.title || "N/A" },
+    { label: "Company", value: requirement?.company || "N/A" },
+    { label: "Location", value: requirement?.location || "N/A" },
+    { label: "Compensation", value: requirement?.salary || "N/A" },
+    { label: "Status", value: requirement?.status === "active" ? "Open" : "Closed" },
+    { label: "Allocated On", value: new Date().toLocaleString("en-IN") },
+  ];
 
-    lines.push(`Allocated On: ${new Date().toLocaleString("en-IN")}`);
-    lines.push("");
-    lines.push(`Regards,`);
-    lines.push(`Requirements System`);
-
-    return lines.join("\n");
-  };
+  const buildAllocationMemberRows = (allocatedMembersList) =>
+    allocatedMembersList.map((member) => [
+      member?.name || "N/A",
+      member?.email || "N/A",
+      member?.phone || "N/A",
+      member?.designation || "N/A",
+      member?.state || "N/A",
+      member?.city || "N/A",
+      member?.category || "N/A",
+      member?.resume_fileurl || "",
+    ]);
 
   const sendAllocationEmail = async (requirement, allocatedMembersList) => {
     const response = await fetch("/api/send-allocation-email", {
@@ -533,7 +536,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       body: JSON.stringify({
         to: "dme@briskolive.com",
         subject: `Member Allocation - ${requirement?.title || "Requirement"}`,
-        body: buildAllocationEmailBody({ requirement, allocatedMembersList }),
+        heading: `${getTypeLabel(requirement?.type)} Allocation`,
+        subheading: requirement?.title || "",
+        fields: buildAllocationEmailFields(requirement),
+        tableTitle: "Allocated Members",
+        table: {
+          headers: ALLOCATION_TABLE_HEADERS,
+          rows: buildAllocationMemberRows(allocatedMembersList),
+        },
       }),
     });
 
@@ -545,7 +555,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
   const exportToCSV = () => {
     const csvData = filteredRequirements.map((req) => ({
-      Type: req.type === "project" ? "Project" : "Job",
+      Type: getTypeLabel(req.type),
       Title: req.title,
       Company: req.company,
       Location: req.location,
@@ -644,7 +654,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       {/* HEADER */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", paddingBottom: "10px" }}>
         <div style={{ display: "flex", gap: "10px" }}>
-          {["All", "Open", "Closed", "Projects", "Recruitment"].map((filter) => (
+          {["All", "Open", "Closed", "Projects", "Recruitment", "Temp Staffing"].map((filter) => (
             <button
               key={filter}
               className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
@@ -768,6 +778,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             {activeFilter === "Closed" && "Closed Requirements"}
             {activeFilter === "Projects" && "Projects"}
             {activeFilter === "Recruitment" && "Recruitment"}
+            {activeFilter === "Temp Staffing" && "Temp Staffing"}
             <span style={{ marginLeft: "10px", color: "#10b981", fontSize: "20px" }}>
               ({filteredRequirements.length})
             </span>
@@ -862,15 +873,15 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                       <td style={{ padding: "16px", fontWeight: "600", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
                         <span
                           style={{
-                            backgroundColor: req.type === "project" ? "#e9d5ff" : "#dbeafe",
-                            color: req.type === "project" ? "#6b21a8" : "#0c4a6e",
+                            backgroundColor: getTypeBadgeColors(req.type).bg,
+                            color: getTypeBadgeColors(req.type).color,
                             padding: "6px 14px",
                             borderRadius: "20px",
                             fontSize: "13px",
                             fontWeight: "600",
                           }}
                         >
-                          {req.type === "project" ? "Project" : "Job"}
+                          {getTypeLabel(req.type)}
                         </span>
                       </td>
                       <td style={{ padding: "16px" }}>
@@ -1059,7 +1070,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               />
             )}
             <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>
-              {selectedReq.type === "project" ? "Project" : "Job"}: {selectedReq.title}
+              {getTypeLabel(selectedReq.type)}: {selectedReq.title}
             </h2>
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
               <strong>Company:</strong> {selectedReq.company}
@@ -1094,7 +1105,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             </p>
             <div style={{ backgroundColor: "#f9fafb", padding: "20px", borderRadius: "12px", marginBottom: "32px" }}>
               <strong style={{ fontSize: "18px", display: "block", marginBottom: "12px" }}>
-                {selectedReq.type === "project" ? "Project Description" : "Job Description"}:
+                {getTypeLabel(selectedReq.type)} Description:
               </strong>
               <div
                 style={{ lineHeight: "1.7", color: "#374151" }}
@@ -1980,7 +1991,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                               <td style={{ padding: "16px" }}>
                                 <span
                                   style={{
-                                    background: job?.type === "project" ? "#9333ea" : "#2563eb",
+                                    background: getTypeSolidColor(job?.type),
                                     color: "white",
                                     padding: "6px 12px",
                                     borderRadius: "20px",
@@ -1988,7 +1999,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                                     fontWeight: "600",
                                   }}
                                 >
-                                  {job?.type === "project" ? "Project" : "Job"}
+                                  {getTypeLabel(job?.type)}
                                 </span>
                               </td>
                               <td style={{ padding: "16px" }}>{member.phone}</td>
@@ -2277,7 +2288,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             <div style={{ background: "#1976d2", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexShrink: 0 }}>
               <div>
                 <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>
-                  {applicantsReq?.type === "project" ? "Project" : "Job"} Applicants
+                  {getTypeLabel(applicantsReq?.type)} Applicants
                 </div>
                 <h2 style={{ margin: 0, color: "#fff", fontSize: "18px", fontWeight: 700 }}>
                   {applicantsReq?.title}

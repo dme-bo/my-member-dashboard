@@ -16,6 +16,7 @@ function Navbar() {
       recruitment: "Recruitment Applications",
       projects: "Projects Applications",
       requirements: "Requirements Allocations Dashboard",
+      "community-jobs": "Community Jobs",
       interactions: "Escalations",
       "regimental-centers": "Regimental Centers",
       training: "Training",

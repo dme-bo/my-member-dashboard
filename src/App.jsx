@@ -53,6 +53,7 @@ const TempStaffPage       = lazyWithReloadOnStaleChunk(() => import("./pages/Tem
 const RecruitmentPage     = lazyWithReloadOnStaleChunk(() => import("./pages/RecruitmentPage"));
 const ProjectsPage        = lazyWithReloadOnStaleChunk(() => import("./pages/ProjectsPage"));
 const RequirementsPage    = lazyWithReloadOnStaleChunk(() => import("./pages/RequirementsPage"));
+const CommunityJobsPage   = lazyWithReloadOnStaleChunk(() => import("./pages/CommunityJobsPage"));
 const InteractionPage     = lazyWithReloadOnStaleChunk(() => import("./pages/InteractionPage"));
 const RegimentalCenterPage = lazyWithReloadOnStaleChunk(() => import("./pages/RegimentalCenterPage"));
 const TrainingPage        = lazyWithReloadOnStaleChunk(() => import("./pages/TrainingPage"));
@@ -239,6 +240,14 @@ function Layout() {
                     memberRecords={memberRecords}
                     membersLoading={membersLoading}
                   />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/community-jobs"
+              element={
+                <ErrorBoundary>
+                  <CommunityJobsPage />
                 </ErrorBoundary>
               }
             />

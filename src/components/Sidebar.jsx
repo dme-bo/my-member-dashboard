@@ -8,6 +8,7 @@ import {
   MdLocationOn,       // Member Location
   MdAssignment,       // Applications
   MdWork,             // Requirements
+  MdBusinessCenter,   // Community Jobs
   MdForum,            // Interactions
   MdEmail,            // Newsletter
   MdSettings,         // Configuration
@@ -29,6 +30,7 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
   const isMemberListActive = location.pathname === "/memberlist";
   const isMemberLocationActive = location.pathname === "/member-location";
   const isRequirementsActive = location.pathname === "/requirements";
+  const isCommunityJobsActive = location.pathname === "/community-jobs";
   const isInteractionsActive = location.pathname === "/interactions";
   const isRegimentalCentersActive = location.pathname === "/regimental-centers";
   const isTrainingActive = location.pathname === "/training";
@@ -123,6 +125,11 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
         <NavLink to="/requirements" className={`menu-item ${isRequirementsActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <MdWork className="menu-icon" />
           <span>Requirements</span>
+        </NavLink>
+
+        <NavLink to="/community-jobs" className={`menu-item ${isCommunityJobsActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
+          <MdBusinessCenter className="menu-icon" />
+          <span>Community Jobs</span>
         </NavLink>
 
         <NavLink to="/interactions" className={`menu-item ${isInteractionsActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>

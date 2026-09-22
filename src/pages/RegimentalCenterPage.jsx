@@ -324,7 +324,11 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
           const existingSkills = parseMemberSkills(member);
           if (existingSkills.includes(label)) return;
           const nextSkills = [...existingSkills, label];
-          await updateDoc(doc(db, "users", memberId), { skills: nextSkills, Skills: nextSkills.join(", ") });
+          await updateDoc(doc(db, "users", memberId), {
+            skills: nextSkills,
+            Skills: nextSkills.join(", "),
+            taggedAt: serverTimestamp(),
+          });
         })
       );
 

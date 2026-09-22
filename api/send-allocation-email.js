@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { renderCardEmail, renderPlainEmail } from "./_lib/emailTemplate.js";
+import { renderCardEmail, renderPlainEmail, renderAllocationEmail } from "./_lib/emailTemplate.js";
 
 let cachedTransporter = null;
 const getTransporter = () => {
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { to, subject, body, fields, heading, subheading, accentColor, footerNote } = req.body || {};
+    const { to, subject, body, fields, table, tableTitle, heading, subheading, accentColor, footerNote } = req.body || {};
 
     if (!to || !subject || (!body && !fields)) {
       return res.status(400).json({ error: "Missing to, subject, or body/fields." });
@@ -37,10 +37,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const textFallback = body || fields.map(({ label, value }) => `${label}: ${value}`).join("\n");
-    const html = Array.isArray(fields)
-      ? renderCardEmail({ heading: heading || subject, subheading, fields, accentColor, footerNote })
-      : renderPlainEmail(body);
+    const textFallback = [
+      body || (Array.isArray(fields) ? fields.map(({ label, value }) => `${label}: ${value}`).join("\n") : ""),
+      table ? `\n${tableTitle || "Allocated Members"}\n${table.headers.join(" | ")}\n${table.rows.map((r) => r.join(" | ")).join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    let html;
+    if (Array.isArray(fields) && table) {
+      html = renderAllocationEmail({ heading: heading || subject, subheading, fields, tableTitle, table, accentColor, footerNote });
+    } else if (Array.isArray(fields)) {
+      html = renderCardEmail({ heading: heading || subject, subheading, fields, accentColor, footerNote });
+    } else {
+      html = renderPlainEmail(body);
+    }
 
     await getTransporter().sendMail({
       from: `Brisk Olive <${gmailUser}>`,

@@ -228,6 +228,50 @@ function sendFollowupRemindersDevApi() {
   }
 }
 
+function parseCommunityJobPhotosDevApi() {
+  return {
+    name: 'parse-community-job-photos-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'POST' || req.url !== '/api/parse-community-job-photos') {
+          return next()
+        }
+
+        let rawBody = ''
+        req.on('data', (chunk) => { rawBody += chunk })
+
+        req.on('end', async () => {
+          res.setHeader('Content-Type', 'application/json')
+          try {
+            const env = loadEnv(server.config.mode, process.cwd(), '')
+            Object.assign(process.env, env)
+
+            req.body = rawBody ? JSON.parse(rawBody) : {}
+            const { default: handler } = await import('./api/parse-community-job-photos.js')
+            const shimRes = {
+              statusCode: 200,
+              setHeader: (...args) => res.setHeader(...args),
+              status(code) {
+                this.statusCode = code
+                return this
+              },
+              json(payload) {
+                res.statusCode = this.statusCode
+                res.end(JSON.stringify(payload))
+              },
+            }
+            await handler(req, shimRes)
+          } catch (error) {
+            console.error('parse-community-job-photos (dev) error:', error)
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: 'Failed to parse job photos.' }))
+          }
+        })
+      })
+    },
+  }
+}
+
 function firestoreDevApi() {
   return {
     name: 'firestore-dev-api',
@@ -260,7 +304,15 @@ function firestoreDevApi() {
 }
 
 export default defineConfig({
-  plugins: [react(), allocationEmailDevApi(), whatsappDevApi(), hrEmployeesDevApi(), firestoreDevApi(), sendFollowupRemindersDevApi()],
+  plugins: [
+    react(),
+    allocationEmailDevApi(),
+    whatsappDevApi(),
+    hrEmployeesDevApi(),
+    firestoreDevApi(),
+    sendFollowupRemindersDevApi(),
+    parseCommunityJobPhotosDevApi(),
+  ],
   optimizeDeps: {
     include: ['react-window'],
   },

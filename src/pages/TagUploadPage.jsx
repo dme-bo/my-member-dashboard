@@ -1,7 +1,7 @@
 // src/pages/TagUploadPage.jsx
 import { useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import { doc, writeBatch, db } from "../firestoreClient";
+import { doc, writeBatch, db, serverTimestamp } from "../firestoreClient";
 import { FaFileUpload, FaCheckCircle } from "react-icons/fa";
 
 const BATCH_CHUNK_SIZE = 400;
@@ -160,6 +160,7 @@ export default function TagUploadPage({ memberRecords = [], membersLoading = fal
           batch.update(doc(db, "users", row.member.id), {
             tags: row.newTags,
             Tags: row.newTags.join(", "),
+            taggedAt: serverTimestamp(),
           });
         });
         await batch.commit();
