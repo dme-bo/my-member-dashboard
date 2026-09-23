@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef, useTransition, useCallback } from "react";
 import * as ReactWindow from "react-window";
 const List = ReactWindow.FixedSizeList;
-import { collection, collectionGroup, db, doc, getDocs, query, updateDoc } from "../firestoreClient";
+import { collection, collectionGroup, db, doc, getDocs, query, serverTimestamp, updateDoc } from "../firestoreClient";
 import DualRangeSlider from "../components/DualRangeSlider";
 import MultiSelectDropdown from "../components/MultiSelectDropdown";
 import SkeletonLoader from "../components/SkeletonLoader";
@@ -737,7 +737,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     setMembers((prev) =>
       prev.map((member) =>
         member.id === memberId
-          ? { ...member, skills: nextSkills, Skills: nextSkills.join(", ") }
+          ? { ...member, skills: nextSkills, skillsUpdatedAt: new Date() }
           : member
       )
     );
@@ -746,7 +746,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const persistMemberSkills = async (memberId, nextSkills) => {
     await updateDoc(doc(db, "users", memberId), {
       skills: nextSkills,
-      Skills: nextSkills.join(", "),
+      skillsUpdatedAt: serverTimestamp(),
     });
   };
 

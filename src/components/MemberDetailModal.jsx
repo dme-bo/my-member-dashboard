@@ -11,7 +11,7 @@ import {
   Timestamp,
   where,
 } from "../firestoreClient";
-import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberCategory, parseMemberDate } from "../utils/memberFields";
+import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberEmail, getMemberCategory, parseMemberDate } from "../utils/memberFields";
 import SkeletonLoader from "./SkeletonLoader";
 
 const RATING_TYPES = {
@@ -68,6 +68,7 @@ export default function MemberDetailModal({ member, onClose }) {
   const fullName = getMemberName(normalizedMember) || "N/A";
   const userId = normalizedMember.id || normalizedMember.uid || normalizedMember.member_id;
   const phoneNumber = getMemberPhone(normalizedMember);
+  const memberEmail = getMemberEmail(normalizedMember);
 
   const tabs = [
     { id: "personal", label: "Personal Info" },
@@ -573,6 +574,8 @@ export default function MemberDetailModal({ member, onClose }) {
         return addDoc(interactionsRef, {
           entryType: "note",
           contactPerson: note.contactPerson,
+          contactPhone: phoneNumber || "-",
+          contactEmail: memberEmail || "-",
           notes: note.notes.trim(),
           nextAction: note.nextAction.trim(),
           followUpDate: note.followUpDate

@@ -134,20 +134,11 @@ async function countMembersInteractedToday(db, today, tomorrow) {
   return memberIds.size;
 }
 
-// Mirrors MemberListPage's "Is Tagged?" filter exactly: a member counts as
-// tagged if `skills`/`Skills` has any non-empty entry. There's no timestamp
-// on tagging anywhere in this data, so this is a running total, not a
-// same-day count — labeled accordingly wherever it's shown.
-async function countMembersTagged(db) {
-  const snapshot = await db.collection("users").select("skills", "Skills").get();
-  let count = 0;
-  snapshot.forEach((doc) => {
-    const data = doc.data();
-    const raw = data.skills !== undefined && data.skills !== null && String(data.skills).trim() !== "" ? data.skills : data.Skills;
-    const parsed = Array.isArray(raw) ? raw.map((s) => String(s).trim()).filter(Boolean) : String(raw || "").split(",").map((s) => s.trim()).filter(Boolean);
-    if (parsed.length > 0) count += 1;
-  });
-  return count;
+// `skillsUpdatedAt` is a real Firestore Timestamp set whenever a member's
+// skills/tags are written — a single-field range query on one collection,
+// so unlike the interactions collection group this needs no extra index.
+async function countMembersTaggedToday(db, today, tomorrow) {
+  return countOf(db.collection("users").where("skillsUpdatedAt", ">=", today).where("skillsUpdatedAt", "<", tomorrow));
 }
 
 // Builds the daily report as a set of grid-table sections: an overview
@@ -164,7 +155,7 @@ export async function buildDailyReport(db) {
     newMembersToday,
     totalPartners,
     newPartnersToday,
-    membersTagged,
+    membersTaggedToday,
     membersInteractedToday,
     workshopsPostedToday,
     communityJobsPostedToday,
@@ -181,7 +172,7 @@ export async function buildDailyReport(db) {
       ),
       "New Regional Partners Today"
     ),
-    safe(countMembersTagged(db), "Members Tagged"),
+    safe(countMembersTaggedToday(db, today, tomorrow), "Members Tagged Today"),
     safe(countMembersInteractedToday(db, today, tomorrow), "Members Interacted Today"),
     safe(countWorkshopsPostedToday(db, today), "Workshops Posted Today"),
     safe(countCommunityJobsPostedToday(db, today), "Community Jobs Posted Today"),
@@ -216,7 +207,7 @@ export async function buildDailyReport(db) {
     rows: [
       ["New Members Added", newMembersToday, link(`/memberlist?from=${todayIso}&to=${todayIso}`)],
       ["New Regional Partners Added", newPartnersToday, link("/partneragent")],
-      ["Members Tagged (Total) ★", membersTagged, link("/memberlist?tagged=yes")],
+      ["Members Tagged", membersTaggedToday, link("/memberlist?tagged=yes")],
       ["Members Interacted", membersInteractedToday, link("/interactions")],
       ["Workshop Posted", workshopsPostedToday, link("/training")],
       ["Community Job Posted", communityJobsPostedToday, link(`/community-jobs?postedOn=${todayIso}`)],

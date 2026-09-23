@@ -70,6 +70,8 @@ export default async function handler(req, res) {
       const followUpDateStr = formatDate(data.followUpDate.toDate());
       const fields = [
         { label: "Member", value: data.contactPerson || "-" },
+        { label: "Mobile", value: data.contactPhone || "-" },
+        { label: "Email", value: data.contactEmail || "-" },
         { label: "Notes", value: data.notes || "-" },
         { label: "Next Action", value: data.nextAction || "-" },
         { label: "Follow-up Date", value: followUpDateStr },
