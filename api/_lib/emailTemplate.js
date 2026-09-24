@@ -86,6 +86,7 @@ export function renderAllocationEmail({
   tableTitle = "Allocated Members",
   table,
   accentColor = "#1976d2",
+  dashboardUrl,
   footerNote,
 }) {
   const fieldRows = fields
@@ -119,6 +120,11 @@ export function renderAllocationEmail({
     <tr>
       <td style="padding:0 24px 24px 24px;">${renderMemberTable(table)}</td>
     </tr>
+    ${
+      dashboardUrl
+        ? `<tr><td style="padding:0 24px 20px 24px;font-size:13px;"><span style="font-weight:700;color:#111827;">Dashboard:</span> <a href="${escapeHtml(dashboardUrl)}" style="color:${accentColor};">${escapeHtml(dashboardUrl)}</a></td></tr>`
+        : ""
+    }
     ${
       footerNote
         ? `<tr><td style="padding:16px 28px;color:#9ca3af;font-size:12px;">${escapeHtml(footerNote)}</td></tr>`

@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { to, subject, body, fields, table, tableTitle, heading, subheading, accentColor, footerNote } = req.body || {};
+    const { to, subject, body, fields, table, tableTitle, heading, subheading, accentColor, dashboardUrl, footerNote } = req.body || {};
 
     if (!to || !subject || (!body && !fields)) {
       return res.status(400).json({ error: "Missing to, subject, or body/fields." });
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
 
     let html;
     if (Array.isArray(fields) && table) {
-      html = renderAllocationEmail({ heading: heading || subject, subheading, fields, tableTitle, table, accentColor, footerNote });
+      html = renderAllocationEmail({ heading: heading || subject, subheading, fields, tableTitle, table, accentColor, dashboardUrl, footerNote });
     } else if (Array.isArray(fields)) {
       html = renderCardEmail({ heading: heading || subject, subheading, fields, accentColor, footerNote });
     } else {

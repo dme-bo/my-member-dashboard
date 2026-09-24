@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     const sections = [
       { title: "Members & Regional Partner Overview", table: report.overview },
       { title: "Today's Report", table: report.todaysReport },
-      { title: "Status of Jobs / Projects / TCS on Mobile App", table: report.status },
+      { title: "Status of Jobs / Projects / TCS / Community Jobs / Workshop on Mobile App", table: report.status },
       { title: "Regional Partner Report", table: report.regionalPartnerReport },
     ];
 

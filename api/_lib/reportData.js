@@ -102,6 +102,30 @@ async function countWorkshopsPostedToday(db, today) {
   return count;
 }
 
+// Real status values: communityjobs uses job_status "Open" (no "Closed"/"Active"
+// convention like jobsmaster), workshopsmaster uses workshop_status "Active"
+// for a currently-running workshop (also "Completed"/"Archived"). Both
+// excluded-draft, select()-then-filter client-side to avoid a composite index.
+async function countOpenCommunityJobs(db) {
+  const snapshot = await db.collection("communityjobs").select("job_status", "job_isdraft").get();
+  let count = 0;
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    if (!data.job_isdraft && data.job_status === "Open") count += 1;
+  });
+  return count;
+}
+
+async function countActiveWorkshops(db) {
+  const snapshot = await db.collection("workshopsmaster").select("workshop_status", "workshop_isdraft").get();
+  let count = 0;
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    if (!data.workshop_isdraft && data.workshop_status === "Active") count += 1;
+  });
+  return count;
+}
+
 const countOf = (query) => query.count().get().then((snap) => snap.data().count);
 
 const BLANK = "";
@@ -162,6 +186,8 @@ export async function buildDailyReport(db) {
     cvRecommendedToday,
     jobsOpen,
     projectsOpen,
+    communityJobsOpen,
+    activeWorkshops,
   ] = await Promise.all([
     safe(countOf(db.collection("users")), "Total Members"),
     safe(countNewMembersToday(db, today), "New Members Added Today"),
@@ -180,8 +206,10 @@ export async function buildDailyReport(db) {
       countOf(db.collection("allocations").where("allocatedAt", ">=", today).where("allocatedAt", "<", tomorrow)),
       "CV Recommended Today"
     ),
-    safe(countOf(db.collection("jobsmaster").where("job_status", "==", "Open")), "Jobs Open"),
+    safe(countOf(db.collection("jobsmaster").where("job_status", "==", "Open").where("job_isdraft", "==", false)), "Jobs Open"),
     safe(countOf(db.collection("projectsmaster").where("project_status", "==", "Open")), "Projects Open"),
+    safe(countOpenCommunityJobs(db), "Community Jobs Open"),
+    safe(countActiveWorkshops(db), "Active Workshops"),
   ]);
 
   const overview = {
@@ -221,6 +249,8 @@ export async function buildDailyReport(db) {
       ["TCS City Requirement", "To be added soon", link(`/requirements?filter=${encodeURIComponent("Temp Staffing")}`)],
       ["Project Requirement (Open)", projectsOpen, link(`/requirements?filter=${encodeURIComponent("Projects")}`)],
       ["No. of Recruitment Profile Working (Open Jobs)", jobsOpen, link(`/requirements?filter=${encodeURIComponent("Recruitment")}`)],
+      ["No. of Community Jobs (Open)", communityJobsOpen, link("/community-jobs")],
+      ["No. of Workshops (Active)", activeWorkshops, link("/training")],
     ],
   };
 

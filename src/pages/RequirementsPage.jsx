@@ -186,7 +186,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             logo = item.job_logo ?? null;
             postedOn = item.job_postedon ?? "—";
             benefits = item.job_otherbenefits ?? null;
-            status = item.job_status === "Open" ? "active" : "completed";
+            status = item.job_status === "Open" && item.job_isdraft === false ? "active" : "completed";
           } else {
             title = item.project_title ?? "Untitled Project";
             jd = item.project_description ?? "No description available.";
@@ -534,14 +534,20 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       member?.resume_fileurl || "",
     ]);
 
+  const JOB_ALLOCATION_RECIPIENTS =
+    "dme@briskolive.com,recruitment.manager@briskolive.com,recruitment.executive@briskolive.com,recruitment.associate@briskolive.com,members@briskolive.com";
+  const DEFAULT_ALLOCATION_RECIPIENT = "dme@briskolive.com";
+  const REQUIREMENTS_DASHBOARD_URL = "https://my-member-dashboard.vercel.app/requirements";
+
   const sendAllocationEmail = async (requirement, allocatedMembersList) => {
+    const isJobAllocation = requirement?.type === "job";
     const response = await fetch("/api/send-allocation-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        to: "dme@briskolive.com",
+        to: isJobAllocation ? JOB_ALLOCATION_RECIPIENTS : DEFAULT_ALLOCATION_RECIPIENT,
         subject: `Member Allocation - ${requirement?.title || "Requirement"}`,
         heading: `${getTypeLabel(requirement?.type)} Allocation`,
         subheading: requirement?.title || "",
@@ -551,6 +557,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
           headers: ALLOCATION_TABLE_HEADERS,
           rows: buildAllocationMemberRows(allocatedMembersList),
         },
+        ...(isJobAllocation ? { dashboardUrl: REQUIREMENTS_DASHBOARD_URL } : {}),
       }),
     });
 
