@@ -107,8 +107,23 @@ const getBase64FromUrl = async (url) => {
   }
 };
 
+// Same "Open, not a draft" rule as the Requirements page's Recruitment tab —
+// without the isdraft check this pulled in every stale/never-published job.
+// Projects run by TCS are shown under "Temporary Staffing" instead of
+// "Projects" — same reclassification rule used on the Requirements page.
+const TCS_TEMP_STAFFING_COMPANY = 'Tata Consultancy Services Pvt Ltd';
+
+// Every "apply here" touchpoint also points members at the app itself.
+const MEMBER_APP_LINK = 'https://play.google.com/store/apps/details?id=com.briskolive.memberapp';
+const ApplyViaAppNote = () => (
+  <Text style={[styles.bodyText, { marginTop: 6 }]}>
+    Apply via our Brisk Olive Member App:{' '}
+    <Link style={styles.link} src={MEMBER_APP_LINK}>{MEMBER_APP_LINK}</Link>
+  </Text>
+);
+
 const fetchOpenJobs = async () => {
-  const q = query(collection(db, 'jobsmaster'), where('job_status', '==', 'Open'));
+  const q = query(collection(db, 'jobsmaster'), where('job_status', '==', 'Open'), where('job_isdraft', '==', false));
   const snap = await getDocs(q);
   return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 };
@@ -119,8 +134,18 @@ const fetchOpenProjects = async () => {
   return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 };
 
-const fetchScheduledWorkshops = async () => {
-  const q = query(collection(db, 'workshopsmaster'), where('workshop_status', '==', 'Scheduled'));
+// `workshop_status` never actually holds "Scheduled" in real data (the real
+// values are Active/Completed/Archived) — this filter never matched anything,
+// which is why the newsletter always showed 0 workshops.
+const fetchActiveWorkshops = async () => {
+  const q = query(collection(db, 'workshopsmaster'), where('workshop_status', '==', 'Active'), where('workshop_isdraft', '==', false));
+  const snap = await getDocs(q);
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+};
+
+// Same Open/not-draft rule as the daily report's "No. of Community Jobs (Open)".
+const fetchOpenCommunityJobs = async () => {
+  const q = query(collection(db, 'communityjobs'), where('job_status', '==', 'Open'), where('job_isdraft', '==', false));
   const snap = await getDocs(q);
   return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 };
@@ -236,7 +261,7 @@ const customSelectStyles = {
 
 // ── PDF Document Component (full structure) ────────────────────────────────
 // The document component assembles jobs, projects, partner stats, and config content.
-const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, content }) => {
+const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaffingProjects, regionalPartners, content }) => {
   const {
     companyName = 'Brisk Olive Business Solutions Pvt Ltd',
     mainTitle = 'Jobs & Earning Opportunities for Members',
@@ -244,6 +269,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, conte
     greeting = '',
     intro = {},
     jobsSection = {},
+    communityJobsSection = {},
     tempStaffing = {},
     projectsSection = {},
     workshopsSection = {},
@@ -321,6 +347,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, conte
                   {jobsSection.registrationLink}
                 </Link>
               </Text>
+              <ApplyViaAppNote />
               {jobsSection.successStoryText && (
                 <View>
                   <Text style={[styles.bodyText, { marginTop: 10 }]}>{jobsSection.successStoryText}</Text>
@@ -331,29 +358,68 @@ const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, conte
             </View>
           )}
 
-          {/* Temporary Staffing */}
+          {/* Community Jobs */}
+          {communityJobs?.length > 0 && (
+            <View>
+              <Text style={styles.subsectionTitle}>
+                {communityJobsSection.title || 'Community Job Postings'}
+              </Text>
+              <Text style={styles.bodyText}>{communityJobsSection.description}</Text>
+              <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                  <Text style={styles.tableCell}>Company</Text>
+                  <Text style={styles.tableCell}>Designation</Text>
+                  <Text style={styles.tableCell}>Location</Text>
+                  <Text style={styles.tableCell}>Experience</Text>
+                  <Text style={styles.tableCell}>Salary</Text>
+                </View>
+                {communityJobs.map((job, i) => (
+                  <View key={i} style={styles.tableRow}>
+                    <Text style={styles.tableCell}>{job.job_company || '-'}</Text>
+                    <Text style={styles.tableCell}>{job.job_designation || '-'}</Text>
+                    <Text style={styles.tableCell}>{job.job_location || '-'}</Text>
+                    <Text style={styles.tableCell}>{job.job_experience_required || '-'}</Text>
+                    <Text style={styles.tableCell}>
+                      {job.job_salary_minimum || job.job_salary_maximum
+                        ? `₹${job.job_salary_minimum || 0} - ₹${job.job_salary_maximum || 0}`
+                        : '-'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <ApplyViaAppNote />
+            </View>
+          )}
+
+          {/* Temporary Staffing — projectsmaster entries where project_company is
+              TCS are shown here instead of under Projects (no company column,
+              since every row here is the same company by definition). */}
           <View wrap={false}>
             <Text style={styles.subsectionTitle}>
               {tempStaffing.title || '2. Temporary Staffing Assignments for You'}
             </Text>
             <Text style={styles.bodyText}>{tempStaffing.introText}</Text>
             {images.examInvigilator && <Image style={styles.image} src={images.examInvigilator} />}
-            <View style={styles.table}>
-              <View style={styles.tableHeader}>
-                <Text style={styles.tableCell}>State</Text>
-                <Text style={styles.tableCell}>Location</Text>
-                <Text style={styles.tableCell}>Registration</Text>
-              </View>
-              {Object.entries(tempStaffing.importantLinks || {}).map(([state, link]) => (
-                <View key={state} style={styles.tableRow}>
-                  <Text style={styles.tableCell}>{state}</Text>
-                  <Text style={styles.tableCell}>Various cities</Text>
-                  <Text style={styles.tableCell}>
-                    <Link src={link}>Register</Link>
-                  </Text>
+            {tempStaffingProjects?.length > 0 && (
+              <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                  <Text style={styles.tableCell}>Ser</Text>
+                  <Text style={styles.tableCell}>Assignment</Text>
+                  <Text style={styles.tableCell}>Description</Text>
+                  <Text style={styles.tableCell}>Apply</Text>
                 </View>
-              ))}
-            </View>
+                {tempStaffingProjects.map((proj, i) => (
+                  <View key={i} style={styles.tableRow}>
+                    <Text style={styles.tableCell}>{String(i + 1).padStart(2, '0')}.</Text>
+                    <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
+                    <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
+                    <Text style={styles.tableCell}>
+                      <Link src={MEMBER_APP_LINK}>{'Apply'}</Link>
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Projects */}
@@ -376,7 +442,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, conte
                     <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
                     <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
                     <Text style={styles.tableCell}>
-                      <Link src={proj.project_apply_link || '#'}>{'Apply'}</Link>
+                      <Link src={MEMBER_APP_LINK}>{'Apply'}</Link>
                     </Text>
                   </View>
                 ))}
@@ -452,6 +518,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, regionalPartners, conte
                   </Link>
                 </Text>
               )}
+              <ApplyViaAppNote />
             </View>
           )}
 
@@ -536,12 +603,16 @@ export default function BriskOliveNewsletterApp() {
   const [jobs, setJobs] = useState([]);
   const [projects, setProjects] = useState([]);
   const [workshops, setWorkshops] = useState([]);
+  const [communityJobs, setCommunityJobs] = useState([]);
+  const [tempStaffingProjects, setTempStaffingProjects] = useState([]);
   const [regionalPartners, setRegionalPartners] = useState([]);
   const [content, setContent] = useState({});
   const [editedContent, setEditedContent] = useState({});
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedProjects, setSelectedProjects] = useState([]);
   const [selectedWorkshops, setSelectedWorkshops] = useState([]);
+  const [selectedCommunityJobs, setSelectedCommunityJobs] = useState([]);
+  const [selectedTempStaffingProjects, setSelectedTempStaffingProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -554,10 +625,11 @@ export default function BriskOliveNewsletterApp() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [jobsData, projectsData, workshopsData, partnersData, contentData] = await Promise.all([
+        const [jobsData, projectsData, workshopsData, communityJobsData, partnersData, contentData] = await Promise.all([
           fetchOpenJobs(),
           fetchOpenProjects(),
-          fetchScheduledWorkshops(),
+          fetchActiveWorkshops(),
+          fetchOpenCommunityJobs(),
           fetchRegionalPartners(),
           fetchNewsletterContent(),
         ]);
@@ -574,10 +646,15 @@ export default function BriskOliveNewsletterApp() {
           });
         }
 
+        const regularProjects = projectsData.filter((p) => p.project_company !== TCS_TEMP_STAFFING_COMPANY);
+        const tcsProjects = projectsData.filter((p) => p.project_company === TCS_TEMP_STAFFING_COMPANY);
+
         const fullContent = { ...contentData, images: processedImages };
         setJobs(jobsData);
-        setProjects(projectsData);
+        setProjects(regularProjects);
+        setTempStaffingProjects(tcsProjects);
         setWorkshops(workshopsData);
+        setCommunityJobs(communityJobsData);
         setRegionalPartners(partnersData);
         setContent(fullContent);
         setEditedContent(structuredClone(contentData || {}));
@@ -747,6 +824,16 @@ export default function BriskOliveNewsletterApp() {
     label: `${w.workshop_title || 'Workshop'}${w.workshop_start_date ? ' • ' + w.workshop_start_date : ''}`,
   }));
 
+  const communityJobOptions = communityJobs.map((j) => ({
+    value: j.id,
+    label: `${j.job_company || '?'} • ${j.job_designation || 'Position'}`,
+  }));
+
+  const tempStaffingProjectOptions = tempStaffingProjects.map((p) => ({
+    value: p.id,
+    label: p.project_title || 'Assignment',
+  }));
+
   // PDFViewer/PDFDownloadLink regenerate the entire PDF whenever the `document`
   // element's props change reference — without memoizing these, every render
   // (e.g. the toast auto-dismiss timer, any unrelated state update) produced a
@@ -764,6 +851,14 @@ export default function BriskOliveNewsletterApp() {
     () => workshops.filter((w) => selectedWorkshops.some((s) => s.value === w.id)),
     [workshops, selectedWorkshops]
   );
+  const filteredCommunityJobs = useMemo(
+    () => communityJobs.filter((j) => selectedCommunityJobs.some((s) => s.value === j.id)),
+    [communityJobs, selectedCommunityJobs]
+  );
+  const filteredTempStaffingProjects = useMemo(
+    () => tempStaffingProjects.filter((p) => selectedTempStaffingProjects.some((s) => s.value === p.id)),
+    [tempStaffingProjects, selectedTempStaffingProjects]
+  );
 
   const newsletterDocumentElement = useMemo(
     () => (
@@ -771,11 +866,13 @@ export default function BriskOliveNewsletterApp() {
         jobs={filteredJobs}
         projects={filteredProjects}
         workshops={filteredWorkshops}
+        communityJobs={filteredCommunityJobs}
+        tempStaffingProjects={filteredTempStaffingProjects}
         regionalPartners={regionalPartners}
         content={content}
       />
     ),
-    [filteredJobs, filteredProjects, filteredWorkshops, regionalPartners, content]
+    [filteredJobs, filteredProjects, filteredWorkshops, filteredCommunityJobs, filteredTempStaffingProjects, regionalPartners, content]
   );
 
     if (loading) {
@@ -837,6 +934,34 @@ export default function BriskOliveNewsletterApp() {
             value={selectedWorkshops}
             onChange={setSelectedWorkshops}
             placeholder="Select workshops to include..."
+            styles={customSelectStyles}
+          />
+        </div>
+
+        <div className="select-group">
+          <label>Select Community Jobs ({selectedCommunityJobs.length}/{communityJobOptions.length})</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
+            options={communityJobOptions}
+            value={selectedCommunityJobs}
+            onChange={setSelectedCommunityJobs}
+            placeholder="Select community jobs to include..."
+            styles={customSelectStyles}
+          />
+        </div>
+
+        <div className="select-group">
+          <label>Select Temp Staffing ({selectedTempStaffingProjects.length}/{tempStaffingProjectOptions.length})</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
+            options={tempStaffingProjectOptions}
+            value={selectedTempStaffingProjects}
+            onChange={setSelectedTempStaffingProjects}
+            placeholder="Select temp staffing assignments to include..."
             styles={customSelectStyles}
           />
         </div>
