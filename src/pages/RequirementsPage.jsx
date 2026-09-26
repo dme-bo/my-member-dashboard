@@ -565,65 +565,6 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  const ALLOCATION_TABLE_HEADERS = ["Name", "Email", "Phone", "Designation", "State", "City", "Category", "Resume"];
-
-  const buildAllocationEmailFields = (requirement, allocatedCity) => [
-    { label: "Type", value: getTypeLabel(requirement?.type) },
-    { label: "Title", value: requirement?.title || "N/A" },
-    { label: "Company", value: requirement?.company || "N/A" },
-    // When the requirement spans multiple cities, show the specific one this
-    // batch was allocated to rather than the whole list.
-    { label: "Location", value: allocatedCity || requirement?.location || "N/A" },
-    { label: "Compensation", value: requirement?.salary || "N/A" },
-    { label: "Status", value: requirement?.status === "active" ? "Open" : "Closed" },
-    { label: "Allocated On", value: new Date().toLocaleString("en-IN") },
-  ];
-
-  const buildAllocationMemberRows = (allocatedMembersList) =>
-    allocatedMembersList.map((member) => [
-      member?.name || "N/A",
-      member?.email || "N/A",
-      member?.phone || "N/A",
-      member?.designation || "N/A",
-      member?.state || "N/A",
-      member?.city || "N/A",
-      member?.category || "N/A",
-      member?.resume_fileurl || "",
-    ]);
-
-  const JOB_ALLOCATION_RECIPIENTS =
-    "dme@briskolive.com,recruitment.manager@briskolive.com,recruitment.executive@briskolive.com,recruitment.associate@briskolive.com,members@briskolive.com";
-  const DEFAULT_ALLOCATION_RECIPIENT = "dme@briskolive.com";
-  const REQUIREMENTS_DASHBOARD_URL = "https://my-member-dashboard.vercel.app/requirements";
-
-  const sendAllocationEmail = async (requirement, allocatedMembersList, allocatedCity) => {
-    const isJobAllocation = requirement?.type === "job";
-    const response = await fetch("/api/send-allocation-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: isJobAllocation ? JOB_ALLOCATION_RECIPIENTS : DEFAULT_ALLOCATION_RECIPIENT,
-        subject: `Member Allocation - ${requirement?.title || "Requirement"}${allocatedCity ? ` (${allocatedCity})` : ""}`,
-        heading: `${getTypeLabel(requirement?.type)} Allocation`,
-        subheading: requirement?.title || "",
-        fields: buildAllocationEmailFields(requirement, allocatedCity),
-        tableTitle: "Allocated Members",
-        table: {
-          headers: ALLOCATION_TABLE_HEADERS,
-          rows: buildAllocationMemberRows(allocatedMembersList),
-        },
-        ...(isJobAllocation ? { dashboardUrl: REQUIREMENTS_DASHBOARD_URL } : {}),
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Failed to send allocation email.");
-    }
-  };
-
   const exportToCSV = () => {
     const csvData = filteredRequirements.map((req) => ({
       Type: getTypeLabel(req.type),
@@ -1747,13 +1688,9 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     });
 
                     await Promise.all(promises);
-                    const allocatedMemberDetails = newMembers
-                      .map((userId) => members.find((m) => m.id === userId))
-                      .filter(Boolean);
-                    sendAllocationEmail(selectedReq, allocatedMemberDetails, allocationCity).catch((emailError) => {
-                      console.error("Allocation email failed:", emailError);
-                      showToast("Allocation saved, but email could not be sent.", "error");
-                    });
+                    // No per-allocation email anymore — a single daily 4pm
+                    // summary (api/send-allocation-summary.js) covers every
+                    // allocation across Jobs/Projects/Temp Staffing instead.
                     showToast(`Successfully allocated ${newMembers.length} new member(s)!`, "success");
                     setSelectedMemberIds([]);
                     setAllocationCity("");

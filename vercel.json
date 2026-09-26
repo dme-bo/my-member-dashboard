@@ -4,9 +4,11 @@
   ],
   "crons": [
     { "path": "/api/send-followup-reminders", "schedule": "0 3 * * *" },
-    { "path": "/api/send-daily-report", "schedule": "30 12 * * *" }
+    { "path": "/api/send-daily-report", "schedule": "30 12 * * *" },
+    { "path": "/api/send-allocation-summary", "schedule": "30 10 * * *" }
   ],
   "functions": {
-    "api/send-daily-report.js": { "maxDuration": 30 }
+    "api/send-daily-report.js": { "maxDuration": 30 },
+    "api/send-allocation-summary.js": { "maxDuration": 30 }
   }
 }

@@ -134,6 +134,109 @@ export function renderAllocationEmail({
 </div>`;
 }
 
+function renderStatBlock(value, label, accentColor) {
+  return `
+    <td style="padding:18px 12px;text-align:center;">
+      <div style="font-size:30px;font-weight:800;color:${accentColor};line-height:1;">${escapeHtml(value)}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:6px;text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(label)}</div>
+    </td>`;
+}
+
+function renderAllocationDetailTable({ headers, rows }, accentColor) {
+  const headerRow = headers
+    .map(
+      (h) =>
+        `<th style="background:${accentColor};color:#ffffff;font-size:12px;font-weight:700;text-align:left;padding:10px 14px;white-space:nowrap;">${escapeHtml(h)}</th>`
+    )
+    .join("");
+  const bodyRows = rows
+    .map(
+      (row, i) => `
+      <tr style="background:${i % 2 === 0 ? "#ffffff" : "#f9fafb"};">
+        ${row
+          .map(
+            (cell) =>
+              `<td style="padding:10px 14px;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;vertical-align:top;">${escapeHtml(
+                cell === "" || cell === undefined || cell === null ? "-" : String(cell)
+              )}</td>`
+          )
+          .join("")}
+      </tr>`
+    )
+    .join("");
+  return `<table style="width:100%;border-collapse:collapse;"><tr>${headerRow}</tr>${bodyRows}</table>`;
+}
+
+// Single-category allocation digest — one attractive, self-contained email
+// per requirement type (Job / Project / Temp Staffing) instead of one
+// combined report. Gradient banner + at-a-glance stat blocks + a clean
+// rounded table, with a friendly empty state when nothing was allocated.
+export function renderAllocationCategoryEmail({
+  icon = "📋",
+  categoryLabel,
+  dateStr,
+  accentColor = "#1976d2",
+  accentColorDark,
+  headers,
+  rows,
+  totalMembers,
+  totalRequirements,
+  dashboardUrl,
+  signOffName,
+}) {
+  const gradient = `linear-gradient(135deg, ${accentColor}, ${accentColorDark || accentColor})`;
+  const hasRows = rows && rows.length > 0;
+
+  const body = hasRows
+    ? `
+      <div style="padding:0 28px 8px 28px;">
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;background:#fafafa;border-radius:10px;overflow:hidden;">
+          <tr>
+            ${renderStatBlock(totalRequirements, totalRequirements === 1 ? "Requirement" : "Requirements", accentColor)}
+            <td style="width:1px;background:#e5e7eb;"></td>
+            ${renderStatBlock(totalMembers, totalMembers === 1 ? "Member Allocated" : "Members Allocated", accentColor)}
+          </tr>
+        </table>
+      </div>
+      <div style="padding:0 28px 28px 28px;">
+        <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+          ${renderAllocationDetailTable({ headers, rows }, accentColor)}
+        </div>
+      </div>`
+    : `
+      <div style="padding:44px 28px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:10px;">🗒️</div>
+        <div style="font-size:14px;color:#9ca3af;">No ${escapeHtml(categoryLabel.toLowerCase())} today.</div>
+      </div>`;
+
+  return `
+<div style="background:#f3f4f6;padding:32px 16px;font-family:'Segoe UI',Arial,sans-serif;">
+  <table style="max-width:640px;width:100%;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);border-collapse:collapse;">
+    <tr>
+      <td style="background:${accentColor};background:${gradient};padding:32px 28px;">
+        <div style="color:#ffffff;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.85;">Brisk Olive Dashboard</div>
+        <div style="color:#ffffff;font-size:24px;font-weight:700;margin-top:8px;">${icon} ${escapeHtml(categoryLabel)}</div>
+        <div style="color:#ffffff;font-size:13px;opacity:0.9;margin-top:4px;">Daily Summary — ${escapeHtml(dateStr)}</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 0 0 0;">${body}</td>
+    </tr>
+    ${
+      dashboardUrl
+        ? `<tr><td style="padding:0 28px 16px 28px;font-size:13px;"><span style="font-weight:700;color:#111827;">Dashboard:</span> <a href="${escapeHtml(dashboardUrl)}" style="color:${accentColor};">${escapeHtml(dashboardUrl)}</a></td></tr>`
+        : ""
+    }
+    <tr>
+      <td style="padding:16px 28px 24px 28px;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af;line-height:1.6;">
+        For any queries, please connect with the dashboard team.<br/>
+        Regards,<br/>${escapeHtml(signOffName || "Brisk Olive Dashboard (Auto-generated)")}
+      </td>
+    </tr>
+  </table>
+</div>`;
+}
+
 // A cell is normally a plain value; a `{ linkPath, label }` shape renders as
 // a link to that path resolved against the report's dashboardUrl instead.
 function renderGridCell(cell, dashboardUrl) {

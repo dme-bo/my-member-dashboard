@@ -228,6 +228,45 @@ function sendFollowupRemindersDevApi() {
   }
 }
 
+function sendAllocationSummaryDevApi() {
+  return {
+    name: 'send-allocation-summary-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url !== '/api/send-allocation-summary') {
+          return next()
+        }
+
+        try {
+          const env = loadEnv(server.config.mode, process.cwd(), '')
+          Object.assign(process.env, env)
+
+          const { default: handler } = await import('./api/send-allocation-summary.js')
+          const shimRes = {
+            statusCode: 200,
+            setHeader: (...args) => res.setHeader(...args),
+            status(code) {
+              this.statusCode = code
+              return this
+            },
+            json(payload) {
+              res.statusCode = this.statusCode
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify(payload))
+            },
+          }
+          await handler(req, shimRes)
+        } catch (error) {
+          console.error('send-allocation-summary (dev) error:', error)
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Failed to run send-allocation-summary.' }))
+        }
+      })
+    },
+  }
+}
+
 function parseCommunityJobPhotosDevApi() {
   return {
     name: 'parse-community-job-photos-dev-api',
@@ -311,6 +350,7 @@ export default defineConfig({
     hrEmployeesDevApi(),
     firestoreDevApi(),
     sendFollowupRemindersDevApi(),
+    sendAllocationSummaryDevApi(),
     parseCommunityJobPhotosDevApi(),
   ],
   optimizeDeps: {

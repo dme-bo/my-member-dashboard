@@ -40,6 +40,7 @@ const parsePostedOn = (value) => {
 };
 
 const emptyForm = () => ({
+  job_org_type: "Company",
   job_company: "",
   job_designation: "",
   job_location: "",
@@ -51,6 +52,7 @@ const emptyForm = () => ({
   job_shift_time: "",
   job_description: "",
   job_howtoapply: "",
+  job_apply_link: "",
   job_postedon: formatPostedOn(new Date()),
   job_status: "Open",
 });
@@ -175,13 +177,14 @@ export default function CommunityJobsPage() {
 
   const handleSave = async (isDraft) => {
     if (!form.job_designation.trim() || !form.job_company.trim()) {
-      showToast("Company Name and Role/Designation are required.", "error");
+      showToast("Organization Name and Role/Designation are required.", "error");
       return;
     }
 
     setSaving(true);
     try {
       const payload = {
+        job_org_type: form.job_org_type === "Government" ? "Government" : "Company",
         job_company: form.job_company.trim(),
         job_designation: form.job_designation.trim(),
         job_location: form.job_location.trim(),
@@ -193,6 +196,7 @@ export default function CommunityJobsPage() {
         job_shift_time: form.job_shift_time.trim(),
         job_description: form.job_description.trim(),
         job_howtoapply: form.job_howtoapply.trim(),
+        job_apply_link: form.job_apply_link.trim(),
         job_postedon: form.job_postedon || formatPostedOn(new Date()),
         job_status: form.job_status,
         job_isdraft: isDraft,
@@ -411,7 +415,7 @@ export default function CommunityJobsPage() {
               <tr style={{ backgroundColor: "#1976d2", color: "white" }}>
                 <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px", width: "56px" }}></th>
                 <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Role</th>
-                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Company</th>
+                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Organization</th>
                 <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Location</th>
                 <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", width: "130px" }}>Posted On</th>
                 <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", width: "130px" }}>Status</th>
@@ -686,10 +690,13 @@ export default function CommunityJobsPage() {
 }
 
 function CommunityJobFields({ form, updateField, readOnly }) {
+  const isGovt = form.job_org_type === "Government";
+
   if (readOnly) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
-        <ReadOnlyRow label="Company Name" value={form.job_company} />
+        <ReadOnlyRow label="Organization Type" value={isGovt ? "Government" : "Company"} />
+        <ReadOnlyRow label={isGovt ? "Department / Ministry Name" : "Company Name"} value={form.job_company} />
         <ReadOnlyRow label="Role / Designation" value={form.job_designation} />
         <ReadOnlyRow label="Job Location" value={form.job_location} />
         <ReadOnlyRow label="Experience Required" value={form.job_experience_required} />
@@ -702,6 +709,18 @@ function CommunityJobFields({ form, updateField, readOnly }) {
         <ReadOnlyRow label="Shift Time" value={form.job_shift_time} />
         <ReadOnlyRow label="Job Description" value={form.job_description} multiline />
         <ReadOnlyRow label="How to Apply" value={form.job_howtoapply} multiline />
+        {form.job_apply_link ? (
+          <div>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
+              Link to Apply
+            </div>
+            <a href={form.job_apply_link} target="_blank" rel="noreferrer" style={{ fontSize: "14px", color: "#1976d2", wordBreak: "break-all" }}>
+              {form.job_apply_link}
+            </a>
+          </div>
+        ) : (
+          <ReadOnlyRow label="Link to Apply" value="" />
+        )}
         <ReadOnlyRow label="Posted On" value={form.job_postedon} />
         <ReadOnlyRow label="Status" value={form.job_status || "Closed"} />
       </div>
@@ -711,8 +730,37 @@ function CommunityJobFields({ form, updateField, readOnly }) {
   return (
     <>
       <div style={fieldWrapStyle}>
-        <label style={fieldLabelStyle}>Company Name</label>
-        <input style={inputStyle} value={form.job_company} onChange={(e) => updateField("job_company", e.target.value)} placeholder="e.g. Tata Consultancy Services Pvt Ltd" />
+        <label style={fieldLabelStyle}>Organization Type</label>
+        <div style={{ display: "flex", gap: "24px", padding: "2px 0" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#1f2937", cursor: "pointer" }}>
+            <input
+              type="radio"
+              name="job_org_type"
+              checked={!isGovt}
+              onChange={() => updateField("job_org_type", "Company")}
+            />
+            Company
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#1f2937", cursor: "pointer" }}>
+            <input
+              type="radio"
+              name="job_org_type"
+              checked={isGovt}
+              onChange={() => updateField("job_org_type", "Government")}
+            />
+            Government
+          </label>
+        </div>
+      </div>
+
+      <div style={fieldWrapStyle}>
+        <label style={fieldLabelStyle}>{isGovt ? "Department / Ministry Name" : "Company Name"}</label>
+        <input
+          style={inputStyle}
+          value={form.job_company}
+          onChange={(e) => updateField("job_company", e.target.value)}
+          placeholder={isGovt ? "e.g. Ministry of Railways" : "e.g. Tata Consultancy Services Pvt Ltd"}
+        />
       </div>
 
       <div style={fieldWrapStyle}>
@@ -770,6 +818,17 @@ function CommunityJobFields({ form, updateField, readOnly }) {
       <div style={fieldWrapStyle}>
         <label style={fieldLabelStyle}>How to Apply</label>
         <textarea style={{ ...inputStyle, minHeight: "80px", resize: "vertical" }} value={form.job_howtoapply} onChange={(e) => updateField("job_howtoapply", e.target.value)} placeholder="Phone, email, subject line, etc." />
+      </div>
+
+      <div style={fieldWrapStyle}>
+        <label style={fieldLabelStyle}>Link to Apply</label>
+        <input
+          type="url"
+          style={inputStyle}
+          value={form.job_apply_link}
+          onChange={(e) => updateField("job_apply_link", e.target.value)}
+          placeholder="e.g. https://company.com/careers/apply"
+        />
       </div>
 
       <div style={{ ...fieldWrapStyle, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
