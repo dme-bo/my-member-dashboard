@@ -45,6 +45,43 @@ const getTypeBadgeColors = (type) =>
     : { bg: "#dbeafe", color: "#0c4a6e" };
 const getTypeSolidColor = (type) => (type === "project" ? "#9333ea" : type === "tempstaffing" ? "#ea580c" : "#2563eb");
 
+// Short summary for table cells: first 3 cities + how many more, instead of
+// dumping the full (sometimes 60+ city) list inline. Full list is still
+// available via the title tooltip / detail views.
+const formatLocationSummary = (location, locationList) => {
+  if (!locationList || locationList.length <= 3) return location;
+  return `${locationList.slice(0, 3).join(", ")} +${locationList.length - 3} more`;
+};
+
+// Full detail views have room to show every city as a wrapped pill list
+// instead of one run-together (or truncated) line.
+function LocationField({ location, locationList, label = "Location" }) {
+  if (!locationList || locationList.length === 0) {
+    return (
+      <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+        <strong>{label}:</strong> {location}
+      </p>
+    );
+  }
+  return (
+    <div style={{ marginBottom: "8px" }}>
+      <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
+        <strong>{label}:</strong> {locationList.length} cities
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+        {locationList.map((city) => (
+          <span
+            key={city}
+            style={{ padding: "4px 12px", borderRadius: "20px", backgroundColor: "#f1f5f9", color: "#334155", fontSize: "13px", fontWeight: "600" }}
+          >
+            {city}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function RequirementsPage({ memberRecords: propMembers = [], membersLoading: propLoading = false }) {
   const [requirementsData, setRequirementsData] = useState([]);
   const [members, setMembers] = useState([]);
@@ -83,6 +120,9 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const [applicantCounts, setApplicantCounts] = useState({});
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [allocationCity, setAllocationCity] = useState("");
+  const [showCityPickerModal, setShowCityPickerModal] = useState(false);
+  const [pickedCity, setPickedCity] = useState("");
 
   // Member filters
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
@@ -165,8 +205,22 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
         const combined = [...jobs, ...projects];
 
+        // Most postings have a single location string, but some projects list
+        // dozens of cities as an array — React renders array children with no
+        // separator at all, which is what produced the unreadable run-together
+        // blob. Join it into a readable string and keep the raw list too, so
+        // the table/modals can show a short summary and the allocate flow can
+        // ask which specific city a member is being allocated to.
+        const resolveLocation = (raw) => {
+          const list = Array.isArray(raw) ? raw.map((c) => String(c).trim()).filter(Boolean) : null;
+          if (list && list.length > 0) {
+            return { location: list.join(", "), locationList: list };
+          }
+          return { location: raw || "Location not specified", locationList: null };
+        };
+
         const transformed = combined.map((item) => {
-          let title, jd, salary, location, company, logo, postedOn, status, benefits;
+          let title, jd, salary, location, locationList, company, logo, postedOn, status, benefits;
           let displayType = item.type;
           if (item.type === "job") {
             const min = item.job_salaryrange_minimum ?? 0;
@@ -181,7 +235,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             }
             title = item.job_title ?? "Untitled Job";
             jd = item.job_roleandresponsibilities ?? "No description available.";
-            location = item.job_city ?? item.job_location ?? "Location not specified";
+            ({ location, locationList } = resolveLocation(item.job_city ?? item.job_location));
             company = item.job_company ?? "—";
             logo = item.job_logo ?? null;
             postedOn = item.job_postedon ?? "—";
@@ -191,7 +245,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             title = item.project_title ?? "Untitled Project";
             jd = item.project_description ?? "No description available.";
             salary = "Volunteer / Stipend-based";
-            location = item.project_location ?? item.project_city ?? "Location not specified";
+            ({ location, locationList } = resolveLocation(item.project_location ?? item.project_city));
             company = item.project_company ?? "—";
             logo = item.project_company_logo ?? null;
             postedOn = item.project_postedon ?? "—";
@@ -209,6 +263,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             jd,
             salary,
             location,
+            locationList,
             company,
             logo,
             benefits,
@@ -512,11 +567,13 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
   const ALLOCATION_TABLE_HEADERS = ["Name", "Email", "Phone", "Designation", "State", "City", "Category", "Resume"];
 
-  const buildAllocationEmailFields = (requirement) => [
+  const buildAllocationEmailFields = (requirement, allocatedCity) => [
     { label: "Type", value: getTypeLabel(requirement?.type) },
     { label: "Title", value: requirement?.title || "N/A" },
     { label: "Company", value: requirement?.company || "N/A" },
-    { label: "Location", value: requirement?.location || "N/A" },
+    // When the requirement spans multiple cities, show the specific one this
+    // batch was allocated to rather than the whole list.
+    { label: "Location", value: allocatedCity || requirement?.location || "N/A" },
     { label: "Compensation", value: requirement?.salary || "N/A" },
     { label: "Status", value: requirement?.status === "active" ? "Open" : "Closed" },
     { label: "Allocated On", value: new Date().toLocaleString("en-IN") },
@@ -539,7 +596,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const DEFAULT_ALLOCATION_RECIPIENT = "dme@briskolive.com";
   const REQUIREMENTS_DASHBOARD_URL = "https://my-member-dashboard.vercel.app/requirements";
 
-  const sendAllocationEmail = async (requirement, allocatedMembersList) => {
+  const sendAllocationEmail = async (requirement, allocatedMembersList, allocatedCity) => {
     const isJobAllocation = requirement?.type === "job";
     const response = await fetch("/api/send-allocation-email", {
       method: "POST",
@@ -548,10 +605,10 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       },
       body: JSON.stringify({
         to: isJobAllocation ? JOB_ALLOCATION_RECIPIENTS : DEFAULT_ALLOCATION_RECIPIENT,
-        subject: `Member Allocation - ${requirement?.title || "Requirement"}`,
+        subject: `Member Allocation - ${requirement?.title || "Requirement"}${allocatedCity ? ` (${allocatedCity})` : ""}`,
         heading: `${getTypeLabel(requirement?.type)} Allocation`,
         subheading: requirement?.title || "",
-        fields: buildAllocationEmailFields(requirement),
+        fields: buildAllocationEmailFields(requirement, allocatedCity),
         tableTitle: "Allocated Members",
         table: {
           headers: ALLOCATION_TABLE_HEADERS,
@@ -914,7 +971,12 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                         </div>
                       </td>
                       <td style={{ padding: "16px", color: "#4b5563" }}>{req.company}</td>
-                      <td style={{ padding: "16px", color: "#4b5563" }}>{req.location}</td>
+                      <td
+                        style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }}
+                        title={req.location}
+                      >
+                        {formatLocationSummary(req.location, req.locationList)}
+                      </td>
                       <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
                       <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
                         {liveCount}
@@ -1089,9 +1151,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
               <strong>Company:</strong> {selectedReq.company}
             </p>
-            <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
-              <strong>Location:</strong> {selectedReq.location}
-            </p>
+            <LocationField location={selectedReq.location} locationList={selectedReq.locationList} />
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
               <strong>Compensation:</strong> {selectedReq.salary}
             </p>
@@ -1134,7 +1194,6 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               {selectedReq.status === "active" && (
                 <button
                   onClick={() => {
-                    setShowAllocateModal(true);
                     setShowJobModal(false);
                     setMemberSearchTerm("");
                     setGenderFilter("");
@@ -1145,7 +1204,16 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     setRankFilter("");
                     setLevelFilter("");
                     setSelectedMemberIds([]);
+                    setAllocationCity("");
                     setCurrentPage(1);
+                    // Multi-city requirements ask which city first, in their
+                    // own step — only after that opens the member list.
+                    if (selectedReq.locationList && selectedReq.locationList.length > 1) {
+                      setPickedCity("");
+                      setShowCityPickerModal(true);
+                    } else {
+                      setShowAllocateModal(true);
+                    }
                   }}
                   style={{
                     padding: "12px 24px",
@@ -1193,6 +1261,71 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         </div>
       )}
 
+      {/* CITY PICKER MODAL — first step for requirements spanning multiple
+          cities; only once a city is chosen here does the member list open. */}
+      {showCityPickerModal && selectedReq && (
+        <div
+          className="modal-overlay"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1050, padding: "20px" }}
+          onClick={() => {
+            setShowCityPickerModal(false);
+            setShowJobModal(true);
+          }}
+        >
+          <div
+            style={{ background: "white", borderRadius: "20px", padding: "36px", width: "90vw", maxWidth: "460px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: "22px", marginBottom: "8px", color: "#1f2937" }}>Which city are you allocating for?</h2>
+            <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "20px" }}>
+              <strong>{selectedReq.title}</strong> covers {selectedReq.locationList?.length} cities — pick one to continue.
+            </p>
+            <select
+              value={pickedCity}
+              onChange={(e) => setPickedCity(e.target.value)}
+              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "2px solid #e2e8f0", fontSize: "14px", boxSizing: "border-box", marginBottom: "24px" }}
+            >
+              <option value="">Select a city...</option>
+              {selectedReq.locationList?.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setShowCityPickerModal(false);
+                  setShowJobModal(true);
+                }}
+                style={{ padding: "12px 24px", backgroundColor: "#e5e7eb", color: "#1f2937", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!pickedCity}
+                onClick={() => {
+                  setAllocationCity(pickedCity);
+                  setShowCityPickerModal(false);
+                  setShowAllocateModal(true);
+                }}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: pickedCity ? "#1976d2" : "#d1d5db",
+                  color: "white",
+                  borderRadius: "30px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: pickedCity ? "pointer" : "not-allowed",
+                }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ALLOCATE MEMBERS MODAL */}
       {showAllocateModal && selectedReq && (
         <div
@@ -1227,8 +1360,30 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               Allocate Members to: <strong>{selectedReq.title}</strong>
             </h2>
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}>
-              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
+              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong>{" "}
+              <span title={selectedReq.location}>{formatLocationSummary(selectedReq.location, selectedReq.locationList)}</span>
             </p>
+
+            {allocationCity && (
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+                <span
+                  style={{ padding: "8px 16px", borderRadius: "20px", backgroundColor: "#eff6ff", color: "#1976d2", fontWeight: "700", fontSize: "14px" }}
+                >
+                  Allocating for: {allocationCity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAllocateModal(false);
+                    setPickedCity(allocationCity);
+                    setShowCityPickerModal(true);
+                  }}
+                  style={{ background: "none", border: "none", color: "#1976d2", fontWeight: "600", fontSize: "13px", cursor: "pointer", textDecoration: "underline" }}
+                >
+                  Change city
+                </button>
+              </div>
+            )}
 
             {selectedReq.status !== "active" && (
               <div
@@ -1550,10 +1705,18 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
             <div style={{ display: "flex", gap: "16px", justifyContent: "flex-end" }}>
               <button
-                disabled={selectedReq.status !== "active" || selectedMemberIds.length === 0}
+                disabled={
+                  selectedReq.status !== "active" ||
+                  selectedMemberIds.length === 0 ||
+                  (selectedReq.locationList?.length > 1 && !allocationCity)
+                }
                 onClick={async () => {
                   if (selectedReq.status !== "active") {
                     showToast("Cannot allocate to a closed requirement", "error");
+                    return;
+                  }
+                  if (selectedReq.locationList?.length > 1 && !allocationCity) {
+                    showToast("Please select which city you're allocating to.", "error");
                     return;
                   }
                   try {
@@ -1579,6 +1742,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                         name: member.name,
                         phone: member.phone || "—",
                         allocatedAt: serverTimestamp(),
+                        ...(allocationCity ? { city: allocationCity } : {}),
                       });
                     });
 
@@ -1586,12 +1750,13 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     const allocatedMemberDetails = newMembers
                       .map((userId) => members.find((m) => m.id === userId))
                       .filter(Boolean);
-                    sendAllocationEmail(selectedReq, allocatedMemberDetails).catch((emailError) => {
+                    sendAllocationEmail(selectedReq, allocatedMemberDetails, allocationCity).catch((emailError) => {
                       console.error("Allocation email failed:", emailError);
                       showToast("Allocation saved, but email could not be sent.", "error");
                     });
                     showToast(`Successfully allocated ${newMembers.length} new member(s)!`, "success");
                     setSelectedMemberIds([]);
+                    setAllocationCity("");
                     setShowAllocateModal(false);
                     setShowJobModal(true);
                   } catch (err) {
@@ -1601,12 +1766,18 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 }}
                 style={{
                   padding: "12px 28px",
-                  backgroundColor: selectedReq.status !== "active" || selectedMemberIds.length === 0 ? "#d1d5db" : "#1976d2",
+                  backgroundColor:
+                    selectedReq.status !== "active" || selectedMemberIds.length === 0 || (selectedReq.locationList?.length > 1 && !allocationCity)
+                      ? "#d1d5db"
+                      : "#1976d2",
                   color: "white",
                   borderRadius: "30px",
                   border: "none",
                   fontWeight: "600",
-                  cursor: selectedReq.status === "active" && selectedMemberIds.length > 0 ? "pointer" : "not-allowed",
+                  cursor:
+                    selectedReq.status === "active" && selectedMemberIds.length > 0 && !(selectedReq.locationList?.length > 1 && !allocationCity)
+                      ? "pointer"
+                      : "not-allowed",
                 }}
               >
                 Save Allocation ({selectedMemberIds.length})
@@ -1617,6 +1788,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   setShowAllocateModal(false);
                   setShowJobModal(true);
                   setSelectedMemberIds([]);
+                  setAllocationCity("");
                 }}
                 style={{
                   padding: "12px 28px",
@@ -1667,7 +1839,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})
             </h2>
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}>
-              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong> {selectedReq.location}
+              <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong>{" "}
+              <span title={selectedReq.location}>{formatLocationSummary(selectedReq.location, selectedReq.locationList)}</span>
             </p>
 
             <div
