@@ -19,6 +19,7 @@ const RESPONSE_SCHEMA = {
     job_shift_time: { type: SchemaType.STRING },
     job_description: { type: SchemaType.STRING },
     job_howtoapply: { type: SchemaType.STRING },
+    job_apply_link: { type: SchemaType.STRING },
   },
   required: [
     "job_company",
@@ -32,6 +33,7 @@ const RESPONSE_SCHEMA = {
     "job_shift_time",
     "job_description",
     "job_howtoapply",
+    "job_apply_link",
   ],
 };
 
@@ -47,7 +49,8 @@ Fill every field of the JSON schema as best you can from what's visible:
 - job_working_days: e.g. "4 Weekly Offs", "6 Days a Week".
 - job_shift_time: e.g. "General Shift", "Night Shift".
 - job_description: the body text — responsibilities, eligibility, skills, anything descriptive that isn't captured by the other fields.
-- job_howtoapply: contact/apply instructions — phone numbers, email, WhatsApp, subject line to use, etc.
+- job_howtoapply: contact/apply instructions that are NOT a clickable URL — phone numbers, email addresses to send a resume to, WhatsApp numbers, walk-in address, subject line to use, etc.
+- job_apply_link: a URL specifically meant for applying (e.g. text like "Apply here", "Apply now", "Apply at", "Registration link", or a bare link near the apply instructions). Put ONLY the URL itself here, nothing else. If the only apply method shown is a URL, put the URL here and leave job_howtoapply empty; if there's also contact info alongside it (e.g. "Apply at <link> or call 98765xxxxx"), split them — the URL goes in job_apply_link, the phone/email/other contact text goes in job_howtoapply.
 
 If a field genuinely isn't visible anywhere in the photos, return an empty string ("") for text fields or 0 for the salary numbers — never invent information that isn't in the images.`;
 
