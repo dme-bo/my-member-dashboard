@@ -17,17 +17,54 @@ const getTransporter = () => {
   return cachedTransporter;
 };
 
-const DEFAULT_RECIPIENT = "dme@briskolive.com";
-
 const formatDate = (date) =>
   date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
-// One category, one email, one distinct look — easier to scan at a glance
-// than a single combined report.
+// One category, one email, one distinct look, one recipient list — easier to
+// scan at a glance than a single combined report, and each team only gets
+// the category it actually needs to act on.
 const CATEGORIES = [
-  { key: "jobs", icon: "💼", categoryLabel: "Job Allocations", accentColor: "#1976d2", accentColorDark: "#0d47a1" },
-  { key: "projects", icon: "📁", categoryLabel: "Project Allocations", accentColor: "#7c3aed", accentColorDark: "#5b21b6" },
-  { key: "tempStaffing", icon: "🧑‍🤝‍🧑", categoryLabel: "Temp Staffing Allocations (TCS)", accentColor: "#0d9488", accentColorDark: "#0f766e" },
+  {
+    key: "jobs",
+    icon: "💼",
+    categoryLabel: "Job Allocations",
+    accentColor: "#1976d2",
+    accentColorDark: "#0d47a1",
+    recipients: [
+      "recruitment.manager@briskolive.com",
+      "recruitment.executive@briskolive.com",
+      "recruitment.associate@briskolive.com",
+      "members@briskolive.com",
+      "operations.head@briskolive.com",
+      "staffing.manager@briskolive.com",
+    ],
+  },
+  {
+    key: "projects",
+    icon: "📁",
+    categoryLabel: "Project Allocations",
+    accentColor: "#7c3aed",
+    accentColorDark: "#5b21b6",
+    recipients: [
+      "projects@briskolive.com",
+      "members@briskolive.com",
+      "operations.head@briskolive.com",
+      "staffing.manager@briskolive.com",
+    ],
+  },
+  {
+    key: "tempStaffing",
+    icon: "🧑‍🤝‍🧑",
+    categoryLabel: "Temp Staffing Allocations (TCS)",
+    accentColor: "#0d9488",
+    accentColorDark: "#0f766e",
+    recipients: [
+      "tcs@briskolive.com",
+      "members@briskolive.com",
+      "operations.head@briskolive.com",
+      "staffing.manager@briskolive.com",
+    ],
+  },
 ];
 
 // Three separate, attractively-themed digests replace the old per-allocation
@@ -55,7 +92,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing GMAIL_USER or GMAIL_APP_PASSWORD environment variable." });
     }
 
-    const to = (req.method === "POST" && req.body?.to) || req.query?.to || DEFAULT_RECIPIENT;
+    // Manual/testing override: pass `to` to redirect every category to one
+    // address instead of its real distribution list.
+    const toOverride = (req.method === "POST" && req.body?.to) || req.query?.to || null;
 
     const db = getAdminDb();
     const summary = await buildAllocationSummary(db);
@@ -63,8 +102,9 @@ export default async function handler(req, res) {
     const transporter = getTransporter();
 
     const results = await Promise.all(
-      CATEGORIES.map(async ({ key, icon, categoryLabel, accentColor, accentColorDark }) => {
+      CATEGORIES.map(async ({ key, icon, categoryLabel, accentColor, accentColorDark, recipients }) => {
         const category = summary[key];
+        const to = toOverride || recipients.join(", ");
         await transporter.sendMail({
           from: `Brisk Olive <${gmailUser}>`,
           to,
@@ -83,11 +123,11 @@ export default async function handler(req, res) {
             signOffName: "Brisk Olive Dashboard",
           }),
         });
-        return { category: key, totalRequirements: category.totalRequirements, totalMembers: category.totalMembers };
+        return { category: key, to, totalRequirements: category.totalRequirements, totalMembers: category.totalMembers };
       })
     );
 
-    return res.status(200).json({ ok: true, to, totalAllocations: summary.totalAllocations, results });
+    return res.status(200).json({ ok: true, totalAllocations: summary.totalAllocations, results });
   } catch (error) {
     console.error("send-allocation-summary error:", error);
     return res.status(500).json({ error: "Failed to send allocation summary.", details: String(error?.message || error) });
