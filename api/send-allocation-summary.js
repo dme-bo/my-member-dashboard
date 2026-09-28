@@ -20,6 +20,8 @@ const getTransporter = () => {
 const formatDate = (date) =>
   date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
+const DASHBOARD_URL = "https://my-member-dashboard.vercel.app/requirements";
+
 // One category, one email, one distinct look, one recipient list — easier to
 // scan at a glance than a single combined report, and each team only gets
 // the category it actually needs to act on.
@@ -120,6 +122,7 @@ export default async function handler(req, res) {
             rows: category.rows,
             totalMembers: category.totalMembers,
             totalRequirements: category.totalRequirements,
+            dashboardUrl: DASHBOARD_URL,
             signOffName: "Brisk Olive Dashboard",
           }),
         });
