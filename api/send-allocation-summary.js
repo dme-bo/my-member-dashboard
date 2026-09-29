@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { getAdminDb } from "./_lib/firebaseAdmin.js";
-import { renderAllocationCategoryEmail } from "./_lib/emailTemplate.js";
+import { renderAllocationSummaryEmail } from "./_lib/emailTemplate.js";
 import { buildAllocationSummary } from "./_lib/allocationSummaryData.js";
 
 let cachedTransporter = null;
@@ -17,61 +17,30 @@ const getTransporter = () => {
   return cachedTransporter;
 };
 
+const DEFAULT_RECIPIENTS = [
+  "recruitment.manager@briskolive.com",
+  "recruitment.executive@briskolive.com",
+  "recruitment.associate@briskolive.com",
+  "members@briskolive.com",
+  "projects@briskolive.com",
+  "tcs@briskolive.com",
+  "operations.head@briskolive.com",
+  "staffing.manager@briskolive.com",
+].join(", ");
+
 const formatDate = (date) =>
   date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
 const DASHBOARD_URL = "https://my-member-dashboard.vercel.app/requirements";
 
-// One category, one email, one distinct look, one recipient list — easier to
-// scan at a glance than a single combined report, and each team only gets
-// the category it actually needs to act on.
+// One digest, three sections — Job / Project / Temp Staffing allocations for
+// today, stacked in a single email instead of three separate ones.
 const CATEGORIES = [
-  {
-    key: "jobs",
-    icon: "💼",
-    categoryLabel: "Job Allocations",
-    accentColor: "#1976d2",
-    accentColorDark: "#0d47a1",
-    recipients: [
-      "recruitment.manager@briskolive.com",
-      "recruitment.executive@briskolive.com",
-      "recruitment.associate@briskolive.com",
-      "members@briskolive.com",
-      "operations.head@briskolive.com",
-      "staffing.manager@briskolive.com",
-    ],
-  },
-  {
-    key: "projects",
-    icon: "📁",
-    categoryLabel: "Project Allocations",
-    accentColor: "#7c3aed",
-    accentColorDark: "#5b21b6",
-    recipients: [
-      "projects@briskolive.com",
-      "members@briskolive.com",
-      "operations.head@briskolive.com",
-      "staffing.manager@briskolive.com",
-    ],
-  },
-  {
-    key: "tempStaffing",
-    icon: "🧑‍🤝‍🧑",
-    categoryLabel: "Temp Staffing Allocations (TCS)",
-    accentColor: "#0d9488",
-    accentColorDark: "#0f766e",
-    recipients: [
-      "tcs@briskolive.com",
-      "members@briskolive.com",
-      "operations.head@briskolive.com",
-      "staffing.manager@briskolive.com",
-    ],
-  },
+  { key: "jobs", icon: "💼", categoryLabel: "Job Allocations", accentColor: "#1976d2" },
+  { key: "projects", icon: "📁", categoryLabel: "Project Allocations", accentColor: "#7c3aed" },
+  { key: "tempStaffing", icon: "🧑‍🤝‍🧑", categoryLabel: "Temp Staffing Allocations (TCS)", accentColor: "#0d9488" },
 ];
 
-// Three separate, attractively-themed digests replace the old per-allocation
-// emails for Jobs, Projects and Temp Staffing — everything allocated today
-// in each category, as its own email, instead of one email per allocation.
 export default async function handler(req, res) {
   // Vercel Cron sends GET; allow POST too for manual/local testing.
   if (req.method !== "GET" && req.method !== "POST") {
@@ -94,43 +63,46 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing GMAIL_USER or GMAIL_APP_PASSWORD environment variable." });
     }
 
-    // Manual/testing override: pass `to` to redirect every category to one
-    // address instead of its real distribution list.
-    const toOverride = (req.method === "POST" && req.body?.to) || req.query?.to || null;
+    const to = (req.method === "POST" && req.body?.to) || req.query?.to || DEFAULT_RECIPIENTS;
 
     const db = getAdminDb();
     const summary = await buildAllocationSummary(db);
     const todayStr = formatDate(new Date());
-    const transporter = getTransporter();
 
-    const results = await Promise.all(
-      CATEGORIES.map(async ({ key, icon, categoryLabel, accentColor, accentColorDark, recipients }) => {
-        const category = summary[key];
-        const to = toOverride || recipients.join(", ");
-        await transporter.sendMail({
-          from: `Brisk Olive <${gmailUser}>`,
-          to,
-          subject: `${categoryLabel} — ${todayStr} (${category.totalMembers} member${category.totalMembers === 1 ? "" : "s"})`,
-          text: `${categoryLabel}\n${category.headers.join(" | ")}\n${category.rows.map((r) => r.join(" | ")).join("\n")}`,
-          html: renderAllocationCategoryEmail({
-            icon,
-            categoryLabel,
-            dateStr: todayStr,
-            accentColor,
-            accentColorDark,
-            headers: category.headers,
-            rows: category.rows,
-            totalMembers: category.totalMembers,
-            totalRequirements: category.totalRequirements,
-            dashboardUrl: DASHBOARD_URL,
-            signOffName: "Brisk Olive Dashboard",
-          }),
-        });
-        return { category: key, to, totalRequirements: category.totalRequirements, totalMembers: category.totalMembers };
-      })
-    );
+    const categories = CATEGORIES.map(({ key, icon, categoryLabel, accentColor }) => {
+      const category = summary[key];
+      return {
+        icon,
+        categoryLabel,
+        accentColor,
+        headers: category.headers,
+        rows: category.rows,
+        totalMembers: category.totalMembers,
+        totalRequirements: category.totalRequirements,
+      };
+    });
 
-    return res.status(200).json({ ok: true, totalAllocations: summary.totalAllocations, results });
+    const textFallback = categories
+      .map(
+        ({ categoryLabel, headers, rows }) =>
+          `${categoryLabel}\n${headers.join(" | ")}\n${rows.map((r) => r.join(" | ")).join("\n")}`
+      )
+      .join("\n\n");
+
+    await getTransporter().sendMail({
+      from: `Brisk Olive <${gmailUser}>`,
+      to,
+      subject: `Daily Allocation Summary (${todayStr}) — ${summary.totalAllocations} allocation${summary.totalAllocations === 1 ? "" : "s"}`,
+      text: textFallback,
+      html: renderAllocationSummaryEmail({
+        dateStr: todayStr,
+        categories,
+        dashboardUrl: DASHBOARD_URL,
+        signOffName: "Members Team",
+      }),
+    });
+
+    return res.status(200).json({ ok: true, to, totalAllocations: summary.totalAllocations });
   } catch (error) {
     console.error("send-allocation-summary error:", error);
     return res.status(500).json({ error: "Failed to send allocation summary.", details: String(error?.message || error) });

@@ -167,25 +167,13 @@ function renderAllocationDetailTable({ headers, rows }, accentColor) {
   return `<table style="width:100%;border-collapse:collapse;"><tr>${headerRow}</tr>${bodyRows}</table>`;
 }
 
-// Single-category allocation digest — one attractive, self-contained email
-// per requirement type (Job / Project / Temp Staffing) instead of one
-// combined report. Gradient banner + at-a-glance stat blocks + a clean
-// rounded table, with a friendly empty state when nothing was allocated.
-export function renderAllocationCategoryEmail({
-  icon = "📋",
-  categoryLabel,
-  dateStr,
-  accentColor = "#1976d2",
-  accentColorDark,
-  headers,
-  rows,
-  totalMembers,
-  totalRequirements,
-  dashboardUrl,
-  signOffName,
-}) {
-  const gradient = `linear-gradient(135deg, ${accentColor}, ${accentColorDark || accentColor})`;
+// One category's block within the combined digest: a colored mini-heading,
+// at-a-glance stat blocks, and a clean rounded table — or a friendly empty
+// state when nothing was allocated in that category today.
+function renderAllocationCategorySection({ icon = "📋", categoryLabel, accentColor = "#1976d2", headers, rows, totalMembers, totalRequirements }) {
   const hasRows = rows && rows.length > 0;
+
+  const heading = `<div style="padding:24px 28px 12px 28px;font-size:16px;font-weight:700;color:#111827;">${icon} ${escapeHtml(categoryLabel)}</div>`;
 
   const body = hasRows
     ? `
@@ -204,33 +192,61 @@ export function renderAllocationCategoryEmail({
         </div>
       </div>`
     : `
-      <div style="padding:44px 28px;text-align:center;">
-        <div style="font-size:32px;margin-bottom:10px;">🗒️</div>
-        <div style="font-size:14px;color:#9ca3af;">No ${escapeHtml(categoryLabel.toLowerCase())} today.</div>
+      <div style="padding:8px 28px 32px 28px;text-align:center;">
+        <div style="font-size:13px;color:#9ca3af;">No allocations today.</div>
       </div>`;
+
+  return heading + body;
+}
+
+// One combined daily digest covering every category (Job / Project / Temp
+// Staffing) in a single email — a neutral banner up top, then each
+// category's own colored section stacked below, separated by dividers.
+export function renderAllocationSummaryEmail({
+  dateStr,
+  categories,
+  accentColor = "#1976d2",
+  accentColorDark = "#0d47a1",
+  dashboardUrl,
+  signOffName,
+}) {
+  const gradient = `linear-gradient(135deg, ${accentColor}, ${accentColorDark})`;
+
+  const sectionsHtml = categories
+    .map((category, i) => {
+      const sectionRow = `<tr><td>${renderAllocationCategorySection(category)}</td></tr>`;
+      const dividerRow =
+        i < categories.length - 1
+          ? `<tr><td style="padding:0 28px;"><div style="border-top:1px solid #f3f4f6;"></div></td></tr>`
+          : "";
+      return sectionRow + dividerRow;
+    })
+    .join("");
 
   return `
 <div style="background:#f3f4f6;padding:32px 16px;font-family:'Segoe UI',Arial,sans-serif;">
   <table style="max-width:640px;width:100%;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);border-collapse:collapse;">
     <tr>
-      <td style="background:${accentColor};background:${gradient};padding:32px 28px;">
+      <td style="background:${gradient};padding:32px 28px;">
         <div style="color:#ffffff;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.85;">Brisk Olive Dashboard</div>
-        <div style="color:#ffffff;font-size:24px;font-weight:700;margin-top:8px;">${icon} ${escapeHtml(categoryLabel)}</div>
-        <div style="color:#ffffff;font-size:13px;opacity:0.9;margin-top:4px;">Daily Summary — ${escapeHtml(dateStr)}</div>
+        <div style="color:#ffffff;font-size:24px;font-weight:700;margin-top:8px;">📋 Daily Allocation Summary</div>
+        <div style="color:#ffffff;font-size:13px;opacity:0.9;margin-top:4px;">${escapeHtml(dateStr)}</div>
       </td>
     </tr>
     <tr>
-      <td style="padding:20px 0 0 0;">${body}</td>
+      <td style="padding:8px 0 0 0;">
+        <table style="width:100%;border-collapse:collapse;">${sectionsHtml}</table>
+      </td>
     </tr>
     ${
       dashboardUrl
-        ? `<tr><td style="padding:0 28px 16px 28px;font-size:13px;"><span style="font-weight:700;color:#111827;">Dashboard:</span> <a href="${escapeHtml(dashboardUrl)}" style="color:${accentColor};">${escapeHtml(dashboardUrl)}</a></td></tr>`
+        ? `<tr><td style="padding:8px 28px 16px 28px;font-size:13px;"><span style="font-weight:700;color:#111827;">Dashboard:</span> <a href="${escapeHtml(dashboardUrl)}" style="color:${accentColor};">${escapeHtml(dashboardUrl)}</a></td></tr>`
         : ""
     }
     <tr>
       <td style="padding:16px 28px 24px 28px;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af;line-height:1.6;">
-        For any queries, please connect with the dashboard team.<br/>
-        Regards,<br/>${escapeHtml(signOffName || "Brisk Olive Dashboard (Auto-generated)")}
+        For any queries, please connect with the members team.<br/>
+        Regards,<br/>${escapeHtml(signOffName || "Members Team")}
       </td>
     </tr>
   </table>

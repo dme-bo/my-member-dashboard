@@ -10,9 +10,14 @@ import {
   PDFViewer,
   Link,
   Image,
+  Font,
 } from '@react-pdf/renderer';
 import { collection, db, getDocs, query, where, doc, getDoc, updateDoc } from '../firestoreClient';
 import SkeletonLoader from '../components/SkeletonLoader';
+
+// Default hyphenation breaks long words mid-syllable (e.g. "Unspeci-fied")
+// inside narrow table cells — wrapping whole words looks far cleaner.
+Font.registerHyphenationCallback((word) => [word]);
 
 // ── PDF Styles ─────────────────────────────────────────────────────────────
 // Centralized PDF styles keep the newsletter layout consistent across pages.
@@ -332,8 +337,10 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                   <Text style={styles.tableCell}>Salary</Text>
                 </View>
                 {jobs.map((job, i) => (
-                  <View key={i} style={styles.tableRow}>
-                    <Text style={styles.tableCell}>{job.job_company || '-'}</Text>
+                  <View key={i} style={styles.tableRow} wrap={false}>
+                    <Text style={styles.tableCell}>
+                      {job.job_showcompanynameinposts === false ? 'Company Unspecified' : (job.job_company || '-')}
+                    </Text>
                     <Text style={styles.tableCell}>{job.job_industry || '-'}</Text>
                     <Text style={styles.tableCell}>{job.job_title || '-'}</Text>
                     <Text style={styles.tableCell}>{job.job_location || '-'}</Text>
@@ -374,7 +381,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                   <Text style={styles.tableCell}>Salary</Text>
                 </View>
                 {communityJobs.map((job, i) => (
-                  <View key={i} style={styles.tableRow}>
+                  <View key={i} style={styles.tableRow} wrap={false}>
                     <Text style={styles.tableCell}>{job.job_company || '-'}</Text>
                     <Text style={styles.tableCell}>{job.job_designation || '-'}</Text>
                     <Text style={styles.tableCell}>{job.job_location || '-'}</Text>
@@ -409,7 +416,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                   <Text style={styles.tableCell}>Apply</Text>
                 </View>
                 {tempStaffingProjects.map((proj, i) => (
-                  <View key={i} style={styles.tableRow}>
+                  <View key={i} style={styles.tableRow} wrap={false}>
                     <Text style={styles.tableCell}>{String(i + 1).padStart(2, '0')}.</Text>
                     <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
                     <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
@@ -437,7 +444,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                   <Text style={styles.tableCell}>Apply</Text>
                 </View>
                 {projects.map((proj, i) => (
-                  <View key={i} style={styles.tableRow}>
+                  <View key={i} style={styles.tableRow} wrap={false}>
                     <Text style={styles.tableCell}>{String(i + 1).padStart(2, '0')}.</Text>
                     <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
                     <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
@@ -499,7 +506,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                   <Text style={styles.tableCell}>Fee</Text>
                 </View>
                 {workshops.map((workshop, i) => (
-                  <View key={i} style={styles.tableRow}>
+                  <View key={i} style={styles.tableRow} wrap={false}>
                     <Text style={styles.tableCell}>{workshop.workshop_title || '-'}</Text>
                     <Text style={styles.tableCell}>{workshop.workshop_organizer || '-'}</Text>
                     <Text style={styles.tableCell}>{workshop.workshop_location || '-'}</Text>
