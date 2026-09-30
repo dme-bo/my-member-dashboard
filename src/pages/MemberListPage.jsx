@@ -58,9 +58,23 @@ let ratedMembersCache = null; // { timestamp, ratedIds }
 let tagsCache = null; // { timestamp, tags }
 
 // ─── Virtual list constants ───────────────────────────────────────────────────
-const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 200px";
+const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 200px 150px";
 const ROW_HEIGHT = 68;
-const COL_HEADERS = ["Name", "Mobile", "Category", "Service", "Rank", "State", "City", "Tags"];
+const COL_HEADERS = ["Name", "Mobile", "Category", "Service", "Rank", "State", "City", "Tags", "Regional Partner"];
+
+// The vetting checklist reviewed before designating a member a Regional
+// Partner — stored per-item on the user doc alongside the final decision, so
+// which criteria were actually met is auditable later, not just the outcome.
+const REGIONAL_PARTNER_CRITERIA = [
+  { key: "communication", label: "Strong communication and hardworking." },
+  { key: "honesty", label: "Honest, dedicated, and networking skills." },
+  { key: "management", label: "Manage candidates and local teams." },
+  { key: "leadership", label: "Leadership and coordination skills." },
+  { key: "interest", label: "Interested in recruitment and field work." },
+];
+
+const emptyPartnerCriteria = () =>
+  Object.fromEntries(REGIONAL_PARTNER_CRITERIA.map(({ key }) => [key, false]));
 
 const cellStyle = {
   padding: "0 14px",
@@ -74,7 +88,7 @@ const cellStyle = {
 };
 
 const VirtualRow = React.memo(({ index, style, data }) => {
-  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover } = data;
+  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal } = data;
   const member = items[index];
   const memberSkills = member.__skills || [];
   const visibleTags = memberSkills.slice(0, 1);
@@ -139,6 +153,21 @@ const VirtualRow = React.memo(({ index, style, data }) => {
           + Tag
         </button>
       </div>
+      <div style={{ padding: "0 10px", display: "flex", alignItems: "center", height: "100%" }}>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); openPartnerModal(member); }}
+          style={
+            member.is_regional_partner
+              ? member.regional_partner_status === "Inactive"
+                ? { padding: "3px 10px", borderRadius: "999px", border: "1px solid #a16207", background: "#fef9c3", color: "#a16207", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
+                : { padding: "3px 10px", borderRadius: "999px", border: "1px solid #15803d", background: "#dcfce7", color: "#15803d", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
+              : { padding: "3px 10px", borderRadius: "999px", border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
+          }
+        >
+          {member.is_regional_partner ? "★ Regional Partner" : "Mark Partner"}
+        </button>
+      </div>
     </div>
   );
 });
@@ -187,6 +216,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [removeTagTarget, setRemoveTagTarget] = useState(null);
   const [tagsPopover, setTagsPopover] = useState(null);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [partnerModalMember, setPartnerModalMember] = useState(null);
+  const [partnerCriteria, setPartnerCriteria] = useState(emptyPartnerCriteria);
+  const [partnerStatusChoice, setPartnerStatusChoice] = useState("Active");
+  const [partnerModalSaving, setPartnerModalSaving] = useState(false);
 
   const [sidebarFilters, setSidebarFilters] = useState(() => ({
     Gender: [],
@@ -206,6 +239,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "BO Tags": [],
     "Is Rated?": [],
     "Is Tagged?": new URLSearchParams(window.location.search).get("tagged") === "yes" ? ["Yes"] : [],
+    "Regional Partner": [],
   }));
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
@@ -464,6 +498,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       Experience:       buckets,
       "Is Rated?":      ["Yes", "No"],
       "Is Tagged?":     ["Yes", "No"],
+      "Regional Partner": ["Active", "Inactive"],
     };
   }, [memberIndex, availableProjects]);
 
@@ -540,6 +575,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         "BO Tags": [],
         "Is Rated?": [],
         "Is Tagged?": [],
+        "Regional Partner": [],
       });
       setRetirementStatus("All");
       setRegistrationDateFrom("");
@@ -652,6 +688,16 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           const wantsNo = values.includes("no");
           if (wantsYes && !wantsNo && !member.__isTagged) { matchesSidebar = false; break; }
           if (wantsNo && !wantsYes && member.__isTagged) { matchesSidebar = false; break; }
+          continue;
+        }
+
+        if (key === "Regional Partner") {
+          const wantsActive = values.includes("active");
+          const wantsInactive = values.includes("inactive");
+          const isActivePartner = !!member.is_regional_partner && member.regional_partner_status !== "Inactive";
+          const isInactivePartner = !!member.is_regional_partner && member.regional_partner_status === "Inactive";
+          if (wantsActive && !wantsInactive && !isActivePartner) { matchesSidebar = false; break; }
+          if (wantsInactive && !wantsActive && !isInactivePartner) { matchesSidebar = false; break; }
           continue;
         }
 
@@ -802,9 +848,73 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     setTagsPopover({ member, anchorRect });
   }, []);
 
+  const openPartnerModal = useCallback((member) => {
+    setPartnerModalMember(member);
+    setPartnerCriteria({ ...emptyPartnerCriteria(), ...(member.regional_partner_criteria || {}) });
+    setPartnerStatusChoice(member.regional_partner_status === "Inactive" ? "Inactive" : "Active");
+  }, []);
+
+  const closePartnerModal = () => {
+    setPartnerModalMember(null);
+    setPartnerCriteria(emptyPartnerCriteria());
+    setPartnerStatusChoice("Active");
+    setPartnerModalSaving(false);
+  };
+
+  const handleSavePartnerStatus = async (nextIsPartner) => {
+    if (!partnerModalMember?.id) return;
+    const memberId = partnerModalMember.id;
+    const memberName = getMemberName(partnerModalMember);
+    const previousMembers = members;
+    const criteriaSnapshot = { ...partnerCriteria };
+    const statusSnapshot = partnerStatusChoice;
+
+    setPartnerModalSaving(true);
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.id === memberId
+          ? {
+              ...member,
+              is_regional_partner: nextIsPartner,
+              regional_partner_criteria: criteriaSnapshot,
+              regional_partner_status: statusSnapshot,
+            }
+          : member
+      )
+    );
+    closePartnerModal();
+
+    setTagSuccessPopup({
+      show: true,
+      message: nextIsPartner
+        ? `${memberName} marked as a ${statusSnapshot} Regional Partner.`
+        : `${memberName} unmarked as a Regional Partner.`,
+      type: "success",
+    });
+    setTimeout(() => setTagSuccessPopup({ show: false, message: "", type: "success" }), 2200);
+
+    try {
+      await updateDoc(doc(db, "users", memberId), {
+        is_regional_partner: nextIsPartner,
+        regional_partner_criteria: criteriaSnapshot,
+        regional_partner_status: statusSnapshot,
+        regional_partner_marked_at: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error saving Regional Partner status:", error);
+      setMembers(previousMembers);
+      setTagSuccessPopup({
+        show: true,
+        message: "Could not save Regional Partner status. Please try again.",
+        type: "error",
+      });
+      setTimeout(() => setTagSuccessPopup({ show: false, message: "", type: "success" }), 3000);
+    }
+  };
+
   const virtualRowItemData = useMemo(
-    () => ({ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover }),
-    [pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover]
+    () => ({ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal }),
+    [pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal]
   );
 
   const closeRemoveTagConfirm = () => {
@@ -864,6 +974,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Experience",
     "Is Rated?",
     "Is Tagged?",
+    "Regional Partner",
   ];
 
   // Close tags popover on click-outside or Escape
@@ -1508,6 +1619,214 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   }}
                 >
                   {tagModalSaving ? "Saving..." : "Save Tags"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {partnerModalMember && (
+        <div
+          onClick={closePartnerModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 3000,
+            padding: "16px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "560px",
+              background: "#fff",
+              borderRadius: "16px",
+              boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px 20px",
+                borderBottom: "1px solid #e5e7eb",
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: "22px", color: "#0f172a" }}>
+                  {partnerModalMember.__name || getMemberName(partnerModalMember)}
+                </h3>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>Regional Partner Checklist</div>
+              </div>
+              <button
+                type="button"
+                onClick={closePartnerModal}
+                aria-label="Close"
+                style={{
+                  border: "none",
+                  background: "#f1f5f9",
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "999px",
+                  cursor: "pointer",
+                  fontSize: "18px",
+                  color: "#334155",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: "18px 20px 20px" }}>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
+                Criteria
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "18px" }}>
+                {REGIONAL_PARTNER_CRITERIA.map(({ key, label }) => (
+                  <label
+                    key={key}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "10px",
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid #e2e8f0",
+                      background: partnerCriteria[key] ? "#f0fdfa" : "#fafafa",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!partnerCriteria[key]}
+                      onChange={() =>
+                        setPartnerCriteria((prev) => ({ ...prev, [key]: !prev[key] }))
+                      }
+                      style={{ width: "16px", height: "16px", marginTop: "1px" }}
+                    />
+                    <span style={{ fontSize: "13px", color: "#0f172a" }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: "18px" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
+                  Partner Status
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setPartnerStatusChoice("Active")}
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      border: partnerStatusChoice === "Active" ? "2px solid #15803d" : "1px solid #e2e8f0",
+                      background: partnerStatusChoice === "Active" ? "#dcfce7" : "#fafafa",
+                      color: "#15803d",
+                      fontWeight: 700,
+                      fontSize: "13px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPartnerStatusChoice("Inactive")}
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      border: partnerStatusChoice === "Inactive" ? "2px solid #a16207" : "1px solid #e2e8f0",
+                      background: partnerStatusChoice === "Inactive" ? "#fef9c3" : "#fafafa",
+                      color: "#a16207",
+                      fontWeight: 700,
+                      fontSize: "13px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Inactive
+                  </button>
+                </div>
+              </div>
+
+              {partnerModalMember.is_regional_partner && (
+                <div
+                  style={{
+                    marginBottom: "14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: partnerModalMember.regional_partner_status === "Inactive" ? "#a16207" : "#15803d",
+                  }}
+                >
+                  ★ Currently marked as a{" "}
+                  {partnerModalMember.regional_partner_status === "Inactive" ? "Inactive" : "Active"} Regional Partner
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={closePartnerModal}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#fff",
+                    color: "#0f172a",
+                    cursor: "pointer",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                  }}
+                >
+                  Cancel
+                </button>
+                {partnerModalMember.is_regional_partner && (
+                  <button
+                    type="button"
+                    onClick={() => handleSavePartnerStatus(false)}
+                    disabled={partnerModalSaving}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: "8px",
+                      border: "1px solid #dc2626",
+                      background: "#fff",
+                      color: "#dc2626",
+                      cursor: partnerModalSaving ? "not-allowed" : "pointer",
+                      fontWeight: "700",
+                      fontSize: "13px",
+                    }}
+                  >
+                    Remove Partner Status
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSavePartnerStatus(true)}
+                  disabled={partnerModalSaving}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: partnerModalSaving ? "#90caf9" : "#1976d2",
+                    color: "#fff",
+                    cursor: partnerModalSaving ? "not-allowed" : "pointer",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  {partnerModalSaving ? "Saving..." : `Mark as ${partnerStatusChoice} Regional Partner`}
                 </button>
               </div>
             </div>
