@@ -71,17 +71,19 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: 'row',
+    alignItems: 'stretch',
     borderBottom: '1 solid #ddd',
     paddingVertical: 6,
     paddingHorizontal: 4,
   },
   tableHeader: {
     flexDirection: 'row',
+    alignItems: 'stretch',
     backgroundColor: '#f0f0f0',
     borderBottom: '1.5 solid #ccc',
     paddingVertical: 8,
   },
-  tableCell: { flex: 1, paddingHorizontal: 4, fontSize: 10 },
+  tableCell: { flex: 1, paddingHorizontal: 4, fontSize: 10, borderRight: '1 solid #ddd' },
   image: { marginVertical: 8, width: '100%', height: 'auto' },
   footer: {
     marginTop: 40,
@@ -175,12 +177,24 @@ const fetchNewsletterContent = async () => {
   return {};
 };
 
-const formatNewsletterDate = () => {
-  const today = new Date();
-  const day = today.getDate();
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${day} ${monthNames[today.getMonth()]} ${today.getFullYear()}`;
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Every date shown in the newsletter uses this same "dd MMM yyyy" format —
+// zero-padded day, three-letter month — regardless of how it's stored
+// (Firestore Timestamp, ISO string, or a plain Date).
+const formatDDMMMYYYY = (value) => {
+  const date =
+    value && typeof value.toDate === 'function'
+      ? value.toDate()
+      : value instanceof Date
+      ? value
+      : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${day} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
 };
+
+const formatNewsletterDate = () => formatDDMMMYYYY(new Date());
 
 // ── Custom react-select components ─────────────────────────────────────────
 // These custom react-select components add checkbox-style multi-select behavior.
@@ -510,7 +524,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                     <Text style={styles.tableCell}>{workshop.workshop_title || '-'}</Text>
                     <Text style={styles.tableCell}>{workshop.workshop_organizer || '-'}</Text>
                     <Text style={styles.tableCell}>{workshop.workshop_location || '-'}</Text>
-                    <Text style={styles.tableCell}>{workshop.workshop_start_date || '-'}</Text>
+                    <Text style={styles.tableCell}>{formatDDMMMYYYY(workshop.workshop_start_date) || '-'}</Text>
                     <Text style={styles.tableCell}>
                       {workshop.workshop_fee || workshop.workshop_fee === 0 ? `₹${workshop.workshop_fee}` : '-'}
                     </Text>

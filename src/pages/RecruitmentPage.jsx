@@ -1,5 +1,5 @@
 // src/pages/RecruitmentPage.jsx
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   collection,
   db,
@@ -12,27 +12,73 @@ import {
 } from "../firestoreClient";
 import * as XLSX from "xlsx";
 import SkeletonLoader from "../components/SkeletonLoader";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
+import FilterAccordionList from "../components/FilterAccordionList";
+
+const RECRUITMENT_GROUP_BY_OPTIONS = [
+  { key: "city", label: "City" },
+  { key: "client", label: "Client" },
+  { key: "profile", label: "Profile" },
+  { key: "source", label: "Source" },
+  { key: "status", label: "Status" },
+];
+
+const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
+
+function CandidateCard({ candidate, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        padding: "12px 14px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: "14px", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {candidate.full_name || <em style={{ color: "#999" }}>No Name</em>}
+      </div>
+      <div style={{ fontSize: "12px", color: "#64748b" }}>{candidate.contact_number || "-"}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+        {candidate.profile && <span style={kanbanChipStyle}>{candidate.profile}</span>}
+        {candidate.city && <span style={kanbanChipStyle}>{candidate.city}</span>}
+        {candidate.source && <span style={kanbanChipStyle}>{candidate.source}</span>}
+      </div>
+      {candidate.status && (
+        <span
+          style={{
+            alignSelf: "flex-start",
+            padding: "2px 8px",
+            borderRadius: "999px",
+            fontSize: "10.5px",
+            fontWeight: 700,
+            backgroundColor: candidate.status === "Active" ? "#d1fae5" : "#fee2e2",
+            color: candidate.status === "Active" ? "#065f46" : "#991b1b",
+          }}
+        >
+          {candidate.status}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    city: "All",
-    client: "All",
-    profile: "All",
-    source: "All",
-    status: "All",
-  });
+  const [filters, setFilters] = useState({ city: [], client: [], profile: [], source: [], status: [] });
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterSearchTerms, setFilterSearchTerms] = useState({
-    city: "",
-    client: "",
-    profile: "",
-    source: "",
-    status: "",
-  });
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(null); // Track which dropdown is open
+  const [groupBy, setGroupBy] = useState(null);
+  const [viewMode, setViewMode] = useState("list");
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
 
@@ -45,23 +91,6 @@ export default function RecruitmentPage() {
   const [savedNotes, setSavedNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
-
-  // Refs for click-outside detection
-  const filtersRef = useRef(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (filtersRef.current && !filtersRef.current.contains(event.target)) {
-        setOpenDropdown(null);
-      }
-    };
-
-    if (openDropdown) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [openDropdown]);
 
   // Format Date Helper
   const formatDateDDMMMYYYY = (dateInput) => {
@@ -166,7 +195,7 @@ export default function RecruitmentPage() {
           values.add(String(value).trim());
         }
       });
-      return ["All", ...Array.from(values).sort()];
+      return Array.from(values).sort();
     };
 
     return {
@@ -174,7 +203,7 @@ export default function RecruitmentPage() {
       clientOptions: extractValues("client"),
       profileOptions: extractValues("profile"),
       sourceOptions: extractValues("source"),
-      statusOptions: ["All", ...new Set(candidates.map((c) => c.status).filter(Boolean))].sort(),
+      statusOptions: Array.from(new Set(candidates.map((c) => c.status).filter(Boolean))).sort(),
     };
   }, [candidates]);
 
@@ -186,6 +215,7 @@ export default function RecruitmentPage() {
     status: statusOptions,
   };
   const filterKeys = ["city", "client", "profile", "source", "status"];
+  const filterLabels = { city: "City", client: "Client", profile: "Profile", source: "Source", status: "Status" };
 
   // Export to Excel function
   const handleExportXLSX = () => {
@@ -243,31 +273,11 @@ export default function RecruitmentPage() {
   // typed into the detail modal's notes field — causing visible input lag.
   const filteredCandidates = useMemo(() => {
   let filteredCandidates = candidates.filter((c) => {
-    // Handle multi-select arrays
-    if (filters.city && filters.city !== "All") {
-      const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
-      if (!cityValues.some(val => matchesFilter(c.city, val))) return false;
-    }
-    
-    if (filters.client && filters.client !== "All") {
-      const clientValues = Array.isArray(filters.client) ? filters.client : [filters.client];
-      if (!clientValues.some(val => matchesFilter(c.client, val))) return false;
-    }
-    
-    if (filters.profile && filters.profile !== "All") {
-      const profileValues = Array.isArray(filters.profile) ? filters.profile : [filters.profile];
-      if (!profileValues.some(val => matchesFilter(c.profile, val))) return false;
-    }
-    
-    if (filters.source && filters.source !== "All") {
-      const sourceValues = Array.isArray(filters.source) ? filters.source : [filters.source];
-      if (!sourceValues.some(val => matchesFilter(c.source, val))) return false;
-    }
-    
-    if (filters.status && filters.status !== "All") {
-      const statusValues = Array.isArray(filters.status) ? filters.status : [filters.status];
-      if (!statusValues.includes(c.status)) return false;
-    }
+    if (filters.city?.length && !filters.city.some((val) => matchesFilter(c.city, val))) return false;
+    if (filters.client?.length && !filters.client.some((val) => matchesFilter(c.client, val))) return false;
+    if (filters.profile?.length && !filters.profile.some((val) => matchesFilter(c.profile, val))) return false;
+    if (filters.source?.length && !filters.source.some((val) => matchesFilter(c.source, val))) return false;
+    if (filters.status?.length && !filters.status.includes(c.status)) return false;
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
@@ -302,6 +312,80 @@ export default function RecruitmentPage() {
   const currentRows = rowsPerPage === Infinity
     ? filteredCandidates
     : filteredCandidates.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  // Grouping is applied within the current page's rows (this page isn't
+  // virtualized, unlike Member List, so bypassing pagination for grouped/
+  // Kanban views isn't safe here with up to 5,000 rows-per-page).
+  const getGroupLabels = (candidate, key) => {
+    if (key === "status") {
+      const v = candidate.status;
+      return [v && String(v).trim() ? String(v).trim() : "Unspecified"];
+    }
+    const raw = candidate[key];
+    if (!raw) return ["Unspecified"];
+    const parts = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
+    return parts.length ? parts : ["Unspecified"];
+  };
+
+  const groupedRows = useMemo(() => {
+    if (!groupBy) return null;
+    const groups = new Map();
+    for (const c of currentRows) {
+      for (const label of getGroupLabels(c, groupBy)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(c);
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, currentRows]);
+
+  const toggleGroupCollapsed = (key) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const filterChips = [];
+  Object.entries(filters).forEach(([key, values]) => {
+    (values || []).forEach((v) => {
+      filterChips.push({
+        key: `${key}:${v}`,
+        label: v,
+        onRemove: () => setFilters((prev) => ({ ...prev, [key]: prev[key].filter((x) => x !== v) })),
+      });
+    });
+  });
+  if (groupBy) {
+    filterChips.push({ key: "groupby", label: `Group: ${filterLabels[groupBy]}`, onRemove: () => setGroupBy(null) });
+  }
+
+  const advancedFiltersPanel = (
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+        <button
+          onClick={() => setFilters({ city: [], client: [], profile: [], source: [], status: [] })}
+          style={{ padding: "6px 14px", background: "#1976d2", color: "white", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
+        >
+          Clear All
+        </button>
+      </div>
+      <FilterAccordionList
+        sections={filterKeys.map((key) => ({
+          key,
+          label: filterLabels[key],
+          options: options[key] || [],
+          selected: filters[key] || [],
+          onChange: (next) => {
+            setFilters((prev) => ({ ...prev, [key]: next }));
+            setCurrentPage(1);
+          },
+        }))}
+      />
+    </>
+  );
 
   // Modal Handlers
   const openModal = (candidate) => {
@@ -393,55 +477,33 @@ export default function RecruitmentPage() {
 
   return (
     <div className="member-list-page">
-      {/* Header Card with Search, Total Badge, Filters, Export */}
+      {/* Header Card with Search, Filters/Group By/View, Total Badge, Export */}
       <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: isFiltersOpen ? "16px" : "0" }}>
-          {/* Search Input */}
-          <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
-            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input
-              type="text"
-              placeholder="Search by name, phone, email..."
-              aria-label="Search candidates by name, phone, or email"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{
-                padding: "12px 14px 12px 40px",
-                width: "100%",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                fontSize: "14px",
-                backgroundColor: "white",
-                color: "black",
-              }}
-              autoFocus
-            />
-          </div>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" }}>
+          <OdooSearchBar
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search by name, phone, email..."
+            chips={filterChips}
+          />
+
+          <OdooViewToolbar
+            quickFilters={[]}
+            advancedContent={advancedFiltersPanel}
+            groupByOptions={RECRUITMENT_GROUP_BY_OPTIONS}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            view={viewMode}
+            onViewChange={setViewMode}
+          />
 
           {/* Total Applications Badge */}
           <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "auto" }}>
             Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
           </span>
-
-          {/* Filters Button */}
-          <button
-            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #1976d2",
-              color: "#1976d2",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            🔽 Filters
-          </button>
 
           {/* Export Button */}
           <button
@@ -460,65 +522,47 @@ export default function RecruitmentPage() {
             ⬇️ Export
           </button>
         </div>
-
-        {/* Inline Filters */}
-        {isFiltersOpen && (
-          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
-              <button onClick={() => { setFilters({}); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-              {filterKeys.map(filterKey => {
-                const filterOptions = options[filterKey] || [];
-                const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
-                const searchTerm = filterSearchTerms[filterKey] || "";
-                const filteredOptions = filterOptions.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
-                const isDropdownOpen = openDropdown === filterKey;
-
-                return (
-                  <div key={filterKey} style={{ marginBottom: "8px" }}>
-                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey}</label>
-                    <div style={{ position: "relative" }}>
-                      <div
-                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
-                        style={{
-                          padding: "10px 12px",
-                          border: "1px solid #d1d5db",
-                          borderRadius: "6px",
-                          background: "#fff",
-                          cursor: "pointer",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          fontSize: "13px",
-                        }}
-                      >
-                        <span>{selectedValues.length > 0 ? selectedValues.join(", ") : "All"}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
-                      </div>
-                      {isDropdownOpen && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
-                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
-                            {filteredOptions.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOptions.map(o => (
-                              <div key={o} onClick={() => { if (selectedValues.includes(o)) { setFilters(prev => ({ ...prev, [filterKey]: selectedValues.filter(v => v !== o).length === 0 ? undefined : selectedValues.filter(v => v !== o) })); } else { setFilters(prev => ({ ...prev, [filterKey]: [...selectedValues, o] })); } setCurrentPage(1); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValues.includes(o) ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValues.includes(o) && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="content-with-sidebar">
         <div className="table-container">
           <>
+          {viewMode === "kanban" ? (
+            <div style={{ minHeight: "400px", maxHeight: "70vh", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff", padding: "12px" }}>
+              {currentRows.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
+                  {searchTerm || Object.values(filters).some((v) => v.length)
+                    ? "No candidates found matching your criteria"
+                    : "No recruitment candidates registered yet"}
+                </div>
+              ) : groupedRows ? (
+                groupedRows.map(([label, rows]) => (
+                  <div key={label} style={{ marginBottom: "12px" }}>
+                    <div
+                      onClick={() => toggleGroupCollapsed(label)}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                      {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                    </div>
+                    {!collapsedGroups.has(label) && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
+                        {rows.map((c) => (
+                          <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                  {currentRows.map((c) => (
+                    <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
               <div
                 style={{
                   height: "70vh",
@@ -553,11 +597,38 @@ export default function RecruitmentPage() {
                           colSpan="5"
                           style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}
                         >
-                          {searchTerm || Object.keys(filters).length > 0
+                          {searchTerm || Object.values(filters).some((v) => v.length)
                             ? "No candidates found matching your criteria"
                             : "No recruitment candidates registered yet"}
                         </td>
                       </tr>
+                    ) : groupedRows ? (
+                      groupedRows.map(([label, rows]) => (
+                        <Fragment key={label}>
+                          <tr style={{ background: "#eef2f7" }}>
+                            <td colSpan={5} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
+                              <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                              {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                            </td>
+                          </tr>
+                          {!collapsedGroups.has(label) &&
+                            rows.map((c) => (
+                              <tr
+                                key={c.id}
+                                onClick={() => openModal(c)}
+                                style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
+                              >
+                                <td style={{ padding: "12px" }}>
+                                  {c.full_name ? c.full_name : <em style={{ color: "#999" }}>No Name</em>}
+                                </td>
+                                <td style={{ padding: "12px" }}>{c.contact_number || "-"}</td>
+                                <td style={{ padding: "12px" }}>{c.profile || "-"}</td>
+                                <td style={{ padding: "12px" }}>{c.city || "-"}</td>
+                                <td style={{ padding: "12px" }}>{c.source || "-"}</td>
+                              </tr>
+                            ))}
+                        </Fragment>
+                      ))
                     ) : (
                       currentRows.map((c) => (
                         <tr
@@ -578,6 +649,7 @@ export default function RecruitmentPage() {
                   </tbody>
                 </table>
               </div>
+          )}
 
               {/* Pagination */}
               <div

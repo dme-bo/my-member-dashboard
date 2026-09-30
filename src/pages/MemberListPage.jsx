@@ -2,10 +2,13 @@
 import React, { useState, useMemo, useEffect, useRef, useTransition, useCallback } from "react";
 import * as ReactWindow from "react-window";
 const List = ReactWindow.FixedSizeList;
+const VariableList = ReactWindow.VariableSizeList;
 import { collection, collectionGroup, db, doc, getDocs, query, serverTimestamp, updateDoc } from "../firestoreClient";
 import DualRangeSlider from "../components/DualRangeSlider";
-import MultiSelectDropdown from "../components/MultiSelectDropdown";
+import FilterAccordionList from "../components/FilterAccordionList";
 import SkeletonLoader from "../components/SkeletonLoader";
+import OdooViewToolbar from "../components/OdooViewToolbar";
+import OdooSearchBar from "../components/OdooSearchBar";
 import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import DatePicker from "react-datepicker";
@@ -76,6 +79,95 @@ const REGIONAL_PARTNER_CRITERIA = [
 const emptyPartnerCriteria = () =>
   Object.fromEntries(REGIONAL_PARTNER_CRITERIA.map(({ key }) => [key, false]));
 
+// Group By fields offered in the Odoo-style toolbar — the same full field
+// list as the Filters accordion, so Group By has parity with Filters like
+// it does in Odoo, not just a curated subset.
+const MEMBER_GROUP_BY_OPTIONS = [
+  { key: "Gender", label: "Gender" },
+  { key: "Category", label: "Category" },
+  { key: "Service", label: "Service" },
+  { key: "Rank", label: "Rank" },
+  { key: "Level", label: "Level" },
+  { key: "Trade", label: "Trade" },
+  { key: "City", label: "City" },
+  { key: "State", label: "State" },
+  { key: "Education", label: "Education" },
+  { key: "Project", label: "Project" },
+  { key: "Tags", label: "Tags" },
+  { key: "BO Tags", label: "BO Tags" },
+  { key: "Experience", label: "Experience" },
+  { key: "Is Rated?", label: "Is Rated?" },
+  { key: "Is Tagged?", label: "Is Tagged?" },
+  { key: "Regional Partner", label: "Regional Partner" },
+  { key: "Retirement Status", label: "Retirement Status" },
+];
+
+const SCALAR_GROUP_FIELD_MAP = {
+  Gender: "gender",
+  Category: "category",
+  Service: "service",
+  Rank: "rank",
+  Level: "level",
+  Trade: "trade",
+  City: "city",
+  State: "state",
+  Education: "education",
+};
+
+const parseExperienceBucketRange = (label) => {
+  if (label.includes("+")) {
+    const min = parseFloat(label.replace("+ yrs", "").trim());
+    return { min, max: Infinity };
+  }
+  const [minStr, maxStr] = label.replace(" yrs", "").split("-");
+  return { min: parseFloat(minStr), max: parseFloat(maxStr) };
+};
+
+// Returns the group label(s) a member belongs under for a Group By field —
+// usually one, but a member can land in several groups at once for
+// multi-value fields like Tags or Project (same as grouping by a tags field
+// in Odoo — a record with 2 tags appears under both groups).
+const getGroupLabels = (member, groupByKey, experienceBuckets) => {
+  const scalarField = SCALAR_GROUP_FIELD_MAP[groupByKey];
+  if (scalarField) {
+    const raw = member[scalarField];
+    return [raw && String(raw).trim() ? String(raw).trim() : "Unspecified"];
+  }
+  if (groupByKey === "Tags") {
+    return member.__skills && member.__skills.length ? member.__skills : ["Unspecified"];
+  }
+  if (groupByKey === "BO Tags") {
+    const tags = (member.tags || []).map((t) => String(t).trim()).filter(Boolean);
+    return tags.length ? tags : ["Unspecified"];
+  }
+  if (groupByKey === "Project") {
+    return member.__projects && member.__projects.length ? member.__projects : ["Unspecified"];
+  }
+  if (groupByKey === "Experience") {
+    const exp = member.__experienceValue;
+    if (!Number.isFinite(exp) || exp < 0) return ["Unspecified"];
+    for (const bucket of experienceBuckets) {
+      const r = parseExperienceBucketRange(bucket);
+      if (exp >= r.min && (r.max === Infinity || exp <= r.max)) return [bucket];
+    }
+    return ["Unspecified"];
+  }
+  if (groupByKey === "Is Rated?") return [member.__isRated ? "Yes" : "No"];
+  if (groupByKey === "Is Tagged?") return [member.__isTagged ? "Yes" : "No"];
+  if (groupByKey === "Regional Partner") {
+    return [member.is_regional_partner ? (member.regional_partner_status === "Inactive" ? "Inactive" : "Active") : "Not a Partner"];
+  }
+  if (groupByKey === "Retirement Status") {
+    const raw = member.retirement_status;
+    return [raw && String(raw).trim() ? String(raw).trim() : "Unspecified"];
+  }
+  return ["Unspecified"];
+};
+
+const GROUP_HEADER_HEIGHT = 40;
+const KANBAN_CARD_ROW_HEIGHT = 212;
+const KANBAN_CARD_MIN_WIDTH = 240;
+
 const cellStyle = {
   padding: "0 14px",
   fontSize: "13px",
@@ -87,9 +179,46 @@ const cellStyle = {
   alignItems: "center",
 };
 
+const GroupHeaderRow = React.memo(({ style, group, collapsed, onToggle }) => (
+  <div
+    style={{
+      ...style,
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "0 14px",
+      background: "#eef2f7",
+      borderBottom: "1px solid #dbe3ee",
+      borderTop: "1px solid #dbe3ee",
+      cursor: "pointer",
+      boxSizing: "border-box",
+    }}
+    onClick={() => onToggle(group.key)}
+  >
+    <span
+      style={{
+        display: "inline-block",
+        transition: "transform 0.15s",
+        transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+        fontSize: "11px",
+        color: "#475569",
+      }}
+    >
+      ▾
+    </span>
+    <span style={{ fontWeight: 700, fontSize: "13px", color: "#0f172a" }}>{group.label}</span>
+    <span style={{ fontWeight: 600, fontSize: "12px", color: "#64748b" }}>({group.count})</span>
+  </div>
+));
+
 const VirtualRow = React.memo(({ index, style, data }) => {
-  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal } = data;
+  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal, collapsedGroups, onToggleGroup } = data;
   const member = items[index];
+
+  if (member.__type === "group") {
+    return <GroupHeaderRow style={style} group={member} collapsed={collapsedGroups?.has(member.key)} onToggle={onToggleGroup} />;
+  }
+
   const memberSkills = member.__skills || [];
   const visibleTags = memberSkills.slice(0, 1);
 
@@ -172,6 +301,83 @@ const VirtualRow = React.memo(({ index, style, data }) => {
   );
 });
 
+const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
+const kanbanSmallBtnStyle = { padding: "3px 8px", borderRadius: "999px", border: "1px solid #1976d2", background: "#e3f2fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" };
+
+const partnerKanbanStyle = (member) =>
+  member.is_regional_partner
+    ? member.regional_partner_status === "Inactive"
+      ? { padding: "3px 8px", borderRadius: "999px", border: "1px solid #a16207", background: "#fef9c3", color: "#a16207", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" }
+      : { padding: "3px 8px", borderRadius: "999px", border: "1px solid #15803d", background: "#dcfce7", color: "#15803d", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" }
+    : { padding: "3px 8px", borderRadius: "999px", border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" };
+
+const MemberCard = React.memo(({ member, onMemberClick, openTagModal, openPartnerModal }) => {
+  const memberSkills = member.__skills || [];
+  return (
+    <div
+      onClick={() => onMemberClick(member)}
+      style={{
+        flex: "1 1 0",
+        minWidth: 0,
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        padding: "12px 14px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: "14px", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {member.__name || "—"}
+      </div>
+      <div style={{ fontSize: "12px", color: "#64748b" }}>{member.phone_number || "—"}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+        {member.category && <span style={kanbanChipStyle}>{member.category}</span>}
+        {member.service && <span style={kanbanChipStyle}>{member.service}</span>}
+        {member.rank && <span style={kanbanChipStyle}>{member.rank}</span>}
+      </div>
+      <div style={{ fontSize: "11px", color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {[member.city, member.state].filter(Boolean).join(", ") || "—"}
+      </div>
+      {memberSkills.length > 0 && (
+        <div style={{ fontSize: "11px", color: "#1976d2", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          🏷 {memberSkills.join(", ")}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: "6px", marginTop: "auto", paddingTop: "4px" }}>
+        <button type="button" onClick={(e) => { e.stopPropagation(); openTagModal(member); }} style={kanbanSmallBtnStyle}>
+          + Tag
+        </button>
+        <button type="button" onClick={(e) => { e.stopPropagation(); openPartnerModal(member); }} style={partnerKanbanStyle(member)}>
+          {member.is_regional_partner ? "★ Partner" : "Mark Partner"}
+        </button>
+      </div>
+    </div>
+  );
+});
+
+const KanbanRow = React.memo(({ index, style, data }) => {
+  const { rows, onMemberClick, openTagModal, openPartnerModal, collapsedGroups, onToggleGroup } = data;
+  const row = rows[index];
+
+  if (row.__type === "group") {
+    return <GroupHeaderRow style={style} group={row} collapsed={collapsedGroups?.has(row.key)} onToggle={onToggleGroup} />;
+  }
+
+  return (
+    <div style={{ ...style, display: "flex", gap: "12px", padding: "8px 14px", boxSizing: "border-box" }}>
+      {row.items.map((member) => (
+        <MemberCard key={member.id} member={member} onMemberClick={onMemberClick} openTagModal={openTagModal} openPartnerModal={openPartnerModal} />
+      ))}
+    </div>
+  );
+});
+
 export default function MemberListPage({ onMemberClick, memberRecords = [], membersLoading = false }) {
   const pageShellStyle = {
     padding: "20px",
@@ -189,7 +395,11 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [listHeight, setListHeight] = useState(() => Math.max(460, Math.floor(window.innerHeight * 0.65)));
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(500);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [viewMode, setViewMode] = useState("list");
+  const [groupBy, setGroupBy] = useState(null);
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  const [kanbanCardsPerRow, setKanbanCardsPerRow] = useState(4);
+  const kanbanContainerRef = useRef(null);
   const tagsPopoverRef = useRef(null);
   const [, startTransition] = useTransition();
   const [retirementStatus, setRetirementStatus] = useState("All");
@@ -248,6 +458,29 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     const onResize = () => setListHeight(Math.max(460, Math.floor(window.innerHeight * 0.65)));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Recompute how many Kanban cards fit per row from the actual container
+  // width, so the grid stays responsive without a CSS grid (react-window
+  // needs a fixed item count per virtualized row).
+  useEffect(() => {
+    if (viewMode !== "kanban") return;
+    const calc = () => {
+      const width = kanbanContainerRef.current?.clientWidth || window.innerWidth - 260;
+      setKanbanCardsPerRow(Math.max(1, Math.floor(width / KANBAN_CARD_MIN_WIDTH)));
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, [viewMode]);
+
+  const toggleGroupCollapsed = useCallback((key) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }, []);
 
   const normalizeProjectPhone = (value) => {
@@ -760,7 +993,54 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
   useEffect(() => { setCurrentPage(1); }, [filteredMembers]);
 
-  const toggleFilter = () => setIsFilterOpen(!isFilterOpen);
+  // Grouping shows every matching member via the virtualized list rather
+  // than the page-by-page slice above — a "page 2 of N" doesn't make sense
+  // once rows are reorganized into named groups.
+  const groupedMembers = useMemo(() => {
+    if (!groupBy) return null;
+    const experienceBuckets = filterOptions.Experience || [];
+    const groups = new Map();
+    for (const member of filteredMembers) {
+      const labels = getGroupLabels(member, groupBy, experienceBuckets);
+      for (const label of labels) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(member);
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, filteredMembers, filterOptions]);
+
+  const groupedFlatItems = useMemo(() => {
+    if (!groupedMembers) return null;
+    const flat = [];
+    for (const [label, groupMembers] of groupedMembers) {
+      flat.push({ __type: "group", key: label, label, count: groupMembers.length });
+      if (!collapsedGroups.has(label)) flat.push(...groupMembers);
+    }
+    return flat;
+  }, [groupedMembers, collapsedGroups]);
+
+  const listSourceItems = groupBy ? groupedFlatItems : pageMembers;
+
+  const kanbanSourceItems = groupBy ? groupedFlatItems : filteredMembers;
+
+  const kanbanRows = useMemo(() => {
+    const rows = [];
+    let buffer = [];
+    for (const item of kanbanSourceItems) {
+      if (item.__type === "group") {
+        if (buffer.length) { rows.push({ __type: "cards", items: buffer }); buffer = []; }
+        rows.push(item);
+        continue;
+      }
+      buffer.push(item);
+      if (buffer.length === kanbanCardsPerRow) { rows.push({ __type: "cards", items: buffer }); buffer = []; }
+    }
+    if (buffer.length) rows.push({ __type: "cards", items: buffer });
+    return rows;
+  }, [kanbanSourceItems, kanbanCardsPerRow]);
+
+  const kanbanRowHeight = useCallback((index) => (kanbanRows[index]?.__type === "group" ? GROUP_HEADER_HEIGHT : KANBAN_CARD_ROW_HEIGHT), [kanbanRows]);
 
   const openTagModal = useCallback((member) => {
     setTagModalMember(member);
@@ -913,8 +1193,22 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   };
 
   const virtualRowItemData = useMemo(
-    () => ({ items: pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal }),
-    [pageMembers, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal]
+    () => ({
+      items: listSourceItems,
+      onMemberClick,
+      openTagModal,
+      openRemoveTagConfirm,
+      openTagsPopover,
+      openPartnerModal,
+      collapsedGroups,
+      onToggleGroup: toggleGroupCollapsed,
+    }),
+    [listSourceItems, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal, collapsedGroups, toggleGroupCollapsed]
+  );
+
+  const kanbanRowItemData = useMemo(
+    () => ({ rows: kanbanRows, onMemberClick, openTagModal, openPartnerModal, collapsedGroups, onToggleGroup: toggleGroupCollapsed }),
+    [kanbanRows, onMemberClick, openTagModal, openPartnerModal, collapsedGroups, toggleGroupCollapsed]
   );
 
   const closeRemoveTagConfirm = () => {
@@ -1038,6 +1332,193 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     XLSX.writeFile(workbook, `Members_${today}.xlsx`);
   };
 
+  // One-click toggles shown in the Filters dropdown — each just flips a
+  // value already tracked in sidebarFilters/retirementStatus, so the search
+  // bar's chip row (below) reflects them automatically, same as any other
+  // filter.
+  const quickFilters = [
+    {
+      key: "tagged",
+      label: "Tagged",
+      active: (sidebarFilters["Is Tagged?"] || []).includes("Yes"),
+      onToggle: () =>
+        handleFilterChange("Is Tagged?", (sidebarFilters["Is Tagged?"] || []).includes("Yes") ? [] : ["Yes"]),
+    },
+    {
+      key: "rated",
+      label: "Rated",
+      active: (sidebarFilters["Is Rated?"] || []).includes("Yes"),
+      onToggle: () =>
+        handleFilterChange("Is Rated?", (sidebarFilters["Is Rated?"] || []).includes("Yes") ? [] : ["Yes"]),
+    },
+    {
+      key: "partner-active",
+      label: "Regional Partner (Active)",
+      active: (sidebarFilters["Regional Partner"] || []).includes("Active"),
+      startGroup: true,
+      onToggle: () => {
+        const current = sidebarFilters["Regional Partner"] || [];
+        const has = current.includes("Active");
+        handleFilterChange("Regional Partner", has ? current.filter((v) => v !== "Active") : [...current, "Active"]);
+      },
+    },
+    {
+      key: "partner-inactive",
+      label: "Regional Partner (Inactive)",
+      active: (sidebarFilters["Regional Partner"] || []).includes("Inactive"),
+      onToggle: () => {
+        const current = sidebarFilters["Regional Partner"] || [];
+        const has = current.includes("Inactive");
+        handleFilterChange("Regional Partner", has ? current.filter((v) => v !== "Inactive") : [...current, "Inactive"]);
+      },
+    },
+    {
+      key: "retired",
+      label: "Retired",
+      active: retirementStatus === "Retired",
+      startGroup: true,
+      onToggle: () => setRetirementStatus(retirementStatus === "Retired" ? "All" : "Retired"),
+    },
+  ];
+
+  // Every active filter/group renders as a removable chip in the search bar
+  // — a generic projection of sidebarFilters/retirementStatus/groupBy rather
+  // than a separately-tracked list, so it can never drift out of sync.
+  const filterChips = [];
+  Object.entries(sidebarFilters).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((v) => {
+        filterChips.push({
+          key: `${key}:${v}`,
+          label: v,
+          onRemove: () => handleFilterChange(key, value.filter((x) => x !== v)),
+        });
+      });
+    } else if (value && value !== "All") {
+      filterChips.push({ key: `${key}:${value}`, label: value, onRemove: () => handleFilterChange(key, "All") });
+    }
+  });
+  if (retirementStatus !== "All") {
+    filterChips.push({ key: "retirement", label: retirementStatus, onRemove: () => setRetirementStatus("All") });
+  }
+  if (groupBy) {
+    const activeGroupOption = MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy);
+    filterChips.push({
+      key: "groupby",
+      label: `Group: ${activeGroupOption?.label || groupBy}`,
+      onRemove: () => setGroupBy(null),
+    });
+  }
+
+  // The full field-by-field filter panel, embedded as the Filters dropdown's
+  // collapsible "Advanced Filters" section instead of living in its own
+  // block below the header.
+  const advancedFiltersPanel = (
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+        <button
+          onClick={clearFilters}
+          style={{
+            padding: "6px 14px",
+            background: "#1976d2",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "12px",
+            cursor: "pointer",
+            fontWeight: "700",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Clear All
+        </button>
+      </div>
+
+      <div style={{ marginBottom: "14px" }}>
+        <FilterAccordionList
+          sections={[
+            ...filterKeys.map((filterKey) => ({
+              key: filterKey,
+              label: filterKey,
+              options: filterOptions[filterKey] || [],
+              selected: sidebarFilters[filterKey] || [],
+              onChange: (next) => handleFilterChange(filterKey, next),
+            })),
+            {
+              key: "Retirement Status",
+              label: "Retirement Status",
+              options: ["Retired", "Not Retired"],
+              selected: retirementStatus === "All" ? [] : [retirementStatus],
+              onChange: (next) => setRetirementStatus(next.length ? next[next.length - 1] : "All"),
+            },
+          ]}
+        />
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "stretch" }}>
+        <div
+          style={{
+            flex: "1 1 320px",
+            background: "#f8fafc",
+            border: "1px solid #dbe3ee",
+            borderRadius: "10px",
+            padding: "10px",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
+          }}
+        >
+          <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "11px", color: "#334155" }}>Date Range</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <DatePicker
+              selected={toDatePickerValue(registrationDateFrom)}
+              onChange={(date) =>
+                startTransition(() => {
+                  setRegistrationDateFrom(toDateInputValue(date));
+                })
+              }
+              dateFormat="dd MMM yyyy"
+              placeholderText="From date"
+              showPopperArrow={false}
+              className="member-date-range-input"
+              wrapperClassName="member-date-range-wrapper"
+              portalId="member-date-range-portal"
+              popperClassName="member-date-range-popper"
+            />
+            <DatePicker
+              selected={toDatePickerValue(registrationDateTo)}
+              onChange={(date) =>
+                startTransition(() => {
+                  setRegistrationDateTo(toDateInputValue(date));
+                })
+              }
+              dateFormat="dd MMM yyyy"
+              placeholderText="To date"
+              showPopperArrow={false}
+              className="member-date-range-input"
+              wrapperClassName="member-date-range-wrapper"
+              portalId="member-date-range-portal"
+              popperClassName="member-date-range-popper"
+            />
+          </div>
+        </div>
+        <div style={{ flex: "1 1 280px", border: "1px solid #dbe3ee", borderRadius: "12px", background: "#f8fafc", overflow: "hidden" }}>
+          <DualRangeSlider
+            label="Age Range"
+            helperText="Drag both handles to narrow the visible age range."
+            min={ageBounds.min}
+            max={ageBounds.max}
+            value={ageRange}
+            onChange={(nextValue) => {
+              startTransition(() => {
+                setAgeRange(nextValue);
+              });
+            }}
+            suffix=" yrs"
+            className="member-age-range"
+          />
+        </div>
+      </div>
+    </>
+  );
+
   // Loading state
   if (!isMembersLoaded) {
     return (
@@ -1083,64 +1564,35 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         z-index: 10200;
       }
     `}</style>
-      {/* Header Card with Search, Total Badge, Filters, Export */}
+      {/* Header Card: search bar with filter/group chips, Filters/Group By/View, Total Badge, Export */}
       <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", marginBottom: isFilterOpen ? "16px" : "0" }}>
-          {/* Search Input */}
-          <div style={{ position: "relative", flex: 1, maxWidth: "350px", minWidth: "200px" }}>
-            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-              <input
-              type="text"
-              placeholder="Search name, mobile, email..."
-              aria-label="Search members by name, mobile, or email"
-              value={searchTerm}
-              onChange={(e) => {
-                const nextValue = e.target.value;
-                startTransition(() => {
-                  setSearchTerm(nextValue);
-                });
-              }}
-              style={{
-                padding: "10px 14px 10px 38px",
-                width: "100%",
-                borderRadius: "8px",
-                border: "1px solid #e2e8f0",
-                fontSize: "13.5px",
-                backgroundColor: "white",
-                color: "#1a2332",
-                outline: "none",
-                transition: "border-color 0.15s",
-              }}
-              onFocus={(e) => { e.target.style.borderColor = "#1976d2"; e.target.style.boxShadow = "0 0 0 3px rgba(25,118,210,0.1)"; }}
-              onBlur={(e) => { e.target.style.borderColor = "#e2e8f0"; e.target.style.boxShadow = "none"; }}
-            />
-          </div>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
+          <OdooSearchBar
+            value={searchTerm}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              startTransition(() => {
+                setSearchTerm(nextValue);
+              });
+            }}
+            placeholder="Search name, mobile, email..."
+            chips={filterChips}
+          />
+
+          <OdooViewToolbar
+            quickFilters={quickFilters}
+            advancedContent={advancedFiltersPanel}
+            groupByOptions={MEMBER_GROUP_BY_OPTIONS}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            view={viewMode}
+            onViewChange={setViewMode}
+          />
 
           {/* Total Members Badge */}
           <span style={{ backgroundColor: "#e3f2fd", color: "#1565c0", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "700", whiteSpace: "nowrap", marginLeft: "auto", border: "1px solid #bbdefb" }}>
             {totalItems.toLocaleString()} Members
           </span>
-
-          {/* Filters Button */}
-          <button
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-            style={{
-              padding: "9px 18px",
-              backgroundColor: isFilterOpen ? "#1976d2" : "white",
-              border: "1px solid #1976d2",
-              color: isFilterOpen ? "white" : "#1976d2",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "13px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-            Filters
-          </button>
 
           {/* Export Button */}
           <button
@@ -1163,192 +1615,40 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
             Export
           </button>
         </div>
-
-        {/* Inline Filters */}
-        {isFilterOpen && (
-          <div
-            style={{
-              borderTop: "1px solid #e5e7eb",
-              marginTop: "14px",
-              paddingTop: "16px",
-              background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: "12px",
-                marginBottom: "14px",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ minWidth: "220px" }}>
-                <strong style={{ fontSize: "15px", color: "#0f172a", display: "block", marginBottom: "4px" }}>Filters</strong>
-              </div>
-              <button
-                onClick={() => {
-                  clearFilters();
-                  setOpenDropdown(null);
-                }}
-                style={{
-                  padding: "8px 16px",
-                  background: "#1976d2",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontSize: "12.5px",
-                  cursor: "pointer",
-                  fontWeight: "700",
-                  whiteSpace: "nowrap",
-                  transition: "background 0.15s",
-                }}
-              >
-                Clear All
-              </button>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))",
-                gap: "12px",
-                marginBottom: "14px",
-                alignItems: "start",
-              }}
-            >
-              {filterKeys.map(filterKey => (
-                <MultiSelectDropdown
-                  key={filterKey}
-                  label={filterKey}
-                  options={filterOptions[filterKey] || []}
-                  selected={sidebarFilters[filterKey] || []}
-                  onChange={(next) => handleFilterChange(filterKey, next)}
-                />
-              ))}
-              <div style={{ padding: "4px 0", minWidth: 0 }}>
-                <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "12px", color: "#334155" }}>Retirement Status</label>
-                <select
-                  value={retirementStatus}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    startTransition(() => {
-                      setRetirementStatus(nextValue);
-                    });
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "11px 12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "10px",
-                    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-                    fontSize: "13px",
-                    color: "#0f172a",
-                    outline: "none",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
-                  }}
-                >
-                  <option value="All">All</option>
-                  <option value="Retired">Retired</option>
-                  <option value="Not Retired">Not Retired</option>
-                </select>
-              </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "12px",
-                alignItems: "stretch",
-              }}
-            >
-              <div
-                style={{
-                  flex: "1 1 320px",
-                  background: "#f8fafc",
-                  border: "1px solid #dbe3ee",
-                  borderRadius: "10px",
-                  padding: "10px",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
-                }}
-              >
-                <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", fontSize: "11px", color: "#334155" }}>Date Range</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  <DatePicker
-                    selected={toDatePickerValue(registrationDateFrom)}
-                    onChange={(date) =>
-                      startTransition(() => {
-                        setRegistrationDateFrom(toDateInputValue(date));
-                      })
-                    }
-                    dateFormat="dd MMM yyyy"
-                    placeholderText="From date"
-                    showPopperArrow={false}
-                    className="member-date-range-input"
-                    wrapperClassName="member-date-range-wrapper"
-                    portalId="member-date-range-portal"
-                    popperClassName="member-date-range-popper"
-                  />
-                  <DatePicker
-                    selected={toDatePickerValue(registrationDateTo)}
-                    onChange={(date) =>
-                      startTransition(() => {
-                        setRegistrationDateTo(toDateInputValue(date));
-                      })
-                    }
-                    dateFormat="dd MMM yyyy"
-                    placeholderText="To date"
-                    showPopperArrow={false}
-                    className="member-date-range-input"
-                    wrapperClassName="member-date-range-wrapper"
-                    portalId="member-date-range-portal"
-                    popperClassName="member-date-range-popper"
-                  />
-                </div>
-              </div>
-              <div style={{ flex: "1 1 280px", border: "1px solid #dbe3ee", borderRadius: "12px", background: "#f8fafc", overflow: "hidden" }}>
-                <DualRangeSlider
-                  label="Age Range"
-                  helperText="Drag both handles to narrow the visible age range."
-                  min={ageBounds.min}
-                  max={ageBounds.max}
-                  value={ageRange}
-                  onChange={(nextValue) => {
-                    startTransition(() => {
-                      setAgeRange(nextValue);
-                    });
-                  }}
-                  suffix=" yrs"
-                  className="member-age-range"
-                />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      <div style={{ width: "100%", margin: "0", padding: "0" }}>
+      <div style={{ width: "100%", margin: "0", padding: "0" }} ref={kanbanContainerRef}>
         <div style={{ border: "1px solid #eee", borderRadius: "8px", background: "#fff", overflow: "hidden" }}>
-          {/* Virtual table header */}
-          <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, background: "#1976d2", position: "sticky", top: 0, zIndex: 1 }}>
-            {COL_HEADERS.map((col) => (
-              <div key={col} style={{ padding: "12px 14px", color: "#fff", fontWeight: 700, fontSize: "12.5px", letterSpacing: "0.01em" }}>
-                {col}
-              </div>
-            ))}
-          </div>
+          {viewMode === "list" && (
+            <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, background: "#1976d2", position: "sticky", top: 0, zIndex: 1 }}>
+              {COL_HEADERS.map((col) => (
+                <div key={col} style={{ padding: "12px 14px", color: "#fff", fontWeight: 700, fontSize: "12.5px", letterSpacing: "0.01em" }}>
+                  {col}
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* Virtual rows */}
           {filteredMembers.length === 0 ? (
             <div style={{ padding: "48px 20px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
               No members match your filters
             </div>
+          ) : viewMode === "kanban" ? (
+            <VariableList
+              height={listHeight}
+              width="100%"
+              itemCount={kanbanRows.length}
+              itemSize={kanbanRowHeight}
+              itemData={kanbanRowItemData}
+              overscanCount={4}
+            >
+              {KanbanRow}
+            </VariableList>
           ) : (
             <List
               height={listHeight}
               width="100%"
-              itemCount={pageMembers.length}
+              itemCount={listSourceItems.length}
               itemSize={ROW_HEIGHT}
               itemData={virtualRowItemData}
               overscanCount={6}
@@ -1357,51 +1657,50 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
             </List>
           )}
 
-          {/* Pagination footer — always visible */}
-          <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-            {/* <div style={{ fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
-              {totalItems.toLocaleString()} member{totalItems !== 1 ? "s" : ""} found
-              {totalItems > 0 && (
-                <span style={{ marginLeft: "8px", fontWeight: 400 }}>
-                  (showing {pageStart + 1}–{Math.min(pageStart + rowsPerPage, totalItems).toLocaleString()})
+          {/* Pagination footer — only meaningful for the flat, ungrouped list;
+              grouping/Kanban already show everything via virtualization. */}
+          {!groupBy && viewMode === "list" ? (
+            <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "12.5px", color: "#64748b" }}>Rows per page:</span>
+                <select
+                  value={rowsPerPage === Infinity ? "all" : rowsPerPage}
+                  onChange={(e) => {
+                    const value = e.target.value === "all" ? Infinity : Number(e.target.value);
+                    setRowsPerPage(value);
+                    setCurrentPage(1);
+                  }}
+                  style={{ padding: "4px 8px", borderRadius: "8px", border: "1.5px solid #e2e8f0", fontSize: "13px", background: "#fff", cursor: "pointer" }}
+                >
+                  <option value="all">All</option>
+                  {[100, 500, 1000, 5000].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                <button
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage <= 1 ? "#f1f5f9" : "#1976d2", color: safeCurrentPage <= 1 ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage <= 1 ? "not-allowed" : "pointer" }}
+                >
+                  ‹ Prev
+                </button>
+                <span style={{ fontSize: "13px", color: "#475569", fontWeight: 600, minWidth: "80px", textAlign: "center" }}>
+                  Page {safeCurrentPage} / {totalPages}
                 </span>
-              )}
-            </div> */}
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "12.5px", color: "#64748b" }}>Rows per page:</span>
-              <select
-                value={rowsPerPage === Infinity ? "all" : rowsPerPage}
-                onChange={(e) => {
-                  const value = e.target.value === "all" ? Infinity : Number(e.target.value);
-                  setRowsPerPage(value);
-                  setCurrentPage(1);
-                }}
-                style={{ padding: "4px 8px", borderRadius: "8px", border: "1.5px solid #e2e8f0", fontSize: "13px", background: "#fff", cursor: "pointer" }}
-              >
-                <option value="all">All</option>
-                {[100, 500, 1000, 5000].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              <button
-                disabled={safeCurrentPage <= 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-                style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage <= 1 ? "#f1f5f9" : "#1976d2", color: safeCurrentPage <= 1 ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage <= 1 ? "not-allowed" : "pointer" }}
-              >
-                ‹ Prev
-              </button>
-              <span style={{ fontSize: "13px", color: "#475569", fontWeight: 600, minWidth: "80px", textAlign: "center" }}>
-                Page {safeCurrentPage} / {totalPages}
-              </span>
-              <button
-                disabled={safeCurrentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
-                style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage >= totalPages ? "#f1f5f9" : "#1976d2", color: safeCurrentPage >= totalPages ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage >= totalPages ? "not-allowed" : "pointer" }}
-              >
-                Next ›
-              </button>
+                <button
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage >= totalPages ? "#f1f5f9" : "#1976d2", color: safeCurrentPage >= totalPages ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage >= totalPages ? "not-allowed" : "pointer" }}
+                >
+                  Next ›
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
+              Showing all {totalItems.toLocaleString()} matching member{totalItems !== 1 ? "s" : ""}
+            </div>
+          )}
         </div>
       </div>
 

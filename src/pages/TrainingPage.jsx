@@ -1,9 +1,10 @@
 // src/pages/TrainingPage.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment } from "react";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
 import {
   FaPlus,
   FaTimes,
-  FaFilter,
   FaTrashAlt,
   FaChalkboardTeacher,
   FaCalendarCheck,
@@ -116,9 +117,9 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [selectedWorkshop, setSelectedWorkshop] = useState(null);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
 
-  const [showFilters, setShowFilters] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilters, setStatusFilters] = useState([]);
   const [topicSearch, setTopicSearch] = useState("");
+  const [sessionsGroupBy, setSessionsGroupBy] = useState(null);
 
   const [activeView, setActiveView] = useState("sessions");
   const [documentsSession, setdocumentsSession] = useState(null);
@@ -224,17 +225,43 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const filteredSessions = useMemo(() => {
     const term = topicSearch.trim().toLowerCase();
     return sortedSessions.filter((session) => {
-      if (statusFilter !== "All" && getSessionStatus(session) !== statusFilter) return false;
+      if (statusFilters.length && !statusFilters.includes(getSessionStatus(session))) return false;
       if (term && !String(session.topic || "").toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [sortedSessions, statusFilter, topicSearch]);
+  }, [sortedSessions, statusFilters, topicSearch]);
 
-  const hasActiveFilters = statusFilter !== "All" || topicSearch.trim() !== "";
+  const hasActiveFilters = statusFilters.length > 0 || topicSearch.trim() !== "";
   const clearFilters = () => {
-    setStatusFilter("All");
+    setStatusFilters([]);
     setTopicSearch("");
   };
+  const toggleStatusFilter = (value) => {
+    setStatusFilters((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  };
+
+  const SESSIONS_GROUP_BY_OPTIONS = [
+    { key: "status", label: "Status" },
+    { key: "trainer", label: "Trainer" },
+    { key: "organizer", label: "Organizer" },
+  ];
+
+  const groupedSessions = useMemo(() => {
+    if (!sessionsGroupBy) return null;
+    const getLabel = (session) => {
+      if (sessionsGroupBy === "status") return getSessionStatus(session);
+      if (sessionsGroupBy === "trainer") return session.trainer && session.trainer.trim() ? session.trainer.trim() : "Unspecified";
+      if (sessionsGroupBy === "organizer") return session.workshopOrganizer && session.workshopOrganizer.trim() ? session.workshopOrganizer.trim() : "Unspecified";
+      return "Unspecified";
+    };
+    const groups = new Map();
+    for (const session of filteredSessions) {
+      const label = getLabel(session);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(session);
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [sessionsGroupBy, filteredSessions]);
 
   const uploadPickerSessions = useMemo(() => {
     const term = uploadPickerSearch.trim().toLowerCase();
@@ -967,6 +994,90 @@ Please don't miss it — we look forward to your participation!`;
       );
     });
   }, [historyRows, historySearch]);
+
+  const renderSessionRow = (session) => {
+    const status = getSessionStatus(session);
+    return (
+      <tr key={session.id}>
+        <td>{formatDateDisplay(session.date)}</td>
+        <td>{session.time || "-"}</td>
+        <td style={{ cursor: "pointer" }} onClick={() => openScheduleModal(session)} title="Click to edit">
+          <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic}</div>
+          {(session.workshopOrganizer || session.workshopLocation) && (
+            <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+              {[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
+            </div>
+          )}
+        </td>
+        <td>{session.workshopFee || session.workshopFee === 0 ? `₹${session.workshopFee}` : "-"}</td>
+        <td>
+          <button type="button" className="training-attendees-btn" onClick={() => openScheduleModal(session)}>
+            <FaUserFriends size={11} />
+            {(session.attendees || []).length}
+          </button>
+          <button
+            type="button"
+            className="training-add-trainees-btn"
+            onClick={() => openAddTraineesModal(session)}
+            title="Search and add members from Users to this training"
+          >
+            <FaPlus size={9} />
+            Add
+          </button>
+        </td>
+        <td>
+          {session.meetingLink ? (
+            <a className="training-meeting-link" href={session.meetingLink} target="_blank" rel="noopener noreferrer">
+              <FaLink size={11} />
+              Join
+            </a>
+          ) : (
+            "-"
+          )}
+        </td>
+        <td>
+          <button type="button" className="training-documents-btn" onClick={() => opendocumentsModal(session)}>
+            <FaFolderOpen size={11} />
+            {(session.documents || []).length}
+          </button>
+        </td>
+        <td>
+          <button
+            type="button"
+            className={`training-reminder-btn ${session.whatsappReminderSent ? "sent" : "pending"}`}
+            onClick={() => openReminderModal(session, "whatsappReminderSent")}
+            title={session.whatsappReminderSentAt ? `Last sent ${new Date(session.whatsappReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a reminder"}
+          >
+            <FaWhatsapp size={11} />
+            WhatsApp Reminder
+          </button>
+          <button
+            type="button"
+            className={`training-reminder-btn ${session.whatsappLastReminderSent ? "sent" : "pending"}`}
+            onClick={() => openReminderModal(session, "whatsappLastReminderSent")}
+            title={session.whatsappLastReminderSentAt ? `Last sent ${new Date(session.whatsappLastReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a final reminder"}
+          >
+            <FaWhatsapp size={11} />
+            WhatsApp Last Reminder
+          </button>
+        </td>
+        <td>
+          <span className={`training-status-badge ${status.toLowerCase()}`}>{status}</span>
+        </td>
+        <td>
+          <button
+            type="button"
+            className="training-delete-btn"
+            onClick={() => handleDeleteSession(session)}
+            disabled={deletingId === session.id}
+            title="Remove"
+          >
+            <FaTrashAlt size={11} />
+          </button>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="training-page">
@@ -1737,16 +1848,6 @@ Please don't miss it — we look forward to your participation!`;
           <p>Schedule weekly training sessions and upload documents.</p>
         </div>
         <div className="training-header-actions">
-          {activeView === "sessions" && (
-            <button
-              type="button"
-              className={`training-btn ${hasActiveFilters ? "training-btn-primary" : "training-btn-secondary"}`}
-              onClick={() => setShowFilters((prev) => !prev)}
-            >
-              <FaFilter size={12} />
-              Filters
-            </button>
-          )}
           <button type="button" className="training-btn training-btn-secondary" onClick={openUploadPicker}>
             <FaFolderOpen size={12} />
             Upload Documents
@@ -1787,23 +1888,35 @@ Please don't miss it — we look forward to your participation!`;
         </button>
       </div>
 
-      {activeView === "sessions" && showFilters && (
-        <div className="training-filter-row">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="All">All Statuses</option>
-            <option value="Upcoming">Upcoming</option>
-            <option value="Completed">Completed</option>
-          </select>
-          <input
-            type="text"
-            value={topicSearch}
-            onChange={(e) => setTopicSearch(e.target.value)}
-            placeholder="Search by topic..."
-          />
-          <button type="button" className="training-clear-filters-btn" onClick={clearFilters} disabled={!hasActiveFilters}>
-            <FaTimes size={11} />
-            Clear All
-          </button>
+      {activeView === "sessions" && (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: "14px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", minWidth: "320px", maxWidth: "620px" }}>
+            <OdooSearchBar
+              value={topicSearch}
+              onChange={(e) => setTopicSearch(e.target.value)}
+              placeholder="Search by topic..."
+              chips={[
+                ...statusFilters.map((v) => ({ key: `status-${v}`, label: v, onRemove: () => toggleStatusFilter(v) })),
+                ...(sessionsGroupBy ? [{ key: "groupBy", label: `Group: ${SESSIONS_GROUP_BY_OPTIONS.find((o) => o.key === sessionsGroupBy)?.label || sessionsGroupBy}`, onRemove: () => setSessionsGroupBy(null) }] : []),
+              ]}
+            />
+            <OdooViewToolbar
+              quickFilters={[
+                { key: "status-Upcoming", label: "Upcoming", active: statusFilters.includes("Upcoming"), onToggle: () => toggleStatusFilter("Upcoming") },
+                { key: "status-Completed", label: "Completed", active: statusFilters.includes("Completed"), onToggle: () => toggleStatusFilter("Completed") },
+              ]}
+              groupByOptions={SESSIONS_GROUP_BY_OPTIONS}
+              groupBy={sessionsGroupBy}
+              onGroupByChange={setSessionsGroupBy}
+              showViewToggle={false}
+            />
+          </div>
+          {hasActiveFilters && (
+            <button type="button" className="training-clear-filters-btn" onClick={clearFilters}>
+              <FaTimes size={11} />
+              Clear All
+            </button>
+          )}
         </div>
       )}
 
@@ -1866,89 +1979,18 @@ Please don't miss it — we look forward to your participation!`;
               </tr>
             </thead>
             <tbody>
-              {filteredSessions.map((session) => {
-                const status = getSessionStatus(session);
-                return (
-                  <tr key={session.id}>
-                    <td>{formatDateDisplay(session.date)}</td>
-                    <td>{session.time || "-"}</td>
-                    <td style={{ cursor: "pointer" }} onClick={() => openScheduleModal(session)} title="Click to edit">
-                      <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic}</div>
-                      {(session.workshopOrganizer || session.workshopLocation) && (
-                        <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
-                          {[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
-                        </div>
-                      )}
-                    </td>
-                    <td>{session.workshopFee || session.workshopFee === 0 ? `₹${session.workshopFee}` : "-"}</td>
-                    <td>
-                      <button type="button" className="training-attendees-btn" onClick={() => openScheduleModal(session)}>
-                        <FaUserFriends size={11} />
-                        {(session.attendees || []).length}
-                      </button>
-                      <button
-                        type="button"
-                        className="training-add-trainees-btn"
-                        onClick={() => openAddTraineesModal(session)}
-                        title="Search and add members from Users to this training"
-                      >
-                        <FaPlus size={9} />
-                        Add
-                      </button>
-                    </td>
-                    <td>
-                      {session.meetingLink ? (
-                        <a className="training-meeting-link" href={session.meetingLink} target="_blank" rel="noopener noreferrer">
-                          <FaLink size={11} />
-                          Join
-                        </a>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td>
-                      <button type="button" className="training-documents-btn" onClick={() => opendocumentsModal(session)}>
-                        <FaFolderOpen size={11} />
-                        {(session.documents || []).length}
-                      </button>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className={`training-reminder-btn ${session.whatsappReminderSent ? "sent" : "pending"}`}
-                        onClick={() => openReminderModal(session, "whatsappReminderSent")}
-                        title={session.whatsappReminderSentAt ? `Last sent ${new Date(session.whatsappReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a reminder"}
-                      >
-                        <FaWhatsapp size={11} />
-                        WhatsApp Reminder
-                      </button>
-                      <button
-                        type="button"
-                        className={`training-reminder-btn ${session.whatsappLastReminderSent ? "sent" : "pending"}`}
-                        onClick={() => openReminderModal(session, "whatsappLastReminderSent")}
-                        title={session.whatsappLastReminderSentAt ? `Last sent ${new Date(session.whatsappLastReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a final reminder"}
-                      >
-                        <FaWhatsapp size={11} />
-                        WhatsApp Last Reminder
-                      </button>
-                    </td>
-                    <td>
-                      <span className={`training-status-badge ${status.toLowerCase()}`}>{status}</span>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="training-delete-btn"
-                        onClick={() => handleDeleteSession(session)}
-                        disabled={deletingId === session.id}
-                        title="Remove"
-                      >
-                        <FaTrashAlt size={11} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {groupedSessions
+                ? groupedSessions.map(([label, items]) => (
+                    <Fragment key={label}>
+                      <tr>
+                        <td colSpan={10} style={{ padding: "10px 16px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
+                          {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                        </td>
+                      </tr>
+                      {items.map(renderSessionRow)}
+                    </Fragment>
+                  ))
+                : filteredSessions.map(renderSessionRow)}
             </tbody>
           </table>
         )}

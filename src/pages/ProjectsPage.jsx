@@ -1,5 +1,5 @@
 // src/pages/ProjectsPage.jsx
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   collection,
   db,
@@ -10,21 +10,58 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import FilterSidebar from "../components/FilterSidebar";
 import * as XLSX from "xlsx";
 import SkeletonLoader from "../components/SkeletonLoader";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
+import FilterAccordionList from "../components/FilterAccordionList";
+
+const PROJECTS_GROUP_BY_OPTIONS = [
+  { key: "city", label: "City" },
+  { key: "projects", label: "Project" },
+];
+
+const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
+
+function ApplicationCard({ app, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        padding: "12px 14px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: "14px", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {app.full_name || "-"}
+      </div>
+      <div style={{ fontSize: "12px", color: "#64748b" }}>{app.phone_number || "-"}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+        {app.city && <span style={kanbanChipStyle}>{app.city}</span>}
+        {app.projects && <span style={kanbanChipStyle}>{app.projects}</span>}
+      </div>
+    </div>
+  );
+}
 
 export default function ProjectsPage() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({ city: [], projects: [] });
   const [searchTerm, setSearchTerm] = useState("");
+  const [groupBy, setGroupBy] = useState(null);
+  const [viewMode, setViewMode] = useState("list");
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [filterSearchTerms, setFilterSearchTerms] = useState({});
-  const filtersRef = useRef(null);
 
   // Modal states
   const [selectedApp, setSelectedApp] = useState(null);
@@ -99,36 +136,27 @@ export default function ProjectsPage() {
     });
 
     return {
-      cityOptions: ["All", ...Array.from(cities).sort()],
-      projectOptions: ["All", ...Array.from(projects).sort()],
+      cityOptions: Array.from(cities).sort(),
+      projectOptions: Array.from(projects).sort(),
     };
   }, [applications]);
 
   const options = { city: cityOptions, projects: projectOptions };
   const filterKeys = ["city", "projects"];
-
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value === "All" ? undefined : value
-    }));
-    setCurrentPage(1);
-  };
+  const filterLabels = { city: "City", projects: "Project" };
 
   const clearFilters = () => {
-    setFilters({});
+    setFilters({ city: [], projects: [] });
     setSearchTerm("");
     setCurrentPage(1);
   };
 
-  // Filtering Logic - Handle both single values and arrays
-  const matchesProjectFilter = (appProjects, filterValue) => {
-    if (!filterValue) return true;
+  // Filtering Logic - a project application can list several projects
+  // (comma-separated), so match if it has ANY of the selected values.
+  const matchesProjectFilter = (appProjects, filterValues) => {
+    if (!filterValues || filterValues.length === 0) return true;
     if (!appProjects) return false;
-    
     const appProjectsList = appProjects.split(",").map(p => p.trim());
-    const filterValues = Array.isArray(filterValue) ? filterValue : [filterValue];
-    
     return filterValues.some(fv => appProjectsList.includes(fv));
   };
 
@@ -137,14 +165,8 @@ export default function ProjectsPage() {
   // typed into the detail modal's notes field — causing visible input lag.
   const filteredApplications = useMemo(() => {
   let filteredApplications = applications.filter(app => {
-    // Handle city filter (can be single value or array)
-    if (filters.city) {
-      const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
-      if (!cityValues.includes(app.city)) return false;
-    }
-
-    // Handle projects filter (can be single value or array)
-    if (filters.projects && !matchesProjectFilter(app.projects, filters.projects)) return false;
+    if (filters.city?.length && !filters.city.includes(app.city)) return false;
+    if (filters.projects?.length && !matchesProjectFilter(app.projects, filters.projects)) return false;
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
@@ -174,6 +196,78 @@ export default function ProjectsPage() {
   const currentRows = rowsPerPage === Infinity
     ? filteredApplications
     : filteredApplications.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  // Grouping is applied within the current page's rows (not virtualized).
+  const getGroupLabels = (app, key) => {
+    if (key === "city") {
+      const v = app.city;
+      return [v && String(v).trim() ? String(v).trim() : "Unspecified"];
+    }
+    const raw = app.projects;
+    if (!raw) return ["Unspecified"];
+    const parts = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
+    return parts.length ? parts : ["Unspecified"];
+  };
+
+  const groupedRows = useMemo(() => {
+    if (!groupBy) return null;
+    const groups = new Map();
+    for (const app of currentRows) {
+      for (const label of getGroupLabels(app, groupBy)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(app);
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, currentRows]);
+
+  const toggleGroupCollapsed = (key) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const filterChips = [];
+  Object.entries(filters).forEach(([key, values]) => {
+    (values || []).forEach((v) => {
+      filterChips.push({
+        key: `${key}:${v}`,
+        label: v,
+        onRemove: () => setFilters((prev) => ({ ...prev, [key]: prev[key].filter((x) => x !== v) })),
+      });
+    });
+  });
+  if (groupBy) {
+    filterChips.push({ key: "groupby", label: `Group: ${filterLabels[groupBy]}`, onRemove: () => setGroupBy(null) });
+  }
+
+  const advancedFiltersPanel = (
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+        <button
+          onClick={clearFilters}
+          style={{ padding: "6px 14px", background: "#1976d2", color: "white", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
+        >
+          Clear All
+        </button>
+      </div>
+      <FilterAccordionList
+        sections={filterKeys.map((key) => ({
+          key,
+          label: filterLabels[key],
+          options: options[key] || [],
+          selected: filters[key] || [],
+          onChange: (next) => {
+            setFilters((prev) => ({ ...prev, [key]: next }));
+            setCurrentPage(1);
+          },
+        }))}
+      />
+    </>
+  );
 
   // Load Interaction Notes
   useEffect(() => {
@@ -291,17 +385,6 @@ export default function ProjectsPage() {
     }
   };
 
-  // Close dropdown on click-outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (filtersRef.current && !filtersRef.current.contains(event.target) && openDropdown) {
-        setOpenDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openDropdown]);
-
   // Export function
   const handleExportXLSX = () => {
     try {
@@ -325,62 +408,39 @@ export default function ProjectsPage() {
     }
   };
 
-  const filterData = { filters, handleFilterChange, clearFilters, options };
-
   if (loading) {
     return <SkeletonLoader rows={8} fullPage label="Loading applications…" />;
   }
 
   return (
     <div className="member-list-page">
-      {/* Header Card with Search, Total Badge, Filters, Export */}
+      {/* Header Card with Search, Filters/Group By/View, Total Badge, Export */}
       <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: isFiltersOpen ? "16px" : "0" }}>
-          {/* Search Input */}
-          <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
-            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input
-              type="text"
-              placeholder="Search by name, phone, city, project..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{
-                padding: "12px 14px 12px 40px",
-                width: "159%",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                fontSize: "14px",
-                backgroundColor: "white",
-                color: "black",
-              }}
-              autoFocus
-            />
-          </div>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" }}>
+          <OdooSearchBar
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search by name, phone, city, project..."
+            chips={filterChips}
+          />
+
+          <OdooViewToolbar
+            quickFilters={[]}
+            advancedContent={advancedFiltersPanel}
+            groupByOptions={PROJECTS_GROUP_BY_OPTIONS}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            view={viewMode}
+            onViewChange={setViewMode}
+          />
 
           {/* Total Applications Badge */}
           <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto"}}>
             Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
           </span>
-
-          {/* Filters Button */}
-          <button
-            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #10b981",
-              color: "#10b981",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            🔽 Filters
-          </button>
 
           {/* Export Button */}
           <button
@@ -399,65 +459,47 @@ export default function ProjectsPage() {
             ⬇️ Export
           </button>
         </div>
-
-        {/* Inline Filters */}
-        {isFiltersOpen && (
-          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
-              <button onClick={() => { setFilters({}); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-              {["city", "projects"].map(filterKey => {
-                const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
-                const filterOptions = filterKey === "city" ? cityOptions : projectOptions;
-                const searchTerm = filterSearchTerms[filterKey] || "";
-                const filteredOptions = filterOptions.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
-                const isDropdownOpen = openDropdown === filterKey;
-
-                return (
-                  <div key={filterKey} style={{ marginBottom: "8px" }}>
-                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey}</label>
-                    <div style={{ position: "relative" }}>
-                      <div
-                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
-                        style={{
-                          padding: "10px 12px",
-                          border: "1px solid #d1d5db",
-                          borderRadius: "6px",
-                          background: "#fff",
-                          cursor: "pointer",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          fontSize: "13px",
-                        }}
-                      >
-                        <span>{selectedValues.length > 0 ? selectedValues.join(", ") : "All"}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
-                      </div>
-                      {isDropdownOpen && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
-                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
-                            {filteredOptions.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOptions.map(o => (
-                              <div key={o} onClick={() => { if (selectedValues.includes(o)) { setFilters(prev => ({ ...prev, [filterKey]: selectedValues.filter(v => v !== o).length === 0 ? undefined : selectedValues.filter(v => v !== o) })); } else { setFilters(prev => ({ ...prev, [filterKey]: [...selectedValues, o] })); } setCurrentPage(1); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValues.includes(o) ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValues.includes(o) && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="content-with-sidebar">
         <div className="table-container">
           <>
+          {viewMode === "kanban" ? (
+            <div style={{ minHeight: "400px", maxHeight: "70vh", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff", padding: "12px" }}>
+              {currentRows.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
+                  {searchTerm || Object.values(filters).some((v) => v.length)
+                    ? "No applications found matching your criteria"
+                    : "No project applications registered yet"}
+                </div>
+              ) : groupedRows ? (
+                groupedRows.map(([label, rows]) => (
+                  <div key={label} style={{ marginBottom: "12px" }}>
+                    <div
+                      onClick={() => toggleGroupCollapsed(label)}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                      {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                    </div>
+                    {!collapsedGroups.has(label) && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
+                        {rows.map((app) => (
+                          <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                  {currentRows.map((app) => (
+                    <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
               <div style={{
                 height: "70vh",
                 minHeight: "400px",
@@ -485,11 +527,35 @@ export default function ProjectsPage() {
                     {currentRows.length === 0 ? (
                       <tr>
                         <td colSpan="4" style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
-                          {searchTerm || Object.keys(filters).length > 0
+                          {searchTerm || Object.values(filters).some((v) => v.length)
                             ? "No applications found matching your criteria"
                             : "No project applications registered yet"}
                         </td>
                       </tr>
+                    ) : groupedRows ? (
+                      groupedRows.map(([label, rows]) => (
+                        <Fragment key={label}>
+                          <tr style={{ background: "#eef2f7" }}>
+                            <td colSpan={4} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
+                              <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                              {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                            </td>
+                          </tr>
+                          {!collapsedGroups.has(label) &&
+                            rows.map((app) => (
+                              <tr
+                                key={app.id}
+                                onClick={() => openModal(app)}
+                                style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
+                              >
+                                <td style={{ padding: "12px" }}>{app.full_name || "-"}</td>
+                                <td style={{ padding: "12px" }}>{app.phone_number || "-"}</td>
+                                <td style={{ padding: "12px" }}>{app.city || "-"}</td>
+                                <td style={{ padding: "12px" }}>{app.projects || "-"}</td>
+                              </tr>
+                            ))}
+                        </Fragment>
+                      ))
                     ) : (
                       currentRows.map((app) => (
                         <tr
@@ -507,6 +573,7 @@ export default function ProjectsPage() {
                   </tbody>
                 </table>
               </div>
+          )}
 
               {/* Pagination */}
               <div style={{

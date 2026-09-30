@@ -1,5 +1,5 @@
 // src/pages/TempStaffPage.jsx
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import {
   collection,
   db,
@@ -13,19 +13,77 @@ import {
 } from "../firestoreClient";
 import * as XLSX from "xlsx";
 import SkeletonLoader from "../components/SkeletonLoader";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
+import FilterAccordionList from "../components/FilterAccordionList";
+
+const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
+
+function TempStaffCard({ item, viewMode, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        padding: "12px 14px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: "14px", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.full_name || "-"}
+      </div>
+      <div style={{ fontSize: "12px", color: "#64748b" }}>{item.contact_number || "-"}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+        {viewMode === "applications" ? (
+          <>
+            {item.city && <span style={kanbanChipStyle}>{item.city}</span>}
+            {item.role && <span style={kanbanChipStyle}>{item.role}</span>}
+            {item.coordinator_name && <span style={kanbanChipStyle}>{item.coordinator_name}</span>}
+          </>
+        ) : (
+          <>
+            {item.coordinator_type && <span style={kanbanChipStyle}>{item.coordinator_type}</span>}
+            {Array.isArray(item.locations) && item.locations.slice(0, 2).map((l, i) => l.city && <span key={i} style={kanbanChipStyle}>{l.city}</span>)}
+          </>
+        )}
+      </div>
+      {viewMode === "applications" && item.status && (
+        <span
+          style={{
+            alignSelf: "flex-start",
+            padding: "2px 8px",
+            borderRadius: "999px",
+            fontSize: "10.5px",
+            fontWeight: 700,
+            background: item.status === "Active" ? "#d4edda" : item.status === "Inactive" ? "#f8d7da" : "#fff3cd",
+            color: item.status === "Active" ? "#155724" : item.status === "Inactive" ? "#721c24" : "#856404",
+          }}
+        >
+          {item.status}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function TempStaffPage() {
   const [selectedMember, setSelectedMember] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({ city: [], coordinator_type: [], status: [], role: [], coordinator_name: [] });
   const [membersData, setMembersData] = useState([]); // TCS Applications
   const [coordinatorsData, setCoordinatorsData] = useState([]); // Coordinators
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("applications"); // "applications" or "coordinators"
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [filterSearchTerms, setFilterSearchTerms] = useState({});
-  const filtersRef = useRef(null);
+  const [groupBy, setGroupBy] = useState(null);
+  const [kanbanView, setKanbanView] = useState("list");
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
 
   // Modal states
   const [activeTab, setActiveTab] = useState("personal");
@@ -138,11 +196,11 @@ export default function TempStaffPage() {
     });
 
     return {
-      city: ["All", ...Array.from(uniqueCities).sort()],
-      coordinator_type: ["All", ...Array.from(uniqueCoordinatorTypes).sort()],
-      status: ["All", ...Array.from(uniqueStatuses).sort()],
-      role: ["All", ...Array.from(uniqueRoles).sort()],
-      coordinator_name: ["All", ...Array.from(uniqueCoordinatorNames).sort()],
+      city: Array.from(uniqueCities).sort(),
+      coordinator_type: Array.from(uniqueCoordinatorTypes).sort(),
+      status: Array.from(uniqueStatuses).sort(),
+      role: Array.from(uniqueRoles).sort(),
+      coordinator_name: Array.from(uniqueCoordinatorNames).sort(),
     };
   }, [currentData, viewMode]);
 
@@ -212,40 +270,26 @@ export default function TempStaffPage() {
       );
     }
 
-    // Handle city filter (can be array or single value)
-    if (filters.city && filters.city !== "All") {
-      const cityValues = Array.isArray(filters.city) ? filters.city : [filters.city];
+    if (filters.city?.length) {
       if (viewMode === "applications") {
-        list = list.filter((m) => cityValues.includes(String(m.city || "").trim()));
+        list = list.filter((m) => filters.city.includes(String(m.city || "").trim()));
       } else {
         list = list.filter((m) =>
-          Array.isArray(m.locations) && m.locations.some((loc) => cityValues.includes(String(loc.city || "").trim()))
+          Array.isArray(m.locations) && m.locations.some((loc) => filters.city.includes(String(loc.city || "").trim()))
         );
       }
     }
-
-    // Handle coordinator_type filter (can be array or single value)
-    if (filters.coordinator_type && filters.coordinator_type !== "All") {
-      const values = Array.isArray(filters.coordinator_type) ? filters.coordinator_type : [filters.coordinator_type];
-      list = list.filter((m) => values.includes(String(m.coordinator_type || "").trim()));
+    if (filters.coordinator_type?.length) {
+      list = list.filter((m) => filters.coordinator_type.includes(String(m.coordinator_type || "").trim()));
     }
-
-    // Handle status filter (can be array or single value)
-    if (filters.status && filters.status !== "All") {
-      const values = Array.isArray(filters.status) ? filters.status : [filters.status];
-      list = list.filter((m) => values.includes(String(m.status || "").trim()));
+    if (filters.status?.length) {
+      list = list.filter((m) => filters.status.includes(String(m.status || "").trim()));
     }
-
-    // Handle role filter (can be array or single value)
-    if (filters.role && filters.role !== "All") {
-      const values = Array.isArray(filters.role) ? filters.role : [filters.role];
-      list = list.filter((m) => values.includes(String(m.role || "").trim()));
+    if (filters.role?.length) {
+      list = list.filter((m) => filters.role.includes(String(m.role || "").trim()));
     }
-
-    // Handle coordinator_name filter (can be array or single value)
-    if (filters.coordinator_name && filters.coordinator_name !== "All") {
-      const values = Array.isArray(filters.coordinator_name) ? filters.coordinator_name : [filters.coordinator_name];
-      list = list.filter((m) => values.includes(String(m.coordinator_name || "").trim()));
+    if (filters.coordinator_name?.length) {
+      list = list.filter((m) => filters.coordinator_name.includes(String(m.coordinator_name || "").trim()));
     }
 
     list.sort((a, b) =>
@@ -263,13 +307,44 @@ export default function TempStaffPage() {
         currentPage * rowsPerPage
       );
 
-  const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value === "All" ? "" : value }));
-    setCurrentPage(1);
+  // Grouping is applied within the current page's rows (not virtualized).
+  const groupedRows = useMemo(() => {
+    if (!groupBy) return null;
+
+    const getGroupLabels = (item, key) => {
+      if (key === "city") {
+        if (viewMode === "applications") {
+          const v = item.city;
+          return [v && String(v).trim() ? String(v).trim() : "Unspecified"];
+        }
+        const cities = (Array.isArray(item.locations) ? item.locations : []).map((l) => String(l.city || "").trim()).filter(Boolean);
+        return cities.length ? cities : ["Unspecified"];
+      }
+      const raw = item[key];
+      return [raw && String(raw).trim() ? String(raw).trim() : "Unspecified"];
+    };
+
+    const groups = new Map();
+    for (const item of currentRows) {
+      for (const label of getGroupLabels(item, groupBy)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(item);
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, currentRows, viewMode]);
+
+  const toggleGroupCollapsed = (key) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   const clearFilters = () => {
-    setFilters({});
+    setFilters({ city: [], coordinator_type: [], status: [], role: [], coordinator_name: [] });
     setSearchTerm("");
     setCurrentPage(1);
   };
@@ -358,17 +433,6 @@ export default function TempStaffPage() {
     }
   };
 
-  // Close dropdown on click-outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (filtersRef.current && !filtersRef.current.contains(event.target) && openDropdown) {
-        setOpenDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openDropdown]);
-
   // Export function
   const handleExportXLSX = () => {
     try {
@@ -408,6 +472,48 @@ export default function TempStaffPage() {
   const filterKeys = viewMode === "applications"
     ? ["coordinator_name", "city", "status", "role"]
     : ["city", "coordinator_type"];
+  const filterLabels = { coordinator_name: "Coordinator", city: "City", status: "Status", role: "Role", coordinator_type: "Coordinator Type" };
+  const groupByOptions = filterKeys.map((key) => ({ key, label: filterLabels[key] }));
+
+  const filterChips = [];
+  Object.entries(filters).forEach(([key, values]) => {
+    if (!filterKeys.includes(key)) return;
+    (values || []).forEach((v) => {
+      filterChips.push({
+        key: `${key}:${v}`,
+        label: v,
+        onRemove: () => setFilters((prev) => ({ ...prev, [key]: prev[key].filter((x) => x !== v) })),
+      });
+    });
+  });
+  if (groupBy) {
+    filterChips.push({ key: "groupby", label: `Group: ${filterLabels[groupBy]}`, onRemove: () => setGroupBy(null) });
+  }
+
+  const advancedFiltersPanel = (
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+        <button
+          onClick={clearFilters}
+          style={{ padding: "6px 14px", background: "#1976d2", color: "white", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
+        >
+          Clear All
+        </button>
+      </div>
+      <FilterAccordionList
+        sections={filterKeys.map((key) => ({
+          key,
+          label: filterLabels[key],
+          options: dynamicFilterOptions[key] || [],
+          selected: filters[key] || [],
+          onChange: (next) => {
+            setFilters((prev) => ({ ...prev, [key]: next }));
+            setCurrentPage(1);
+          },
+        }))}
+      />
+    </>
+  );
 
   if (loading) {
     return (
@@ -424,53 +530,31 @@ export default function TempStaffPage() {
 
       {/* Header Card */}
       <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: isFiltersOpen ? "16px" : "0" }}>
-          {/* Search Input */}
-          <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
-            <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", width: "16px", height: "16px" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input
-              type="text"
-              placeholder={`Search by Name, Mobile${viewMode === "applications" ? ", Aadhaar, PAN" : ", Email"}...`}
-              aria-label="Search by name or mobile number"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{
-                padding: "12px 14px 12px 40px",
-                width: "100%",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                fontSize: "14px",
-                backgroundColor: "white",
-                color: "black",
-              }}
-              autoFocus
-            />
-          </div>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" }}>
+          <OdooSearchBar
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder={`Search by Name, Mobile${viewMode === "applications" ? ", Aadhaar, PAN" : ", Email"}...`}
+            chips={filterChips}
+          />
+
+          <OdooViewToolbar
+            quickFilters={[]}
+            advancedContent={advancedFiltersPanel}
+            groupByOptions={groupByOptions}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            view={kanbanView}
+            onViewChange={setKanbanView}
+          />
 
           {/* Total Badge */}
           <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto" }}>
             Total Applications:- <strong>{filteredAndSortedMembers.length}</strong>
           </span>
-
-          {/* Filters Button */}
-          <button
-            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #1976d2",
-              color: "#1976d2",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            🔽 Filters
-          </button>
 
           {/* Export Button */}
           <button
@@ -489,64 +573,46 @@ export default function TempStaffPage() {
             ⬇️ Export
           </button>
         </div>
-
-        {/* Inline Filters */}
-        {isFiltersOpen && (
-          <div ref={filtersRef} style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <strong style={{ fontSize: "14px", color: "#1f2937" }}>Filters</strong>
-              <button onClick={() => { setFilters({}); setOpenDropdown(null); }} style={{ padding: "6px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Clear All</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-              {filterKeys.map(filterKey => {
-                const selectedValues = Array.isArray(filters[filterKey]) ? filters[filterKey] : (filters[filterKey] && filters[filterKey] !== "All" ? [filters[filterKey]] : []);
-                const filterOptions = dynamicFilterOptions[filterKey] || [];
-                const searchTerm = filterSearchTerms[filterKey] || "";
-                const filteredOptions = filterOptions.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
-                const isDropdownOpen = openDropdown === filterKey;
-
-                return (
-                  <div key={filterKey} style={{ marginBottom: "8px" }}>
-                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "12px", textTransform: "capitalize", color: "#374151" }}>{filterKey.replace(/_/g, " ")}</label>
-                    <div style={{ position: "relative" }}>
-                      <div
-                        onClick={() => setOpenDropdown(k => (k === filterKey ? null : filterKey))}
-                        style={{
-                          padding: "10px 12px",
-                          border: "1px solid #d1d5db",
-                          borderRadius: "6px",
-                          background: "#fff",
-                          cursor: "pointer",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          fontSize: "13px",
-                        }}
-                      >
-                        <span>{selectedValues.length > 0 ? selectedValues.join(", ") : "All"}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><path d="M6 9l6 6 6-6" /></svg>
-                      </div>
-                      {isDropdownOpen && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px", marginTop: "4px", zIndex: 200, maxHeight: "240px", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-                          <input autoFocus type="text" value={searchTerm} onChange={(e) => setFilterSearchTerms({ ...filterSearchTerms, [filterKey]: e.target.value })} placeholder="Search..." style={{ padding: "8px 10px", borderBottom: "1px solid #eee", outline: "none", fontSize: "12px" }} />
-                          <div style={{ maxHeight: "180px", overflowY: "auto" }}>
-                            {filteredOptions.length === 0 ? <div style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "12px" }}>No options</div> : filteredOptions.map(o => (
-                              <div key={o} onClick={() => { if (selectedValues.includes(o)) { setFilters(prev => ({ ...prev, [filterKey]: selectedValues.filter(v => v !== o).length === 0 ? undefined : selectedValues.filter(v => v !== o) })); } else { setFilters(prev => ({ ...prev, [filterKey]: [...selectedValues, o] })); } setCurrentPage(1); }} style={{ padding: "8px 10px", cursor: "pointer", background: selectedValues.includes(o) ? "#eff6ff" : "transparent", display: "flex", justifyContent: "space-between", fontSize: "12px" }}><span>{o}</span>{selectedValues.includes(o) && <span style={{ color: "#10b981", fontWeight: "700" }}>✓</span>}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="content-with-sidebar">
         <div className="table-container">
+          {kanbanView === "kanban" ? (
+            <div style={{ minHeight: "400px", maxHeight: "70vh", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff", padding: "12px" }}>
+              {currentRows.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
+                  {searchTerm || Object.values(filters).some((v) => v.length)
+                    ? "No records found matching your criteria"
+                    : `No ${viewMode === "applications" ? "applications" : "coordinators"} registered yet`}
+                </div>
+              ) : groupedRows ? (
+                groupedRows.map(([label, rows]) => (
+                  <div key={label} style={{ marginBottom: "12px" }}>
+                    <div
+                      onClick={() => toggleGroupCollapsed(label)}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                      {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                    </div>
+                    {!collapsedGroups.has(label) && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
+                        {rows.map((item) => (
+                          <TempStaffCard key={item.id} item={item} viewMode={viewMode} onClick={() => openModal(item)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                  {currentRows.map((item) => (
+                    <TempStaffCard key={item.id} item={item} viewMode={viewMode} onClick={() => openModal(item)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
           <div style={{ height: "70vh", minHeight: "400px", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
               <colgroup>
@@ -569,11 +635,43 @@ export default function TempStaffPage() {
                 {currentRows.length === 0 ? (
                   <tr>
                     <td colSpan="4" style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
-                      {searchTerm || Object.keys(filters).length > 0
+                      {searchTerm || Object.values(filters).some((v) => v.length)
                         ? "No records found matching your criteria"
                         : `No ${viewMode === "applications" ? "applications" : "coordinators"} registered yet`}
                     </td>
                   </tr>
+                ) : groupedRows ? (
+                  groupedRows.map(([label, rows]) => (
+                    <Fragment key={label}>
+                      <tr style={{ background: "#eef2f7" }}>
+                        <td colSpan={4} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
+                          <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                        </td>
+                      </tr>
+                      {!collapsedGroups.has(label) &&
+                        rows.map((item) => (
+                          <tr
+                            key={item.id}
+                            onClick={() => openModal(item)}
+                            style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
+                          >
+                            <td style={{ padding: "12px" }}>{item.full_name || "-"}</td>
+                            <td style={{ padding: "12px" }}>{item.contact_number || "-"}</td>
+                            <td style={{ padding: "12px" }}>
+                              {viewMode === "applications"
+                                ? item.city || "-"
+                                : Array.isArray(item.locations)
+                                ? item.locations.map((l) => l.city).join(", ") || "-"
+                                : "-"}
+                            </td>
+                            <td style={{ padding: "12px" }}>
+                              {viewMode === "applications" ? item.coordinator_name || "-" : item.coordinator_type || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                    </Fragment>
+                  ))
                 ) : (
                   currentRows.map((item) => (
                     <tr
@@ -599,6 +697,7 @@ export default function TempStaffPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Pagination */}
           <div style={{ display: "flex", justifyContent: "space-between", padding: "20px 10px", flexWrap: "wrap", gap: "15px" }}>

@@ -309,6 +309,12 @@ body {
   border: 1px solid var(--border);
   overflow: hidden;
   scrollbar-gutter: stable;
+  /* A flex child inside .content-with-sidebar defaults to shrink-to-fit
+     content width; pages with no sidebar rendered (Recruitment/Projects/
+     TempStaff) were left with the table/card grid only filling part of the
+     row, most visible once a Kanban card grid replaced the plain table. */
+  flex: 1;
+  min-width: 0;
 }
 
 .table-wrapper {

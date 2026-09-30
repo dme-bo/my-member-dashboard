@@ -1,5 +1,5 @@
 // src/pages/CommunityJobsPage.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import {
@@ -10,11 +10,12 @@ import {
   FaArchive,
   FaTimes,
   FaBriefcase,
-  FaSearch,
 } from "react-icons/fa";
 import { collection, db, addDoc, doc, getDocs, updateDoc } from "../firestoreClient";
 import SkeletonLoader from "../components/SkeletonLoader";
 import LocationAutocompleteInput from "../components/LocationAutocompleteInput";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
 
 const COLLECTION_NAME = "communityjobs";
 const MAX_UPLOAD_PHOTOS = 6;
@@ -38,6 +39,20 @@ const parsePostedOn = (value) => {
   const parsed = new Date(Number(match[3]), month, Number(match[1]));
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+// Draft/Archived take priority over the raw Open/Closed job_status value for
+// filtering & grouping purposes, since both are set independently of it.
+const getDisplayStatus = (job) => {
+  if (!job.job_status) return "Archived";
+  if (job.job_isdraft) return "Draft";
+  return job.job_status;
+};
+
+const COMMUNITY_GROUP_BY_OPTIONS = [
+  { key: "orgType", label: "Organization Type" },
+  { key: "status", label: "Status" },
+  { key: "company", label: "Organization" },
+];
 
 const emptyForm = () => ({
   job_org_type: "Company",
@@ -80,6 +95,17 @@ export default function CommunityJobsPage() {
   const [postedOnFilter, setPostedOnFilter] = useState(
     () => new URLSearchParams(window.location.search).get("postedOn") || ""
   );
+  const [filters, setFilters] = useState({ orgType: [], status: [] });
+  const [groupBy, setGroupBy] = useState(null);
+  const [kanbanView, setKanbanView] = useState("list");
+
+  const toggleFilter = (key, value) => {
+    setFilters((prev) => {
+      const current = prev[key];
+      const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
+      return { ...prev, [key]: next };
+    });
+  };
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [formMode, setFormMode] = useState("create"); // "create" | "edit" | "view"
@@ -143,8 +169,34 @@ export default function CommunityJobsPage() {
       );
     }
 
+    if (filters.orgType.length) {
+      list = list.filter((job) => filters.orgType.includes(job.job_org_type === "Government" ? "Government" : "Company"));
+    }
+    if (filters.status.length) {
+      list = list.filter((job) => filters.status.includes(getDisplayStatus(job)));
+    }
+
     return list;
-  }, [jobs, searchTerm, postedOnFilter]);
+  }, [jobs, searchTerm, postedOnFilter, filters]);
+
+  // Grouping is applied within the currently filtered list (this page has no
+  // pagination, so there's no separate "page-scoped" concern here).
+  const groupedJobs = useMemo(() => {
+    if (!groupBy) return null;
+    const getLabel = (job) => {
+      if (groupBy === "orgType") return job.job_org_type === "Government" ? "Government" : "Company";
+      if (groupBy === "status") return getDisplayStatus(job);
+      if (groupBy === "company") return job.job_company && job.job_company.trim() ? job.job_company.trim() : "Unspecified";
+      return "Unspecified";
+    };
+    const groups = new Map();
+    for (const job of filteredJobs) {
+      const label = getLabel(job);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(job);
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, filteredJobs]);
 
   const openCreateForm = (prefill) => {
     setForm(prefill ? { ...emptyForm(), ...prefill } : emptyForm());
@@ -293,6 +345,79 @@ export default function CommunityJobsPage() {
     }
   };
 
+  const renderJobRow = (job) => {
+    const isArchived = !job.job_status;
+    return (
+      <tr
+        key={job.id}
+        data-testid={`community-job-card-${job.id}`}
+        style={{ backgroundColor: "white", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", opacity: isArchived ? 0.6 : 1 }}
+      >
+        <td style={{ padding: "12px 16px", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
+          <img
+            src={job.job_logo || DEFAULT_LOGO}
+            alt=""
+            style={{ width: "40px", height: "40px", borderRadius: "8px", objectFit: "contain", background: "#f1f5f9" }}
+          />
+        </td>
+        <td style={{ padding: "16px", fontWeight: "700", color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_designation}>
+          {job.job_designation || "Untitled Role"}
+        </td>
+        <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_company}>
+          {job.job_company || "—"}
+        </td>
+        <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_location}>
+          {job.job_location || "Location not specified"}
+        </td>
+        <td style={{ padding: "16px", color: "#6b7280", fontSize: "13px" }}>{job.job_postedon || "—"}</td>
+        <td style={{ padding: "16px", textAlign: "center" }}>
+          <span
+            style={{
+              display: "inline-block",
+              padding: "4px 12px",
+              borderRadius: "20px",
+              fontSize: "12px",
+              fontWeight: "700",
+              backgroundColor: job.job_isdraft ? "#fef3c7" : "#dcfce7",
+              color: job.job_isdraft ? "#92400e" : "#166534",
+            }}
+          >
+            {job.job_isdraft ? "Draft" : "Published"}
+          </span>
+          {isArchived && (
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "#991b1b", marginTop: "4px" }}>Archived</div>
+          )}
+        </td>
+        <td style={{ padding: "16px", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
+          <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+            <button
+              onClick={() => openViewForm(job)}
+              title="View"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "white", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#4b5563" }}
+            >
+              <FaEye /> View
+            </button>
+            <button
+              onClick={() => openEditForm(job)}
+              title="Edit"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #1976d2", background: "#eff6ff", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#1976d2" }}
+            >
+              <FaEdit /> Edit
+            </button>
+            <button
+              onClick={() => setArchiveTarget(job)}
+              title="Archive"
+              disabled={isArchived}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #fecaca", background: isArchived ? "#f3f4f6" : "#fef2f2", cursor: isArchived ? "not-allowed" : "pointer", fontSize: "13px", fontWeight: "600", color: isArchived ? "#9ca3af" : "#dc2626" }}
+            >
+              <FaArchive />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   if (loading) {
     return <SkeletonLoader rows={6} fullPage label="Loading Community Jobs…" />;
   }
@@ -355,14 +480,31 @@ export default function CommunityJobsPage() {
 
       {/* HEADER */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
-        <div style={{ position: "relative", minWidth: "260px", flex: "1", maxWidth: "420px" }}>
-          <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
-          <input
-            type="text"
-            placeholder="Search by role, company, location..."
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", minWidth: "320px", maxWidth: "640px" }}>
+          <OdooSearchBar
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: "100%", padding: "12px 16px 12px 40px", borderRadius: "30px", border: "2px solid #e2e8f0", fontSize: "14px", boxSizing: "border-box" }}
+            placeholder="Search by role, company, location..."
+            chips={[
+              ...filters.orgType.map((v) => ({ key: `orgType-${v}`, label: v, onRemove: () => toggleFilter("orgType", v) })),
+              ...filters.status.map((v) => ({ key: `status-${v}`, label: v, onRemove: () => toggleFilter("status", v) })),
+              ...(groupBy ? [{ key: "groupBy", label: `Group: ${COMMUNITY_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
+            ]}
+          />
+          <OdooViewToolbar
+            quickFilters={[
+              { key: "orgType-Company", label: "Company", active: filters.orgType.includes("Company"), onToggle: () => toggleFilter("orgType", "Company") },
+              { key: "orgType-Government", label: "Government", active: filters.orgType.includes("Government"), onToggle: () => toggleFilter("orgType", "Government") },
+              { key: "status-Open", label: "Open", active: filters.status.includes("Open"), onToggle: () => toggleFilter("status", "Open"), startGroup: true },
+              { key: "status-Closed", label: "Closed", active: filters.status.includes("Closed"), onToggle: () => toggleFilter("status", "Closed") },
+              { key: "status-Draft", label: "Draft", active: filters.status.includes("Draft"), onToggle: () => toggleFilter("status", "Draft") },
+              { key: "status-Archived", label: "Archived", active: filters.status.includes("Archived"), onToggle: () => toggleFilter("status", "Archived") },
+            ]}
+            groupByOptions={COMMUNITY_GROUP_BY_OPTIONS}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            view={kanbanView}
+            onViewChange={setKanbanView}
           />
         </div>
         <div style={{ display: "flex", gap: "12px" }}>
@@ -393,11 +535,34 @@ export default function CommunityJobsPage() {
         </div>
       )}
 
-      {/* TABLE LIST */}
+      {/* JOB LIST */}
       {filteredJobs.length === 0 ? (
         <div style={{ textAlign: "center", padding: "80px 20px", color: "#666", background: "white", borderRadius: "16px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
           <FaBriefcase size={40} style={{ color: "#cbd5e1", marginBottom: "16px" }} />
           <p style={{ fontSize: "16px" }}>No community jobs found.</p>
+        </div>
+      ) : kanbanView === "kanban" ? (
+        <div>
+          {groupedJobs
+            ? groupedJobs.map(([label, items]) => (
+                <div key={label} style={{ marginBottom: "20px" }}>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
+                    {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                    {items.map((job) => (
+                      <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
+                    ))}
+                  </div>
+                </div>
+              ))
+            : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                {filteredJobs.map((job) => (
+                  <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
+                ))}
+              </div>
+            )}
         </div>
       ) : (
         <div style={{ overflowX: "auto", minWidth: "100%" }}>
@@ -425,78 +590,18 @@ export default function CommunityJobsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredJobs.map((job) => {
-                const isArchived = !job.job_status;
-                return (
-                  <tr
-                    key={job.id}
-                    data-testid={`community-job-card-${job.id}`}
-                    style={{ backgroundColor: "white", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", opacity: isArchived ? 0.6 : 1 }}
-                  >
-                    <td style={{ padding: "12px 16px", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
-                      <img
-                        src={job.job_logo || DEFAULT_LOGO}
-                        alt=""
-                        style={{ width: "40px", height: "40px", borderRadius: "8px", objectFit: "contain", background: "#f1f5f9" }}
-                      />
-                    </td>
-                    <td style={{ padding: "16px", fontWeight: "700", color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_designation}>
-                      {job.job_designation || "Untitled Role"}
-                    </td>
-                    <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_company}>
-                      {job.job_company || "—"}
-                    </td>
-                    <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_location}>
-                      {job.job_location || "Location not specified"}
-                    </td>
-                    <td style={{ padding: "16px", color: "#6b7280", fontSize: "13px" }}>{job.job_postedon || "—"}</td>
-                    <td style={{ padding: "16px", textAlign: "center" }}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          padding: "4px 12px",
-                          borderRadius: "20px",
-                          fontSize: "12px",
-                          fontWeight: "700",
-                          backgroundColor: job.job_isdraft ? "#fef3c7" : "#dcfce7",
-                          color: job.job_isdraft ? "#92400e" : "#166534",
-                        }}
-                      >
-                        {job.job_isdraft ? "Draft" : "Published"}
-                      </span>
-                      {isArchived && (
-                        <div style={{ fontSize: "11px", fontWeight: "700", color: "#991b1b", marginTop: "4px" }}>Archived</div>
-                      )}
-                    </td>
-                    <td style={{ padding: "16px", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
-                      <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
-                        <button
-                          onClick={() => openViewForm(job)}
-                          title="View"
-                          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "white", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#4b5563" }}
-                        >
-                          <FaEye /> View
-                        </button>
-                        <button
-                          onClick={() => openEditForm(job)}
-                          title="Edit"
-                          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #1976d2", background: "#eff6ff", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#1976d2" }}
-                        >
-                          <FaEdit /> Edit
-                        </button>
-                        <button
-                          onClick={() => setArchiveTarget(job)}
-                          title="Archive"
-                          disabled={isArchived}
-                          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #fecaca", background: isArchived ? "#f3f4f6" : "#fef2f2", cursor: isArchived ? "not-allowed" : "pointer", fontSize: "13px", fontWeight: "600", color: isArchived ? "#9ca3af" : "#dc2626" }}
-                        >
-                          <FaArchive />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {groupedJobs
+                ? groupedJobs.map(([label, items]) => (
+                    <Fragment key={label}>
+                      <tr>
+                        <td colSpan={7} style={{ padding: "10px 16px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
+                          {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                        </td>
+                      </tr>
+                      {items.map(renderJobRow)}
+                    </Fragment>
+                  ))
+                : filteredJobs.map(renderJobRow)}
             </tbody>
           </table>
         </div>
@@ -852,6 +957,83 @@ function CommunityJobFields({ form, updateField, readOnly }) {
         </div>
       </div>
     </>
+  );
+}
+
+function JobCard({ job, onView, onEdit, onArchive }) {
+  const isArchived = !job.job_status;
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        padding: "16px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+        opacity: isArchived ? 0.6 : 1,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <img
+          src={job.job_logo || DEFAULT_LOGO}
+          alt=""
+          style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "contain", background: "#f1f5f9", flexShrink: 0 }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: "14px", color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_designation}>
+            {job.job_designation || "Untitled Role"}
+          </div>
+          <div style={{ fontSize: "12.5px", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_company}>
+            {job.job_company || "—"}
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: "12.5px", color: "#6b7280" }}>{job.job_location || "Location not specified"}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <span
+          style={{
+            display: "inline-block",
+            padding: "3px 10px",
+            borderRadius: "20px",
+            fontSize: "11.5px",
+            fontWeight: "700",
+            backgroundColor: job.job_isdraft ? "#fef3c7" : "#dcfce7",
+            color: job.job_isdraft ? "#92400e" : "#166534",
+          }}
+        >
+          {job.job_isdraft ? "Draft" : "Published"}
+        </span>
+        {isArchived && <span style={{ fontSize: "11.5px", fontWeight: "700", color: "#991b1b" }}>Archived</span>}
+        <span style={{ fontSize: "11.5px", color: "#9ca3af", marginLeft: "auto" }}>{job.job_postedon || "—"}</span>
+      </div>
+      <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+        <button
+          onClick={onView}
+          title="View"
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "7px 10px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: "white", cursor: "pointer", fontSize: "12.5px", fontWeight: "600", color: "#4b5563" }}
+        >
+          <FaEye /> View
+        </button>
+        <button
+          onClick={onEdit}
+          title="Edit"
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "7px 10px", borderRadius: "8px", border: "1.5px solid #1976d2", background: "#eff6ff", cursor: "pointer", fontSize: "12.5px", fontWeight: "600", color: "#1976d2" }}
+        >
+          <FaEdit /> Edit
+        </button>
+        <button
+          onClick={onArchive}
+          title="Archive"
+          disabled={isArchived}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: "8px", border: "1.5px solid #fecaca", background: isArchived ? "#f3f4f6" : "#fef2f2", cursor: isArchived ? "not-allowed" : "pointer", color: isArchived ? "#9ca3af" : "#dc2626" }}
+        >
+          <FaArchive />
+        </button>
+      </div>
+    </div>
   );
 }
 

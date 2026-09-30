@@ -1,5 +1,7 @@
 // src/pages/RequirementsPage.jsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
 import {
   FaBriefcase,
   FaCheckCircle,
@@ -35,6 +37,12 @@ import SkeletonLoader from "../components/SkeletonLoader";
 const TCS_TEMP_STAFFING_COMPANY = "Tata Consultancy Services Pvt Ltd";
 
 const REQUIREMENTS_FILTERS = ["All", "Open", "Closed", "Projects", "Recruitment", "Temp Staffing"];
+
+const REQUIREMENTS_GROUP_BY_OPTIONS = [
+  { key: "type", label: "Type" },
+  { key: "status", label: "Status" },
+  { key: "company", label: "Company" },
+];
 
 const getTypeLabel = (type) => (type === "project" ? "Project" : type === "tempstaffing" ? "Temp Staffing" : "Job");
 const getTypeBadgeColors = (type) =>
@@ -82,6 +90,76 @@ function LocationField({ location, locationList, label = "Location" }) {
   );
 }
 
+function RequirementCard({ req, allocatedCount, applicantCount, onViewDetails, onViewApplicants }) {
+  const typeColors = getTypeBadgeColors(req.type);
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        padding: "16px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+        opacity: req.status === "completed" ? 0.7 : 1,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+        <span style={{ backgroundColor: typeColors.bg, color: typeColors.color, padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 600 }}>
+          {getTypeLabel(req.type)}
+        </span>
+        <span
+          style={{
+            backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
+            color: req.status === "active" ? "#166534" : "#991b1b",
+            padding: "4px 12px",
+            borderRadius: "20px",
+            fontSize: "12px",
+            fontWeight: 600,
+          }}
+        >
+          {req.status === "active" ? "Open" : "Closed"}
+        </span>
+      </div>
+      <div style={{ fontWeight: 700, fontSize: "15px", color: "#1f2937" }} title={req.title}>{req.title}</div>
+      <div style={{ fontSize: "13px", color: "#4b5563" }}>{req.company}</div>
+      <div style={{ fontSize: "12.5px", color: "#6b7280" }} title={req.location}>
+        {formatLocationSummary(req.location, req.locationList)}
+      </div>
+      {req.salary && <div style={{ fontSize: "12.5px", color: "#6b7280" }}>{req.salary}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px" }}>
+        <span style={{ fontSize: "12.5px", color: "#10b981", fontWeight: 600 }}>{allocatedCount} allocated</span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onViewApplicants(); }}
+          title={applicantCount > 0 ? `View ${applicantCount} applicant${applicantCount !== 1 ? "s" : ""}` : "No applicants yet"}
+          style={{
+            background: applicantCount > 0 ? "#eff6ff" : "transparent",
+            border: applicantCount > 0 ? "1.5px solid #1976d2" : "1.5px solid #e2e8f0",
+            borderRadius: "20px",
+            color: applicantCount > 0 ? "#1976d2" : "#94a3b8",
+            fontWeight: 700,
+            fontSize: "13px",
+            padding: "2px 12px",
+            cursor: "pointer",
+          }}
+        >
+          {applicantCount} applicants
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onViewDetails}
+        style={{ marginTop: "4px", padding: "8px", backgroundColor: "#1976d2", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}
+      >
+        View Details
+      </button>
+    </div>
+  );
+}
+
 export default function RequirementsPage({ memberRecords: propMembers = [], membersLoading: propLoading = false }) {
   const [requirementsData, setRequirementsData] = useState([]);
   const [members, setMembers] = useState([]);
@@ -99,6 +177,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   });
   const [requirementsSearchTerm, setRequirementsSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "postedOn", direction: "desc" });
+  const [groupBy, setGroupBy] = useState(null);
+  const [kanbanView, setKanbanView] = useState("list");
 
   // Modals state
   const [showJobModal, setShowJobModal] = useState(false);
@@ -473,6 +553,142 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
   const requirementsTotalPages = Math.ceil(filteredRequirements.length / requirementsPageSize);
 
+  // Grouping is applied within the current page's rows (not virtualized),
+  // matching the same pattern used on Recruitment/Projects/TempStaff pages.
+  const groupedRequirements = useMemo(() => {
+    if (!groupBy) return null;
+    const getLabel = (req) => {
+      if (groupBy === "type") return getTypeLabel(req.type);
+      if (groupBy === "status") return req.status === "active" ? "Open" : "Closed";
+      if (groupBy === "company") return req.company && req.company.trim() ? req.company.trim() : "Unspecified";
+      return "Unspecified";
+    };
+    const groups = new Map();
+    for (const req of displayedRequirements) {
+      const label = getLabel(req);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(req);
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, displayedRequirements]);
+
+  const renderRequirementRow = (req) => {
+    const liveCount = allocatedCounts[req.id] || 0;
+    const appCount = applicantCounts[req.id] || 0;
+    return (
+      <tr
+        key={req.id}
+        style={{
+          backgroundColor: "white",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+          borderRadius: "12px",
+          transition: "all 0.3s",
+          opacity: req.status === "completed" ? 0.7 : 1,
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")}
+        onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,0.05)")}
+      >
+        <td style={{ padding: "16px", fontWeight: "600", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
+          <span
+            style={{
+              backgroundColor: getTypeBadgeColors(req.type).bg,
+              color: getTypeBadgeColors(req.type).color,
+              padding: "6px 14px",
+              borderRadius: "20px",
+              fontSize: "13px",
+              fontWeight: "600",
+            }}
+          >
+            {getTypeLabel(req.type)}
+          </span>
+        </td>
+        <td style={{ padding: "16px" }}>
+          <div
+            style={{
+              maxWidth: "250px",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              fontWeight: "600",
+              color: "#1f2937",
+            }}
+            title={req.title}
+          >
+            {req.title}
+          </div>
+        </td>
+        <td style={{ padding: "16px", color: "#4b5563" }}>{req.company}</td>
+        <td
+          style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }}
+          title={req.location}
+        >
+          {formatLocationSummary(req.location, req.locationList)}
+        </td>
+        <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
+        <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
+          {liveCount}
+        </td>
+        <td style={{ padding: "16px", textAlign: "center" }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); fetchApplicants(req); }}
+            title={appCount > 0 ? `View ${appCount} applicant${appCount !== 1 ? "s" : ""}` : "No applicants yet"}
+            style={{
+              background: appCount > 0 ? "#eff6ff" : "transparent",
+              border: appCount > 0 ? "1.5px solid #1976d2" : "1.5px solid #e2e8f0",
+              borderRadius: "20px",
+              color: appCount > 0 ? "#1976d2" : "#94a3b8",
+              fontWeight: 700,
+              fontSize: "15px",
+              minWidth: "44px",
+              padding: "4px 14px",
+              cursor: "pointer",
+              lineHeight: 1.5,
+            }}
+          >
+            {appCount}
+          </button>
+        </td>
+        <td style={{ padding: "16px", textAlign: "center" }}>
+          <span
+            style={{
+              backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
+              color: req.status === "active" ? "#166534" : "#991b1b",
+              padding: "8px 16px",
+              borderRadius: "20px",
+              fontSize: "13px",
+              fontWeight: "600",
+            }}
+          >
+            {req.status === "active" ? "Open" : "Closed"}
+          </span>
+        </td>
+        <td style={{ padding: "16px", textAlign: "center", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
+          <button
+            onClick={() => {
+              setSelectedReq(req);
+              setShowJobModal(true);
+            }}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: "#1976d2",
+              color: "white",
+              border: "none",
+              borderRadius: "20px",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "600",
+              transition: "background-color 0.3s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1565c0")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1976d2")}
+          >
+            View Details
+          </button>
+        </td>
+      </tr>
+    );
+  };
+
   /* FETCH APPLICANT COUNTS — 2 collection-group reads total, runs once on mount */
   useEffect(() => {
     const loadCounts = async () => {
@@ -795,20 +1011,20 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               ({filteredRequirements.length})
             </span>
           </h2>
-          <div style={{ position: "relative", minWidth: "320px", flex: "1", maxWidth: "420px" }}>
-            <FaSearch style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
-            <input
-              type="text"
-              placeholder="Search by title, company, location..."
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", minWidth: "320px", maxWidth: "620px" }}>
+            <OdooSearchBar
               value={requirementsSearchTerm}
               onChange={(e) => setRequirementsSearchTerm(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "12px 16px 12px 40px",
-                borderRadius: "30px",
-                border: "2px solid #e2e8f0",
-                fontSize: "14px",
-              }}
+              placeholder="Search by title, company, location..."
+              chips={groupBy ? [{ key: "groupBy", label: `Group: ${REQUIREMENTS_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []}
+            />
+            <OdooViewToolbar
+              quickFilters={[]}
+              groupByOptions={REQUIREMENTS_GROUP_BY_OPTIONS}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              view={kanbanView}
+              onViewChange={setKanbanView}
             />
           </div>
         </div>
@@ -816,6 +1032,43 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         {displayedRequirements.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px", color: "#666" }}>
             <p style={{ fontSize: "16px" }}>No Requirements found.</p>
+          </div>
+        ) : kanbanView === "kanban" ? (
+          <div>
+            {groupedRequirements
+              ? groupedRequirements.map(([label, items]) => (
+                  <div key={label} style={{ marginBottom: "20px" }}>
+                    <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
+                      {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
+                      {items.map((req) => (
+                        <RequirementCard
+                          key={req.id}
+                          req={req}
+                          allocatedCount={allocatedCounts[req.id] || 0}
+                          applicantCount={applicantCounts[req.id] || 0}
+                          onViewDetails={() => { setSelectedReq(req); setShowJobModal(true); }}
+                          onViewApplicants={() => fetchApplicants(req)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
+                  {displayedRequirements.map((req) => (
+                    <RequirementCard
+                      key={req.id}
+                      req={req}
+                      allocatedCount={allocatedCounts[req.id] || 0}
+                      applicantCount={applicantCounts[req.id] || 0}
+                      onViewDetails={() => { setSelectedReq(req); setShowJobModal(true); }}
+                      onViewApplicants={() => fetchApplicants(req)}
+                    />
+                  ))}
+                </div>
+              )}
           </div>
         ) : (
           <div style={{ overflowX: "auto", minWidth: "100%" }}>
@@ -867,126 +1120,18 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 </tr>
               </thead>
               <tbody>
-                {displayedRequirements.map((req) => {
-                  const liveCount = allocatedCounts[req.id] || 0;
-                  return (
-                    <tr
-                      key={req.id}
-                      style={{
-                        backgroundColor: "white",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-                        borderRadius: "12px",
-                        transition: "all 0.3s",
-                        opacity: req.status === "completed" ? 0.7 : 1,
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,0.05)")}
-                    >
-                      <td style={{ padding: "16px", fontWeight: "600", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
-                        <span
-                          style={{
-                            backgroundColor: getTypeBadgeColors(req.type).bg,
-                            color: getTypeBadgeColors(req.type).color,
-                            padding: "6px 14px",
-                            borderRadius: "20px",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {getTypeLabel(req.type)}
-                        </span>
-                      </td>
-                      <td style={{ padding: "16px" }}>
-                        <div
-                          style={{
-                            maxWidth: "250px",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            fontWeight: "600",
-                            color: "#1f2937",
-                          }}
-                          title={req.title}
-                        >
-                          {req.title}
-                        </div>
-                      </td>
-                      <td style={{ padding: "16px", color: "#4b5563" }}>{req.company}</td>
-                      <td
-                        style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }}
-                        title={req.location}
-                      >
-                        {formatLocationSummary(req.location, req.locationList)}
-                      </td>
-                      <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
-                      <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
-                        {liveCount}
-                      </td>
-                      <td style={{ padding: "16px", textAlign: "center" }}>
-                        {(() => {
-                          const appCount = applicantCounts[req.id] || 0;
-                          return (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); fetchApplicants(req); }}
-                              title={appCount > 0 ? `View ${appCount} applicant${appCount !== 1 ? "s" : ""}` : "No applicants yet"}
-                              style={{
-                                background: appCount > 0 ? "#eff6ff" : "transparent",
-                                border: appCount > 0 ? "1.5px solid #1976d2" : "1.5px solid #e2e8f0",
-                                borderRadius: "20px",
-                                color: appCount > 0 ? "#1976d2" : "#94a3b8",
-                                fontWeight: 700,
-                                fontSize: "15px",
-                                minWidth: "44px",
-                                padding: "4px 14px",
-                                cursor: "pointer",
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              {appCount}
-                            </button>
-                          );
-                        })()}
-                      </td>
-                      <td style={{ padding: "16px", textAlign: "center" }}>
-                        <span
-                          style={{
-                            backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
-                            color: req.status === "active" ? "#166534" : "#991b1b",
-                            padding: "8px 16px",
-                            borderRadius: "20px",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {req.status === "active" ? "Open" : "Closed"}
-                        </span>
-                      </td>
-                      <td style={{ padding: "16px", textAlign: "center", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
-                        <button
-                          onClick={() => {
-                            setSelectedReq(req);
-                            setShowJobModal(true);
-                          }}
-                          style={{
-                            padding: "8px 18px",
-                            backgroundColor: "#1976d2",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "20px",
-                            cursor: "pointer",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                            transition: "background-color 0.3s",
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1565c0")}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1976d2")}
-                        >
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {groupedRequirements
+                  ? groupedRequirements.map(([label, items]) => (
+                      <Fragment key={label}>
+                        <tr>
+                          <td colSpan={9} style={{ padding: "10px 16px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
+                            {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                          </td>
+                        </tr>
+                        {items.map(renderRequirementRow)}
+                      </Fragment>
+                    ))
+                  : displayedRequirements.map(renderRequirementRow)}
               </tbody>
             </table>
           </div>

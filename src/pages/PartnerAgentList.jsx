@@ -1,5 +1,5 @@
 // src/pages/PartnerAgentListPage.jsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   collection,
   db,
@@ -10,16 +10,28 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import FilterSidebar from "../components/FilterSidebar";
 import SkeletonLoader from "../components/SkeletonLoader";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
+import FilterAccordionList from "../components/FilterAccordionList";
+
+const AGENT_FILTER_LABELS = { city: "City", district: "District", state: "State", rating: "Rating" };
+const AGENT_GROUP_BY_OPTIONS = [
+  { key: "city", label: "City" },
+  { key: "district", label: "District" },
+  { key: "state", label: "State" },
+  { key: "rating", label: "Rating" },
+];
 
 export default function PartnerAgentListPage() {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({ city: [], district: [], state: [], rating: [] });
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [groupBy, setGroupBy] = useState(null);
+  const [kanbanView, setKanbanView] = useState("list");
 
   // Modal states
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -92,26 +104,32 @@ export default function PartnerAgentListPage() {
     });
 
     return {
-      cityOptions: ["All", ...Array.from(cities).sort()],
-      districtOptions: ["All", ...Array.from(districts).sort()],
-      stateOptions: ["All", ...Array.from(states).sort()],
-      ratingOptions: ["All", ...Array.from(ratings).sort()],
+      cityOptions: Array.from(cities).sort(),
+      districtOptions: Array.from(districts).sort(),
+      stateOptions: Array.from(states).sort(),
+      ratingOptions: Array.from(ratings).sort(),
     };
   }, [agents]);
 
-  const options = { city: cityOptions, district: districtOptions, state: stateOptions, rating: ratingOptions };
-  const filterKeys = ["city", "district","rating", "state"];
+  const filterOptions = { city: cityOptions, district: districtOptions, state: stateOptions, rating: ratingOptions };
+  const filterKeys = ["city", "district", "state", "rating"];
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value === "All" ? undefined : value
-    }));
+  const toggleFilter = (key, value) => {
+    setFilters(prev => {
+      const current = prev[key] || [];
+      const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+      return { ...prev, [key]: next };
+    });
+    setCurrentPage(1);
+  };
+
+  const setFilterValues = (key, values) => {
+    setFilters(prev => ({ ...prev, [key]: values }));
     setCurrentPage(1);
   };
 
   const clearFilters = () => {
-    setFilters({});
+    setFilters({ city: [], district: [], state: [], rating: [] });
     setSearchTerm("");
     setCurrentPage(1);
   };
@@ -121,10 +139,10 @@ export default function PartnerAgentListPage() {
   // the detail modal's notes field, causing visible input lag.
   const filteredAgents = useMemo(() => {
   let filteredAgents = agents.filter(agent => {
-    if (filters.city && agent.city !== filters.city) return false;
-    if (filters.district && agent.district !== filters.district) return false;
-    if (filters.state && agent.state !== filters.state) return false;
-    if (filters.rating && agent.rating !== filters.rating) return false;
+    if (filters.city?.length && !filters.city.includes(agent.city)) return false;
+    if (filters.district?.length && !filters.district.includes(agent.district)) return false;
+    if (filters.state?.length && !filters.state.includes(agent.state)) return false;
+    if (filters.rating?.length && !filters.rating.includes(agent.rating)) return false;
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
@@ -156,6 +174,55 @@ export default function PartnerAgentListPage() {
   const currentRows = rowsPerPage === Infinity
     ? filteredAgents
     : filteredAgents.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  // Grouping is applied within the current page's rows (not virtualized),
+  // matching the same pattern used on Recruitment/Projects/TempStaff pages.
+  const groupedRows = useMemo(() => {
+    if (!groupBy) return null;
+    const getLabel = (agent) => {
+      const raw = agent[groupBy];
+      return raw && String(raw).trim() ? String(raw).trim() : "Unspecified";
+    };
+    const groups = new Map();
+    for (const agent of currentRows) {
+      const label = getLabel(agent);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(agent);
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, currentRows]);
+
+  const filterChips = [
+    ...filterKeys.flatMap((key) =>
+      (filters[key] || []).map((value) => ({
+        key: `${key}-${value}`,
+        label: value,
+        onRemove: () => toggleFilter(key, value),
+      }))
+    ),
+    ...(groupBy ? [{ key: "groupBy", label: `Group: ${AGENT_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
+  ];
+
+  const advancedFiltersPanel = (
+    <div>
+      <FilterAccordionList
+        sections={filterKeys.map((key) => ({
+          key,
+          label: AGENT_FILTER_LABELS[key],
+          options: filterOptions[key],
+          selected: filters[key] || [],
+          onChange: (values) => setFilterValues(key, values),
+        }))}
+      />
+      <button
+        type="button"
+        onClick={clearFilters}
+        style={{ marginTop: "12px", width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontWeight: 600, fontSize: "12.5px", cursor: "pointer" }}
+      >
+        Clear All
+      </button>
+    </div>
+  );
 
   // Load the selected agent's interaction history when the interaction tab is open.
   useEffect(() => {
@@ -274,7 +341,18 @@ export default function PartnerAgentListPage() {
     }
   };
 
-  const filterData = { filters, handleFilterChange, clearFilters, options };
+  const renderAgentRow = (agent) => (
+    <tr
+      key={agent.id}
+      onClick={() => openModal(agent)}
+      style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
+    >
+      <td style={{ padding: "12px" }}>{agent.full_name || "-"}</td>
+      <td style={{ padding: "12px" }}>{agent.phone_number || "-"}</td>
+      <td style={{ padding: "12px" }}>{agent.email || "-"}</td>
+      <td style={{ padding: "12px" }}>{agent.state || "-"}</td>
+    </tr>
+  );
 
   return (
     <div className="member-list-page with-filters">
@@ -303,25 +381,21 @@ export default function PartnerAgentListPage() {
           </div>
         </div>
 
-        <div className="search-box-container" style={{ maxWidth: "600px", width: "100%" }}>
-          <input
-            type="text"
-            placeholder="Search by name, phone, email, city, district..."
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", maxWidth: "760px" }}>
+          <OdooSearchBar
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{
-              padding: "15px 19px",
-              width: "100%",
-              borderRadius: "8px",
-              border: "1px solid #ccc",
-              fontSize: "17px",
-              backgroundColor: "white",
-              color: "black"
-            }}
-            autoFocus
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            placeholder="Search by name, phone, email, city, district..."
+            chips={filterChips}
+          />
+          <OdooViewToolbar
+            quickFilters={[]}
+            advancedContent={advancedFiltersPanel}
+            groupByOptions={AGENT_GROUP_BY_OPTIONS}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            view={kanbanView}
+            onViewChange={setKanbanView}
           />
         </div>
       </div>
@@ -334,6 +408,36 @@ export default function PartnerAgentListPage() {
             </div>
           ) : (
             <>
+              {currentRows.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
+                  {searchTerm || filterKeys.some((k) => filters[k]?.length)
+                    ? "No agents found matching your criteria"
+                    : "No partner agents registered yet"}
+                </div>
+              ) : kanbanView === "kanban" ? (
+                <div>
+                  {groupedRows
+                    ? groupedRows.map(([label, items]) => (
+                        <div key={label} style={{ marginBottom: "20px" }}>
+                          <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
+                            {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                            {items.map((agent) => (
+                              <AgentCard key={agent.id} agent={agent} onClick={() => openModal(agent)} />
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    : (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                        {currentRows.map((agent) => (
+                          <AgentCard key={agent.id} agent={agent} onClick={() => openModal(agent)} />
+                        ))}
+                      </div>
+                    )}
+                </div>
+              ) : (
               <div style={{
                 height: "70vh",
                 minHeight: "400px",
@@ -358,31 +462,22 @@ export default function PartnerAgentListPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {currentRows.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
-                          {searchTerm || Object.keys(filters).length > 0
-                            ? "No agents found matching your criteria"
-                            : "No partner agents registered yet"}
-                        </td>
-                      </tr>
-                    ) : (
-                      currentRows.map((agent) => (
-                        <tr
-                          key={agent.id}
-                          onClick={() => openModal(agent)}
-                          style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                        >
-                          <td style={{ padding: "12px" }}>{agent.full_name || "-"}</td>
-                          <td style={{ padding: "12px" }}>{agent.phone_number || "-"}</td>
-                          <td style={{ padding: "12px" }}>{agent.email || "-"}</td>
-                          <td style={{ padding: "12px" }}>{agent.state || "-"}</td>
-                        </tr>
-                      ))
-                    )}
+                    {groupedRows
+                      ? groupedRows.map(([label, items]) => (
+                          <Fragment key={label}>
+                            <tr>
+                              <td colSpan={4} style={{ padding: "10px 12px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
+                                {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                              </td>
+                            </tr>
+                            {items.map(renderAgentRow)}
+                          </Fragment>
+                        ))
+                      : currentRows.map(renderAgentRow)}
                   </tbody>
                 </table>
               </div>
+              )}
 
               {/* Pagination */}
               <div style={{
@@ -447,8 +542,6 @@ export default function PartnerAgentListPage() {
             </>
           )}
         </div>
-
-        <FilterSidebar filterData={filterData} filterKeys={filterKeys} />
       </div>
 
       {/* MODAL */}
@@ -746,6 +839,48 @@ export default function PartnerAgentListPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function AgentCard({ agent, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        padding: "16px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+        cursor: "pointer",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: "15px", color: "#1f2937" }}>{agent.full_name || "-"}</div>
+      <div style={{ fontSize: "13px", color: "#4b5563" }}>{agent.phone_number || "-"}</div>
+      <div style={{ fontSize: "13px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={agent.email}>
+        {agent.email || "-"}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
+        {agent.city && (
+          <span style={{ padding: "3px 10px", borderRadius: "20px", background: "#eff6ff", color: "#1976d2", fontSize: "11.5px", fontWeight: 600 }}>
+            {agent.city}
+          </span>
+        )}
+        {agent.state && (
+          <span style={{ padding: "3px 10px", borderRadius: "20px", background: "#f1f5f9", color: "#334155", fontSize: "11.5px", fontWeight: 600 }}>
+            {agent.state}
+          </span>
+        )}
+        {agent.rating && (
+          <span style={{ padding: "3px 10px", borderRadius: "20px", background: "#fef3c7", color: "#92400e", fontSize: "11.5px", fontWeight: 600 }}>
+            {agent.rating}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
