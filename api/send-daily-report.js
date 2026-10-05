@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     await getTransporter().sendMail({
       from: `Brisk Olive <${gmailUser}>`,
       to,
-      subject: `Daily Report (${todayStr}): Members`,
+      subject: `Daily Report Members: ${todayStr}`,
       text: textFallback,
       html: renderDailyReportEmail({
         managerName: "Jainendra Kumar Sachan",
