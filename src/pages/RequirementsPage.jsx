@@ -20,6 +20,7 @@ import {
   collectionGroup,
   db,
   getDocs,
+  getDoc,
   query,
   onSnapshot,
   addDoc,
@@ -28,6 +29,7 @@ import {
   doc,
 } from "../firestoreClient";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { normalizeMemberRecord, getMemberCategory } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
 
@@ -743,6 +745,32 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         };
       });
       results.sort((a, b) => (b.applied_at?.seconds ?? 0) - (a.applied_at?.seconds ?? 0));
+
+      // The ~12k-record "users" list (`members`) can still be mid-load when this
+      // modal is opened, so matching against it alone often misses and falls
+      // back to showing the raw uid. Resolve each applicant's own user doc
+      // directly instead — fast (one doc each) and correct regardless of
+      // whether the full member list has finished loading.
+      await Promise.all(
+        results.map(async (app) => {
+          const memberMatch = members.find((m) => m.id === app.userId);
+          const form = app.parsedForm ?? {};
+          const hasName = !!(form.personalInfo?.fullName || memberMatch?.name);
+          const hasEmail = !!(form.personalInfo?.email || memberMatch?.email);
+          const hasPhone = !!(form.personalInfo?.phone || memberMatch?.phone);
+          app.profile = memberMatch || null;
+          if ((hasName && hasEmail && hasPhone) || !app.userId) return;
+          try {
+            const userSnap = await getDoc(doc(db, "users", app.userId));
+            if (userSnap.exists()) {
+              app.profile = { id: app.userId, ...normalizeMemberRecord(userSnap.data()) };
+            }
+          } catch (err) {
+            console.error(`Error fetching profile for applicant ${app.userId}:`, err);
+          }
+        })
+      );
+
       setApplicants(results);
     } catch (err) {
       console.error("Error fetching applicants:", err);
@@ -798,6 +826,51 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     link.href = URL.createObjectURL(blob);
     link.download = "requirements.csv";
     link.click();
+  };
+
+  // Excel (not CSV) so Excel doesn't mangle long phone numbers into
+  // scientific notation or garble the "—" placeholder via encoding guesses —
+  // same approach already used for exports on the Members/Projects/etc pages.
+  const exportApplicantsToXLSX = () => {
+    const dataToExport = applicants.map((app, idx) => {
+      const form = app.parsedForm ?? {};
+      const profile = app.profile ?? members.find((m) => m.id === app.userId) ?? null;
+      const location = [profile?.city, profile?.state].filter(Boolean).join(", ") || form.personalInfo?.location || "—";
+      const appliedAt = app.applied_at?.toDate
+        ? app.applied_at.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+        : "—";
+      return {
+        "Sr No": idx + 1,
+        Name: form.personalInfo?.fullName || profile?.name || app.userId || "—",
+        Email: form.personalInfo?.email || profile?.email || "—",
+        Mobile: form.personalInfo?.phone || profile?.phone || "—",
+        Location: location,
+        Category: profile?.category || "—",
+        Service: profile?.service || "—",
+        Rank: profile?.rank || "—",
+        "Applied On": appliedAt,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+    // Auto-size columns
+    const range = XLSX.utils.decode_range(worksheet["!ref"]);
+    worksheet["!cols"] = [];
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      let maxWidth = 10;
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        const cell = worksheet[XLSX.utils.encode_cell({ c: C, r: R })];
+        if (cell && cell.v) maxWidth = Math.max(maxWidth, String(cell.v).length);
+      }
+      worksheet["!cols"][C] = { wch: Math.min(maxWidth + 2, 60) };
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Applicants");
+
+    const safeTitle = (applicantsReq?.title || "applicants").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+    XLSX.writeFile(workbook, `${safeTitle}_applicants.xlsx`);
   };
 
   if (loading) {
@@ -2568,10 +2641,33 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   )}
                 </h2>
               </div>
-              <button onClick={() => { setShowApplicantsModal(false); setSelectedApplicant(null); }}
-                style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: "50%", width: "36px", height: "36px", color: "#fff", fontSize: "20px", cursor: "pointer", flexShrink: 0 }}>
-                ×
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+                {!applicantsLoading && applicants.length > 0 && (
+                  <button
+                    onClick={exportApplicantsToXLSX}
+                    title="Export Sr No, Name, Email, Mobile, Location & Category of all applicants"
+                    style={{
+                      background: "rgba(255,255,255,0.18)",
+                      border: "none",
+                      borderRadius: "20px",
+                      color: "#fff",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      padding: "8px 16px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <FaFileExport /> Export Excel
+                  </button>
+                )}
+                <button onClick={() => { setShowApplicantsModal(false); setSelectedApplicant(null); }}
+                  style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: "50%", width: "36px", height: "36px", color: "#fff", fontSize: "20px", cursor: "pointer", flexShrink: 0 }}>
+                  ×
+                </button>
+              </div>
             </div>
 
             {/* Body: two-panel layout */}
@@ -2591,10 +2687,10 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 ) : (
                   applicants.map((app, idx) => {
                     const form = app.parsedForm ?? {};
-                    const memberMatch = members.find((m) => m.id === app.userId);
-                    const name = form.personalInfo?.fullName ?? memberMatch?.name ?? app.userId ?? `Applicant #${idx + 1}`;
-                    const email = form.personalInfo?.email ?? memberMatch?.email ?? "—";
-                    const phone = form.personalInfo?.phone ?? memberMatch?.phone ?? "—";
+                    const profile = app.profile ?? members.find((m) => m.id === app.userId);
+                    const name = form.personalInfo?.fullName ?? profile?.name ?? app.userId ?? `Applicant #${idx + 1}`;
+                    const email = form.personalInfo?.email ?? profile?.email ?? "—";
+                    const phone = form.personalInfo?.phone ?? profile?.phone ?? "—";
                     const role = form.jobInsights?.targetRole ?? form.personalInfo?.location ?? "";
                     const exp = form.totalYearsExperience ?? "";
                     const appliedAt = app.applied_at?.toDate
