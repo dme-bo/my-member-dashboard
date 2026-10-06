@@ -19,8 +19,8 @@ const getTransporter = () => {
 
 // Temporarily restricted to dme@briskolive.com only — restore the full
 // distribution list below once reports are ready to go out broadly again.
-// const DEFAULT_RECIPIENT = "management@briskolive.com,operations.head@briskolive.com,staffing.manager@briskolive.com,members@briskolive.com,dme@briskolive.com";
-const DEFAULT_RECIPIENT = "dme@briskolive.com";
+const DEFAULT_RECIPIENT = "management@briskolive.com,operations.head@briskolive.com,staffing.manager@briskolive.com,members@briskolive.com,dme@briskolive.com";
+// const DEFAULT_RECIPIENT = "dme@briskolive.com";
 
 const formatDate = (date) =>
   date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
