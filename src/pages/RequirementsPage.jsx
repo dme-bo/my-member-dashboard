@@ -519,6 +519,27 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     };
   }, [filteredStatsRequirements, allAllocations]);
 
+  /* FILTERED ALLOCATIONS FOR THE "ALL ALLOCATIONS" MODAL — shared by the table
+     and the Excel export button so both reflect the same title/company filters. */
+  const filteredAllAllocations = useMemo(() => {
+    let filtered = allAllocations;
+    if (allocationTitleFilter) {
+      const term = allocationTitleFilter.toLowerCase();
+      filtered = filtered.filter((a) => {
+        const job = requirementsData.find((j) => j.id === a.jobId);
+        return job?.title?.toLowerCase().includes(term);
+      });
+    }
+    if (allocationCompanyFilter) {
+      const term = allocationCompanyFilter.toLowerCase();
+      filtered = filtered.filter((a) => {
+        const job = requirementsData.find((j) => j.id === a.jobId);
+        return job?.company?.toLowerCase().includes(term);
+      });
+    }
+    return filtered;
+  }, [allAllocations, requirementsData, allocationTitleFilter, allocationCompanyFilter]);
+
   /* SEARCH + SORT + PAGINATED REQUIREMENTS */
   const displayedRequirements = useMemo(() => {
     let list = filteredRequirements.filter((r) => {
@@ -871,6 +892,82 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
     const safeTitle = (applicantsReq?.title || "applicants").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
     XLSX.writeFile(workbook, `${safeTitle}_applicants.xlsx`);
+  };
+
+  // Full-detail export for allocated members — mirrors every field shown
+  // across MemberDetailModal's tabs (Personal/Education/Service/Experience/
+  // Job Preferences/Documents), not just name/phone, since this is meant to
+  // replace opening each allocated member's profile one by one.
+  const buildAllocatedMemberRow = (alloc, idx) => {
+    const job = requirementsData.find((j) => j.id === alloc.jobId);
+    const member = members.find((m) => m.id === alloc.userId) || {};
+    const allocatedOn = alloc.allocatedAt?.toDate
+      ? alloc.allocatedAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      : "—";
+    return {
+      "Sr No": idx + 1,
+      Name: member.name || alloc.name || "Unknown",
+      Email: member.email || "—",
+      Mobile: member.phone || alloc.phone || "—",
+      Gender: member.gender || "—",
+      "Date of Birth": member.dateofbirth || "—",
+      Category: getMemberCategory(member) || member.category || "—",
+      Service: member.service || "—",
+      Rank: member.rank || "—",
+      Level: member.level || "—",
+      Trade: member.trade || "—",
+      City: member.city || "—",
+      State: member.state || "—",
+      "Permanent Address": member.permanent_address || "—",
+      "PIN Code": member.pincode || "—",
+      "Father's Name": member.father_name || "—",
+      "Mother's Name": member.mother_name || "—",
+      Education: member.graduation_course || member.education || "—",
+      "English Proficiency": member.english_proficiency || member.english || "—",
+      "IT Skills": member.it_skills || "—",
+      Skills: member.Skills || "—",
+      "Govt Experience": member.govt_experience || "—",
+      "Corporate Experience": member.corporate_experience || "—",
+      "Total Experience": member.total_experience || "—",
+      "Current CTC": member.current_ctc || "—",
+      "Expected CTC": member.expected_ctc || "—",
+      "Notice Period": member.notice_period || "—",
+      "Preferred Job Location": member.preferred_job_location || "—",
+      "Member ID": member.member_id || "—",
+      "Resume URL": member.resume_fileurl || "—",
+      Requirement: job?.title || "—",
+      Company: job?.company || "—",
+      Type: getTypeLabel(job?.type),
+      "Allocated City": alloc.city || "—",
+      "Allocated On": allocatedOn,
+    };
+  };
+
+  const exportAllocatedMembersToXLSX = (allocList, fileNameBase) => {
+    if (!allocList || allocList.length === 0) {
+      showToast("No allocated members to export.", "error");
+      return;
+    }
+
+    const dataToExport = allocList.map((alloc, idx) => buildAllocatedMemberRow(alloc, idx));
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+    const range = XLSX.utils.decode_range(worksheet["!ref"]);
+    worksheet["!cols"] = [];
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      let maxWidth = 10;
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        const cell = worksheet[XLSX.utils.encode_cell({ c: C, r: R })];
+        if (cell && cell.v) maxWidth = Math.max(maxWidth, String(cell.v).length);
+      }
+      worksheet["!cols"][C] = { wch: Math.min(maxWidth + 2, 60) };
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Allocated Members");
+
+    const safeName = (fileNameBase || "allocated_members").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+    XLSX.writeFile(workbook, `${safeName}_allocated_members.xlsx`);
   };
 
   if (loading) {
@@ -1990,9 +2087,34 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ fontSize: "28px", marginBottom: "16px", color: "#1f2937" }}>
-              Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})
-            </h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", marginBottom: "16px" }}>
+              <h2 style={{ fontSize: "28px", margin: 0, color: "#1f2937" }}>
+                Allocated Members for: <strong>{selectedReq.title}</strong> ({allocatedMembers.length})
+              </h2>
+              {allocatedMembers.length > 0 && (
+                <button
+                  onClick={() => exportAllocatedMembersToXLSX(allocatedMembers, selectedReq.title)}
+                  title="Export full details of all allocated members to Excel"
+                  style={{
+                    padding: "10px 20px",
+                    backgroundColor: "#10b981",
+                    color: "white",
+                    borderRadius: "30px",
+                    border: "none",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    flexShrink: 0,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <FaFileExport /> Export Excel
+                </button>
+              )}
+            </div>
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "24px" }}>
               <strong>Company:</strong> {selectedReq.company} | <strong>Location:</strong>{" "}
               <span title={selectedReq.location}>{formatLocationSummary(selectedReq.location, selectedReq.locationList)}</span>
@@ -2221,9 +2343,39 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ fontSize: "28px", marginBottom: "24px", color: "#1f2937" }}>
-              All Allocated Members ({stats.totalAllocated})
-            </h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", marginBottom: "24px" }}>
+              <h2 style={{ fontSize: "28px", margin: 0, color: "#1f2937" }}>
+                All Allocated Members ({stats.totalAllocated})
+              </h2>
+              {filteredAllAllocations.length > 0 && (
+                <button
+                  onClick={() =>
+                    exportAllocatedMembersToXLSX(
+                      filteredAllAllocations,
+                      allocationTitleFilter || allocationCompanyFilter ? "filtered" : "all"
+                    )
+                  }
+                  title="Export full details of all allocated members to Excel"
+                  style={{
+                    padding: "10px 20px",
+                    backgroundColor: "#10b981",
+                    color: "white",
+                    borderRadius: "30px",
+                    border: "none",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    flexShrink: 0,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <FaFileExport /> Export Excel
+                </button>
+              )}
+            </div>
 
             {/* Filters */}
             <div style={{ marginBottom: "32px", display: "flex", gap: "20px", flexWrap: "wrap" }}>
@@ -2282,21 +2434,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
             {/* Table */}
             {(() => {
-              let filtered = allAllocations;
-              if (allocationTitleFilter) {
-                const term = allocationTitleFilter.toLowerCase();
-                filtered = filtered.filter((a) => {
-                  const job = requirementsData.find((j) => j.id === a.jobId);
-                  return job?.title?.toLowerCase().includes(term);
-                });
-              }
-              if (allocationCompanyFilter) {
-                const term = allocationCompanyFilter.toLowerCase();
-                filtered = filtered.filter((a) => {
-                  const job = requirementsData.find((j) => j.id === a.jobId);
-                  return job?.company?.toLowerCase().includes(term);
-                });
-              }
+              const filtered = filteredAllAllocations;
 
               return (
                 <div style={{ maxHeight: "500px", overflowY: "auto", border: "2px solid #e2e8f0", borderRadius: "16px", padding: "10px", backgroundColor: "white" }}>

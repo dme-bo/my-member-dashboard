@@ -1,3 +1,7 @@
+// Projects run by TCS are shown/filtered elsewhere (RequirementsPage) as
+// "Temp Staffing" rather than "Project" — same company match used here.
+const TCS_TEMP_STAFFING_COMPANY = "Tata Consultancy Services Pvt Ltd";
+
 const MONTH_LOOKUP = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
@@ -63,12 +67,26 @@ function isSameLocalDay(a, b) {
   );
 }
 
+function isWithinRange(date, start, end) {
+  return date >= start && date < end;
+}
+
 async function countNewMembersToday(db, today) {
   const snapshot = await db.collection("users").select(...ENTRY_DATE_FIELDS).get();
   let count = 0;
   snapshot.forEach((doc) => {
     const date = parseLooseDate(firstPresentValue(doc.data(), ENTRY_DATE_FIELDS));
     if (date && isSameLocalDay(date, today)) count += 1;
+  });
+  return count;
+}
+
+async function countNewMembersInRange(db, start, end) {
+  const snapshot = await db.collection("users").select(...ENTRY_DATE_FIELDS).get();
+  let count = 0;
+  snapshot.forEach((doc) => {
+    const date = parseLooseDate(firstPresentValue(doc.data(), ENTRY_DATE_FIELDS));
+    if (date && isWithinRange(date, start, end)) count += 1;
   });
   return count;
 }
@@ -88,6 +106,18 @@ async function countCommunityJobsPostedToday(db, today) {
   return count;
 }
 
+async function countCommunityJobsPostedInRange(db, start, end) {
+  const snapshot = await db.collection("communityjobs").select("job_postedon", "job_isdraft").get();
+  let count = 0;
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    if (data.job_isdraft) return;
+    const posted = parseLooseDate(data.job_postedon);
+    if (posted && isWithinRange(posted, start, end)) count += 1;
+  });
+  return count;
+}
+
 // `workshop_postedon` is stored in mixed formats (ISO datetime, "DD-MMM-YYYY")
 // depending on when the workshop was created — same loose-parse as jobs.
 async function countWorkshopsPostedToday(db, today) {
@@ -98,6 +128,18 @@ async function countWorkshopsPostedToday(db, today) {
     if (data.workshop_isdraft) return;
     const posted = parseLooseDate(data.workshop_postedon);
     if (posted && isSameLocalDay(posted, today)) count += 1;
+  });
+  return count;
+}
+
+async function countWorkshopsPostedInRange(db, start, end) {
+  const snapshot = await db.collection("workshopsmaster").select("workshop_postedon", "workshop_isdraft").get();
+  let count = 0;
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    if (data.workshop_isdraft) return;
+    const posted = parseLooseDate(data.workshop_postedon);
+    if (posted && isWithinRange(posted, start, end)) count += 1;
   });
   return count;
 }
@@ -165,6 +207,32 @@ async function countMembersTaggedToday(db, today, tomorrow) {
   return countOf(db.collection("users").where("skillsUpdatedAt", ">=", today).where("skillsUpdatedAt", "<", tomorrow));
 }
 
+// Regional Partner isn't its own collection — it's a flag on the member's own
+// `users` doc (`is_regional_partner` + `regional_partner_status` +
+// `regional_partner_criteria` + `regional_partner_marked_at`), set via
+// MemberListPage's "Mark Partner" action. A single equality filter needs no
+// composite index; status/date filtering happens client-side below.
+async function fetchRegionalPartners(db) {
+  const snapshot = await db
+    .collection("users")
+    .where("is_regional_partner", "==", true)
+    .select("regional_partner_status", "regional_partner_marked_at")
+    .get();
+  return snapshot.docs.map((doc) => doc.data());
+}
+
+function countActivePartners(partners) {
+  return partners.filter((p) => p.regional_partner_status !== "Inactive").length;
+}
+
+function countNewActivePartnersInRange(partners, start, end) {
+  return partners.filter((p) => {
+    if (p.regional_partner_status === "Inactive") return false;
+    const markedAt = parseLooseDate(p.regional_partner_marked_at);
+    return markedAt && isWithinRange(markedAt, start, end);
+  }).length;
+}
+
 // Builds the daily report as a set of grid-table sections: an overview
 // table, a "today" table of daily activity, and a status table for open
 // jobs/projects/TCS requirements.
@@ -177,8 +245,7 @@ export async function buildDailyReport(db) {
   const [
     totalMembers,
     newMembersToday,
-    totalPartners,
-    newPartnersToday,
+    regionalPartners,
     membersTaggedToday,
     membersInteractedToday,
     workshopsPostedToday,
@@ -188,16 +255,11 @@ export async function buildDailyReport(db) {
     projectsOpen,
     communityJobsOpen,
     activeWorkshops,
+    tcsRequirements,
   ] = await Promise.all([
     safe(countOf(db.collection("users")), "Total Members"),
     safe(countNewMembersToday(db, today), "New Members Added Today"),
-    safe(countOf(db.collection("partneragentusersmaster")), "Total Regional Partners"),
-    safe(
-      countOf(
-        db.collection("partneragentusersmaster").where("created_time", ">=", today).where("created_time", "<", tomorrow)
-      ),
-      "New Regional Partners Today"
-    ),
+    safe(fetchRegionalPartners(db), "Regional Partners", []),
     safe(countMembersTaggedToday(db, today, tomorrow), "Members Tagged Today"),
     safe(countMembersInteractedToday(db, today, tomorrow), "Members Interacted Today"),
     safe(countWorkshopsPostedToday(db, today), "Workshops Posted Today"),
@@ -210,7 +272,11 @@ export async function buildDailyReport(db) {
     safe(countOf(db.collection("projectsmaster").where("project_status", "==", "Open")), "Projects Open"),
     safe(countOpenCommunityJobs(db), "Community Jobs Open"),
     safe(countActiveWorkshops(db), "Active Workshops"),
+    safe(countOf(db.collection("projectsmaster").where("project_company", "==", TCS_TEMP_STAFFING_COMPANY)), "TCS City Requirement"),
   ]);
+
+  const totalPartners = countActivePartners(regionalPartners);
+  const newPartnersToday = countNewActivePartnersInRange(regionalPartners, today, tomorrow);
 
   const overview = {
     headers: ["Total Existing Members", "Total Regional Partners"],
@@ -234,7 +300,6 @@ export async function buildDailyReport(db) {
     headers: ["Metric", "Count", "Link"],
     rows: [
       ["New Members Added", newMembersToday, link(`/memberlist?from=${todayIso}&to=${todayIso}`)],
-      ["New Regional Partners Added", newPartnersToday, link("/partneragent")],
       ["Members Tagged", membersTaggedToday, link("/memberlist?tagged=yes")],
       ["Members Interacted", membersInteractedToday, link("/interactions")],
       ["Workshop Posted", workshopsPostedToday, link("/training")],
@@ -246,7 +311,7 @@ export async function buildDailyReport(db) {
   const status = {
     headers: ["Item", "Value", "Link"],
     rows: [
-      ["TCS City Requirement", "To be added soon", link(`/requirements?filter=${encodeURIComponent("Temp Staffing")}`)],
+      ["TCS City Requirement", tcsRequirements, link(`/requirements?filter=${encodeURIComponent("Temp Staffing")}`)],
       ["Project Requirement (Open)", projectsOpen, link(`/requirements?filter=${encodeURIComponent("Projects")}`)],
       ["No. of Recruitment Profile Working (Open Jobs)", jobsOpen, link(`/requirements?filter=${encodeURIComponent("Recruitment")}`)],
       ["No. of Community Jobs (Open)", communityJobsOpen, link("/community-jobs")],
@@ -255,9 +320,111 @@ export async function buildDailyReport(db) {
   };
 
   const regionalPartnerReport = {
-    headers: ["Status", "Link"],
-    rows: [["To be added soon", link("/partneragent")]],
+    headers: ["Metric", "Count", "Link"],
+    rows: [
+      ["Total Regional Partners", totalPartners, link("/memberlist")],
+      ["New Regional Partners Added", newPartnersToday, link("/memberlist")],
+    ],
   };
 
   return { overview, todaysReport, status, regionalPartnerReport };
+}
+
+// Same shape as buildDailyReport, but the activity table covers the trailing
+// 7 days (Sun–Sat of the week ending "today") instead of a single day — the
+// two date-range metrics (`countMembersTaggedToday`/`countMembersInteractedToday`)
+// already take a start/end pair, so only the single-day counters needed a
+// range-based counterpart (added above as `*InRange`).
+export async function buildWeeklyReport(db) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - 6);
+
+  const [
+    totalMembers,
+    newMembersThisWeek,
+    regionalPartners,
+    membersTaggedThisWeek,
+    membersInteractedThisWeek,
+    workshopsPostedThisWeek,
+    communityJobsPostedThisWeek,
+    cvRecommendedThisWeek,
+    jobsOpen,
+    projectsOpen,
+    communityJobsOpen,
+    activeWorkshops,
+    tcsRequirements,
+  ] = await Promise.all([
+    safe(countOf(db.collection("users")), "Total Members"),
+    safe(countNewMembersInRange(db, weekStart, tomorrow), "New Members Added This Week"),
+    safe(fetchRegionalPartners(db), "Regional Partners", []),
+    safe(countMembersTaggedToday(db, weekStart, tomorrow), "Members Tagged This Week"),
+    safe(countMembersInteractedToday(db, weekStart, tomorrow), "Members Interacted This Week"),
+    safe(countWorkshopsPostedInRange(db, weekStart, tomorrow), "Workshops Posted This Week"),
+    safe(countCommunityJobsPostedInRange(db, weekStart, tomorrow), "Community Jobs Posted This Week"),
+    safe(
+      countOf(db.collection("allocations").where("allocatedAt", ">=", weekStart).where("allocatedAt", "<", tomorrow)),
+      "CV Recommended This Week"
+    ),
+    safe(countOf(db.collection("jobsmaster").where("job_status", "==", "Open").where("job_isdraft", "==", false)), "Jobs Open"),
+    safe(countOf(db.collection("projectsmaster").where("project_status", "==", "Open")), "Projects Open"),
+    safe(countOpenCommunityJobs(db), "Community Jobs Open"),
+    safe(countActiveWorkshops(db), "Active Workshops"),
+    safe(countOf(db.collection("projectsmaster").where("project_company", "==", TCS_TEMP_STAFFING_COMPANY)), "TCS City Requirement"),
+  ]);
+
+  const totalPartners = countActivePartners(regionalPartners);
+  const newPartnersThisWeek = countNewActivePartnersInRange(regionalPartners, weekStart, tomorrow);
+
+  const overview = {
+    headers: ["Total Existing Members", "Total Regional Partners"],
+    rows: [[totalMembers, totalPartners]],
+  };
+
+  const link = (linkPath) => ({ linkPath, label: "View" });
+
+  const isoOf = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+  const weekStartIso = isoOf(weekStart);
+  const todayIso = isoOf(today);
+
+  const weeksReport = {
+    headers: ["Metric", "Count", "Link"],
+    rows: [
+      ["New Members Added", newMembersThisWeek, link(`/memberlist?from=${weekStartIso}&to=${todayIso}`)],
+      ["Members Tagged", membersTaggedThisWeek, link("/memberlist?tagged=yes")],
+      ["Members Interacted", membersInteractedThisWeek, link("/interactions")],
+      ["Workshops Posted", workshopsPostedThisWeek, link("/training")],
+      ["Community Jobs Posted", communityJobsPostedThisWeek, link(`/community-jobs?postedOn=${todayIso}`)],
+      ["CV Recommended", cvRecommendedThisWeek, link("/requirements")],
+    ],
+  };
+
+  const status = {
+    headers: ["Item", "Value", "Link"],
+    rows: [
+      ["TCS City Requirement", tcsRequirements, link(`/requirements?filter=${encodeURIComponent("Temp Staffing")}`)],
+      ["Project Requirement (Open)", projectsOpen, link(`/requirements?filter=${encodeURIComponent("Projects")}`)],
+      ["No. of Recruitment Profile Working (Open Jobs)", jobsOpen, link(`/requirements?filter=${encodeURIComponent("Recruitment")}`)],
+      ["No. of Community Jobs (Open)", communityJobsOpen, link("/community-jobs")],
+      ["No. of Workshops (Active)", activeWorkshops, link("/training")],
+    ],
+  };
+
+  const regionalPartnerReport = {
+    headers: ["Metric", "Count", "Link"],
+    rows: [
+      ["Total Regional Partners", totalPartners, link("/memberlist")],
+      ["New Regional Partners Added", newPartnersThisWeek, link("/memberlist")],
+    ],
+  };
+
+  return { overview, weeksReport, status, regionalPartnerReport, weekStart, weekEnd: today };
 }
