@@ -18,7 +18,8 @@ const getTransporter = () => {
 };
 
 // Temporarily restricted to dme@briskolive.com only, same as send-daily-report.js.
-const DEFAULT_RECIPIENT = "dme@briskolive.com";
+// const DEFAULT_RECIPIENT = "dme@briskolive.com";
+const DEFAULT_RECIPIENT = "management@briskolive.com,operations.head@briskolive.com,staffing.manager@briskolive.com,members@briskolive.com,dme@briskolive.com";
 
 const formatDate = (date) =>
   date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -49,7 +50,7 @@ export default async function handler(req, res) {
 
     const db = getAdminDb();
     const report = await buildWeeklyReport(db);
-    const weekRangeStr = `${formatDate(report.weekStart)} - ${formatDate(report.weekEnd)}`;
+    const todayStr = formatDate(new Date());
 
     const dashboardUrl = "https://my-member-dashboard.vercel.app/";
 
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
     await getTransporter().sendMail({
       from: `Brisk Olive <${gmailUser}>`,
       to,
-      subject: `Weekly Report Members: ${weekRangeStr}`,
+      subject: `Weekly Report Members: ${todayStr}`,
       text: textFallback,
       html: renderDailyReportEmail({
         managerName: "Jainendra Kumar Sachan",
