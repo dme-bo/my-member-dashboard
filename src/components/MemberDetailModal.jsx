@@ -2,17 +2,27 @@
 import { useState, useEffect } from "react";
 import {
   collection,
+  collectionGroup,
   db,
   addDoc,
+  getDoc,
   getDocs,
+  doc,
   query,
   orderBy,
   serverTimestamp,
+  updateDoc,
+  deleteDoc,
   Timestamp,
   where,
 } from "../firestoreClient";
 import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberEmail, getMemberCategory, parseMemberDate } from "../utils/memberFields";
 import SkeletonLoader from "./SkeletonLoader";
+
+// Projects run by TCS are filed under projectsmaster like any other project,
+// but applicants should see them as a TCS application, not a generic one —
+// same company string used for this split in RequirementsPage/NewsLetterPage.
+const TCS_COMPANY_NAME = "Tata Consultancy Services Pvt Ltd";
 
 const RATING_TYPES = {
   workRelated: "work_related",
@@ -60,9 +70,27 @@ export default function MemberDetailModal({ member, onClose }) {
   const [currentEmployment, setCurrentEmployment] = useState(null); // null | "TCS" | { name: string }
   const [employmentLoading, setEmploymentLoading] = useState(false);
 
+  // BO Journey — applications to jobs/projects/workshops (TCS-run projects are
+  // split out of appliedProjects and shown as their own "TCS Application" list)
+  const [appliedJobs, setAppliedJobs] = useState([]);
+  const [appliedProjects, setAppliedProjects] = useState([]);
+  const [appliedTcs, setAppliedTcs] = useState([]);
+  const [appliedWorkshops, setAppliedWorkshops] = useState([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(false);
+
   // BO employees — used to populate the "Logged By" / "Rated By" dropdowns
   const [boEmployees, setBoEmployees] = useState([]);
   const [boEmployeesLoadFailed, setBoEmployeesLoadFailed] = useState(false);
+
+  // Edit/delete state — Interaction Notes history
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editNoteDraft, setEditNoteDraft] = useState(null);
+  const [confirmDeleteNoteId, setConfirmDeleteNoteId] = useState(null);
+
+  // Edit/delete state — Rating history
+  const [editingRatingId, setEditingRatingId] = useState(null);
+  const [editRatingDraft, setEditRatingDraft] = useState(null);
+  const [confirmDeleteRatingId, setConfirmDeleteRatingId] = useState(null);
 
   const normalizedMember = normalizeMemberRecord(member);
   const fullName = getMemberName(normalizedMember) || "N/A";
@@ -152,6 +180,27 @@ export default function MemberDetailModal({ member, onClose }) {
     </div>
   );
 
+  // Clickable variant of renderRatingStars, used when editing a saved rating
+  // in place (the history table's own "Edit" row), since that view needs stars
+  // the reviewer can change rather than just display.
+  const renderEditableStars = (stars, onChange, size = 18) => (
+    <div style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => onChange(star)}
+          style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, lineHeight: 1 }}
+          title={`${star} star${star > 1 ? "s" : ""}`}
+        >
+          <span aria-hidden="true" style={{ color: star <= Number(stars) ? "#f59e0b" : "#d1d5db", fontSize: `${size}px` }}>
+            ★
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+
   const createNewNote = () => ({
     id: Date.now() + Math.random(),
     contactPerson: fullName,
@@ -187,6 +236,18 @@ export default function MemberDetailModal({ member, onClose }) {
       month: "short",
       year: "numeric",
     });
+  };
+
+  // Inverse of the above, for pre-filling a <input type="date"> when editing
+  // a saved interaction — uses local getters so it round-trips the same
+  // calendar day that Timestamp.fromDate(new Date(value + "T00:00:00")) wrote.
+  const timestampToInputDate = (dateInput) => {
+    const date = parseMemberDate(dateInput);
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
   const formatCommaSeparatedValue = (value) => {
@@ -333,6 +394,7 @@ export default function MemberDetailModal({ member, onClose }) {
             notes: data.notes || "-",
             nextAction: data.nextAction || "-",
             followUpDate: followUpDateStr,
+            followUpDateRaw: data.followUpDate || null,
             loggedBy: data.loggedBy || "-",
             entryType: data.entryType || "note",
             ratingType: data.ratingType || RATING_TYPES.notRated,
@@ -422,6 +484,90 @@ export default function MemberDetailModal({ member, onClose }) {
 
     checkEmploymentStatus();
   }, [activeTab, phoneNumber]);
+
+  // BO Journey — applications submitted to jobsmaster/projectsmaster/workshopsmaster.
+  // Projects run by TCS (project_company === TCS_COMPANY_NAME) are pulled out of
+  // appliedProjects and surfaced as their own TCS application list instead, matching
+  // how Requirements/Temp Staffing already treat TCS-run projects.
+  useEffect(() => {
+    if (activeTab !== "bojourney" || !userId) return;
+
+    const loadApplications = async () => {
+      setApplicationsLoading(true);
+      try {
+        const [jobsAppliedSnap, projectsAppliedSnap, workshopApplicantsSnap] = await Promise.all([
+          getDocs(collection(db, "users", userId, "jobs_applied")),
+          getDocs(collection(db, "users", userId, "projects_applied")),
+          getDocs(collectionGroup(db, "workshop_users_applied")),
+        ]);
+
+        const jobs = await Promise.all(
+          jobsAppliedSnap.docs.map(async (appliedDoc) => {
+            const jobSnap = await getDoc(doc(db, "jobsmaster", appliedDoc.id));
+            const jobData = jobSnap.exists() ? jobSnap.data() : {};
+            return {
+              id: appliedDoc.id,
+              title: jobData.job_title || "Untitled Job",
+              company: jobData.job_company || "—",
+              status: jobData.job_status || "—",
+              appliedAt: appliedDoc.data().applied_at || null,
+            };
+          })
+        );
+
+        const resolvedProjects = await Promise.all(
+          projectsAppliedSnap.docs.map(async (appliedDoc) => {
+            const projectSnap = await getDoc(doc(db, "projectsmaster", appliedDoc.id));
+            const projectData = projectSnap.exists() ? projectSnap.data() : {};
+            const isTcs = String(projectData.project_company || "").trim() === TCS_COMPANY_NAME;
+            return {
+              id: appliedDoc.id,
+              title: projectData.project_title || "Untitled Project",
+              company: projectData.project_company || "—",
+              status: projectData.project_status || "—",
+              appliedAt: appliedDoc.data().applied_at || null,
+              isTcs,
+            };
+          })
+        );
+
+        // Fetched unfiltered (not via where()) and matched client-side — same
+        // approach RequirementsPage/TrainingPage already use for this subcollection,
+        // since the applicant's id can land in any of a few differently-named fields.
+        const myWorkshopDocs = workshopApplicantsSnap.docs.filter((d) => {
+          const data = d.data() || {};
+          const uid = data.user_id || data.uid || data.userId || d.id;
+          return uid === userId;
+        });
+
+        const workshops = await Promise.all(
+          myWorkshopDocs.map(async (appliedDoc) => {
+            const workshopId = appliedDoc.ref.parent?.parent?.id;
+            const workshopSnap = workshopId ? await getDoc(doc(db, "workshopsmaster", workshopId)) : null;
+            const workshopData = workshopSnap?.exists() ? workshopSnap.data() : {};
+            return {
+              id: workshopId || appliedDoc.id,
+              title: workshopData.workshop_title || "Untitled Workshop",
+              organizer: workshopData.workshop_organizer || "—",
+              date: workshopData.workshop_start_date || "—",
+              status: workshopData.workshop_status || "—",
+            };
+          })
+        );
+
+        setAppliedJobs(jobs);
+        setAppliedProjects(resolvedProjects.filter((p) => !p.isTcs));
+        setAppliedTcs(resolvedProjects.filter((p) => p.isTcs));
+        setAppliedWorkshops(workshops);
+      } catch (error) {
+        console.error("Error loading BO journey applications:", error);
+      } finally {
+        setApplicationsLoading(false);
+      }
+    };
+
+    loadApplications();
+  }, [activeTab, userId]);
 
   // Seed the rating form as soon as the Rating tab is opened
   useEffect(() => {
@@ -542,6 +688,7 @@ export default function MemberDetailModal({ member, onClose }) {
         notes: data.notes || "-",
         nextAction: data.nextAction || "-",
         followUpDate: followUpDateStr,
+        followUpDateRaw: data.followUpDate || null,
         loggedBy: data.loggedBy || "-",
         entryType: data.entryType || "note",
         ratingType: data.ratingType || RATING_TYPES.notRated,
@@ -654,6 +801,132 @@ export default function MemberDetailModal({ member, onClose }) {
     } catch (error) {
       console.error("Error saving rating:", error);
       showToast("Failed to save rating.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---- Interaction Notes: edit & delete ----
+  const startEditNote = (note) => {
+    setEditingNoteId(note.id);
+    setEditNoteDraft({
+      notes: note.notes === "-" ? "" : note.notes,
+      nextAction: note.nextAction === "-" ? "" : note.nextAction,
+      followUpDate: note.followUpDateRaw ? timestampToInputDate(note.followUpDateRaw) : "",
+      loggedBy: note.loggedBy === "-" ? "" : note.loggedBy,
+    });
+    setConfirmDeleteNoteId(null);
+  };
+
+  const cancelEditNote = () => {
+    setEditingNoteId(null);
+    setEditNoteDraft(null);
+  };
+
+  const updateEditNoteDraft = (field, value) => {
+    setEditNoteDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveEditNote = async () => {
+    if (!editingNoteId || !editNoteDraft) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, "users", userId, "interactions", editingNoteId), {
+        notes: editNoteDraft.notes.trim(),
+        nextAction: editNoteDraft.nextAction.trim(),
+        followUpDate: editNoteDraft.followUpDate
+          ? Timestamp.fromDate(new Date(editNoteDraft.followUpDate + "T00:00:00"))
+          : null,
+        loggedBy: String(editNoteDraft.loggedBy || "").trim() || "-",
+      });
+      showToast("Interaction updated successfully!", "success");
+      cancelEditNote();
+      await refreshInteractionHistory(collection(db, "users", userId, "interactions"));
+    } catch (error) {
+      console.error("Error updating note:", error);
+      showToast("Failed to update interaction.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteNoteEntry = async (noteId) => {
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, "users", userId, "interactions", noteId));
+      showToast("Interaction deleted.", "success");
+      setConfirmDeleteNoteId(null);
+      if (editingNoteId === noteId) cancelEditNote();
+      await refreshInteractionHistory(collection(db, "users", userId, "interactions"));
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      showToast("Failed to delete interaction.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---- Rating history: edit & delete ----
+  const startEditRating = (note) => {
+    setEditingRatingId(note.id);
+    setEditRatingDraft({
+      ratingType: note.ratingType,
+      ratedBy: note.ratedBy === "-" ? "" : note.ratedBy,
+      workRating: Number(note.workRating) || 0,
+      boRating: Number(note.boRating) || 0,
+      boRemarks: note.boRemarks === "-" ? "" : note.boRemarks,
+      referrerRating: Number(note.referrerRating) || 0,
+      referrerRemarks: note.referrerRemarks === "-" ? "" : note.referrerRemarks,
+      referrerName: note.referrerName === "-" ? "" : note.referrerName,
+    });
+    setConfirmDeleteRatingId(null);
+  };
+
+  const cancelEditRating = () => {
+    setEditingRatingId(null);
+    setEditRatingDraft(null);
+  };
+
+  const updateEditRatingDraft = (field, value) => {
+    setEditRatingDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveEditRating = async () => {
+    if (!editingRatingId || !editRatingDraft) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, "users", userId, "interactions", editingRatingId), {
+        ratingType: editRatingDraft.ratingType,
+        ratedBy: String(editRatingDraft.ratedBy || "").trim() || "-",
+        workRating: Number(editRatingDraft.workRating) || 0,
+        boRating: Number(editRatingDraft.boRating) || 0,
+        boRemarks: String(editRatingDraft.boRemarks || "").trim() || "-",
+        referrerRating: Number(editRatingDraft.referrerRating) || 0,
+        referrerRemarks: String(editRatingDraft.referrerRemarks || "").trim() || "-",
+        referrerName: String(editRatingDraft.referrerName || "").trim() || "-",
+      });
+      showToast("Rating updated successfully!", "success");
+      cancelEditRating();
+      await refreshInteractionHistory(collection(db, "users", userId, "interactions"));
+    } catch (error) {
+      console.error("Error updating rating:", error);
+      showToast("Failed to update rating.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteRatingEntry = async (ratingId) => {
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, "users", userId, "interactions", ratingId));
+      showToast("Rating deleted.", "success");
+      setConfirmDeleteRatingId(null);
+      if (editingRatingId === ratingId) cancelEditRating();
+      await refreshInteractionHistory(collection(db, "users", userId, "interactions"));
+    } catch (error) {
+      console.error("Error deleting rating:", error);
+      showToast("Failed to delete rating.", "error");
     } finally {
       setLoading(false);
     }
@@ -846,8 +1119,102 @@ export default function MemberDetailModal({ member, onClose }) {
                   )}
                 </div>
 
-                <div style={{ marginTop: "40px", color: "#6b7280", fontStyle: "italic", textAlign: "center" }}>
-                  More BO journey details will be added soon...
+                <div style={{ marginTop: "32px" }}>
+                  <strong style={{ fontSize: "18px", display: "block", marginBottom: "16px", color: "#1f2937" }}>
+                    Applications
+                  </strong>
+
+                  {applicationsLoading ? (
+                    <SkeletonLoader rows={4} compact />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                      {/* TCS projects (project_company === Tata Consultancy Services Pvt Ltd)
+                          are split out of Project Applications and shown here instead. */}
+                      <div>
+                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#9a3412", marginBottom: "8px" }}>
+                          TCS Applications ({appliedTcs.length})
+                        </div>
+                        {appliedTcs.length === 0 ? (
+                          <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px", margin: 0 }}>No TCS applications.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {appliedTcs.map((app) => (
+                              <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#fff7ed", border: "1px solid #fed7aa", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
+                                  <div style={{ fontSize: "12.5px", color: "#9a3412" }}>{app.company} · {app.status}</div>
+                                </div>
+                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>Applied: {formatDateDDMMMYYYY(app.appliedAt)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#0c4a6e", marginBottom: "8px" }}>
+                          Job Applications ({appliedJobs.length})
+                        </div>
+                        {appliedJobs.length === 0 ? (
+                          <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px", margin: 0 }}>No job applications.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {appliedJobs.map((app) => (
+                              <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
+                                  <div style={{ fontSize: "12.5px", color: "#0c4a6e" }}>{app.company} · {app.status}</div>
+                                </div>
+                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>Applied: {formatDateDDMMMYYYY(app.appliedAt)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#6b21a8", marginBottom: "8px" }}>
+                          Project Applications ({appliedProjects.length})
+                        </div>
+                        {appliedProjects.length === 0 ? (
+                          <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px", margin: 0 }}>No project applications.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {appliedProjects.map((app) => (
+                              <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#faf5ff", border: "1px solid #e9d5ff", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
+                                  <div style={{ fontSize: "12.5px", color: "#6b21a8" }}>{app.company} · {app.status}</div>
+                                </div>
+                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>Applied: {formatDateDDMMMYYYY(app.appliedAt)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#166534", marginBottom: "8px" }}>
+                          Workshop Applications ({appliedWorkshops.length})
+                        </div>
+                        {appliedWorkshops.length === 0 ? (
+                          <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px", margin: 0 }}>No workshop applications.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {appliedWorkshops.map((app) => (
+                              <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#f0fdf4", border: "1px solid #bbf7d0", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
+                                  <div style={{ fontSize: "12.5px", color: "#166534" }}>{app.organizer} · {app.status}</div>
+                                </div>
+                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>{app.date}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1243,36 +1610,136 @@ export default function MemberDetailModal({ member, onClose }) {
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Next Action</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Follow-up Date</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Logged By</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {noteEntries.map((note, index) => (
-                            <tr
-                              key={note.id}
-                              style={{
-                                backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
-                              }}
-                            >
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.date}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.contactPerson}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
-                                {note.notes}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.nextAction}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.followUpDate}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.loggedBy}
-                              </td>
-                            </tr>
-                          ))}
+                          {noteEntries.map((note, index) => {
+                            const isEditing = editingNoteId === note.id;
+                            const isConfirmingDelete = confirmDeleteNoteId === note.id;
+                            return (
+                              <tr
+                                key={note.id}
+                                style={{
+                                  backgroundColor: isEditing ? "#eff6ff" : index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                                }}
+                              >
+                                <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                  {note.date}
+                                </td>
+                                <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                  {note.contactPerson}
+                                </td>
+                                {isEditing ? (
+                                  <>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "200px" }}>
+                                      <textarea
+                                        value={editNoteDraft.notes}
+                                        onChange={(e) => updateEditNoteDraft("notes", e.target.value)}
+                                        rows="3"
+                                        style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #93c5fd", resize: "vertical" }}
+                                      />
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "150px" }}>
+                                      <input
+                                        type="text"
+                                        value={editNoteDraft.nextAction}
+                                        onChange={(e) => updateEditNoteDraft("nextAction", e.target.value)}
+                                        style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #93c5fd" }}
+                                      />
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "150px" }}>
+                                      <input
+                                        type="date"
+                                        value={editNoteDraft.followUpDate}
+                                        onChange={(e) => updateEditNoteDraft("followUpDate", e.target.value)}
+                                        style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #93c5fd" }}
+                                      />
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "150px" }}>
+                                      <input
+                                        type="text"
+                                        list="bo-employees-datalist"
+                                        value={editNoteDraft.loggedBy}
+                                        onChange={(e) => updateEditNoteDraft("loggedBy", e.target.value)}
+                                        style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #93c5fd" }}
+                                      />
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", whiteSpace: "pre-wrap", maxWidth: "350px" }}>
+                                      {note.notes}
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                      {note.nextAction}
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                      {note.followUpDate}
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                      {note.loggedBy}
+                                    </td>
+                                  </>
+                                )}
+                                <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "160px" }}>
+                                  {isEditing ? (
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                      <button
+                                        onClick={saveEditNote}
+                                        disabled={loading}
+                                        style={{ padding: "6px 14px", backgroundColor: "#16a34a", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={cancelEditNote}
+                                        disabled={loading}
+                                        style={{ padding: "6px 14px", backgroundColor: "#e5e7eb", color: "#1f2937", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : isConfirmingDelete ? (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                      <span style={{ fontSize: "12.5px", color: "#991b1b" }}>Delete this entry?</span>
+                                      <div style={{ display: "flex", gap: "8px" }}>
+                                        <button
+                                          onClick={() => deleteNoteEntry(note.id)}
+                                          disabled={loading}
+                                          style={{ padding: "6px 14px", backgroundColor: "#dc2626", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                        >
+                                          Yes
+                                        </button>
+                                        <button
+                                          onClick={() => setConfirmDeleteNoteId(null)}
+                                          disabled={loading}
+                                          style={{ padding: "6px 14px", backgroundColor: "#e5e7eb", color: "#1f2937", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                        >
+                                          No
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                      <button
+                                        onClick={() => startEditNote(note)}
+                                        style={{ padding: "6px 14px", backgroundColor: "#2563eb", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmDeleteNoteId(note.id)}
+                                        style={{ padding: "6px 14px", backgroundColor: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1558,51 +2025,181 @@ export default function MemberDetailModal({ member, onClose }) {
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rating</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Referrer Name</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Rated By</th>
+                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {ratingEntries.map((note, index) => (
-                            <tr
-                              key={note.id}
-                              style={{
-                                backgroundColor: index % 2 === 0 ? "#f9fafb" : "#ffffff",
-                              }}
-                            >
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.date}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.contactPerson}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "190px" }}>
-                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#374151" }}>
-                                    {getRatingTypeLabel(note.ratingType)}
-                                  </div>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                    {note.ratingType === RATING_TYPES.workRelated && renderRatingStars(Number(note.workRating), 16)}
-                                    {note.ratingType === RATING_TYPES.referrer && renderRatingStars(Number(note.referrerRating), 16)}
-                                    {note.ratingType === RATING_TYPES.boEmployee && renderRatingStars(Number(note.boRating), 16)}
-                                    {note.ratingType === RATING_TYPES.notRated && (
-                                      <span style={{ fontSize: "13px", color: "#6b7280" }}>Not rated yet</span>
-                                    )}
-                                  </div>
-                                  {note.ratingType === RATING_TYPES.boEmployee && (
-                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.boRemarks}</div>
+                          {ratingEntries.map((note, index) => {
+                            const isEditing = editingRatingId === note.id;
+                            const isConfirmingDelete = confirmDeleteRatingId === note.id;
+                            return (
+                              <tr
+                                key={note.id}
+                                style={{
+                                  backgroundColor: isEditing ? "#f0fdfa" : index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                                }}
+                              >
+                                <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                  {note.date}
+                                </td>
+                                <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                  {note.contactPerson}
+                                </td>
+                                {isEditing ? (
+                                  <>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "240px" }}>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                        <select
+                                          value={editRatingDraft.ratingType}
+                                          onChange={(e) => updateEditRatingDraft("ratingType", e.target.value)}
+                                          style={{ padding: "8px", borderRadius: "6px", border: "1px solid #99f6e0" }}
+                                        >
+                                          <option value={RATING_TYPES.workRelated}>Work Related</option>
+                                          <option value={RATING_TYPES.boEmployee}>BO Employee</option>
+                                          <option value={RATING_TYPES.referrer}>Referrer</option>
+                                        </select>
+
+                                        {editRatingDraft.ratingType === RATING_TYPES.workRelated &&
+                                          renderEditableStars(editRatingDraft.workRating, (star) => updateEditRatingDraft("workRating", star), 18)}
+
+                                        {editRatingDraft.ratingType === RATING_TYPES.boEmployee && (
+                                          <>
+                                            {renderEditableStars(editRatingDraft.boRating, (star) => updateEditRatingDraft("boRating", star), 18)}
+                                            <textarea
+                                              value={editRatingDraft.boRemarks}
+                                              onChange={(e) => updateEditRatingDraft("boRemarks", e.target.value)}
+                                              placeholder="BO remarks..."
+                                              rows="2"
+                                              style={{ padding: "8px", borderRadius: "6px", border: "1px solid #99f6e0", resize: "vertical" }}
+                                            />
+                                          </>
+                                        )}
+
+                                        {editRatingDraft.ratingType === RATING_TYPES.referrer && (
+                                          <>
+                                            {renderEditableStars(editRatingDraft.referrerRating, (star) => updateEditRatingDraft("referrerRating", star), 18)}
+                                            <textarea
+                                              value={editRatingDraft.referrerRemarks}
+                                              onChange={(e) => updateEditRatingDraft("referrerRemarks", e.target.value)}
+                                              placeholder="Referrer remarks..."
+                                              rows="2"
+                                              style={{ padding: "8px", borderRadius: "6px", border: "1px solid #99f6e0", resize: "vertical" }}
+                                            />
+                                          </>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "150px" }}>
+                                      {editRatingDraft.ratingType === RATING_TYPES.referrer ? (
+                                        <input
+                                          type="text"
+                                          value={editRatingDraft.referrerName}
+                                          onChange={(e) => updateEditRatingDraft("referrerName", e.target.value)}
+                                          style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #99f6e0" }}
+                                        />
+                                      ) : (
+                                        "-"
+                                      )}
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "150px" }}>
+                                      <input
+                                        type="text"
+                                        list="bo-employees-datalist"
+                                        value={editRatingDraft.ratedBy}
+                                        onChange={(e) => updateEditRatingDraft("ratedBy", e.target.value)}
+                                        style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #99f6e0" }}
+                                      />
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "190px" }}>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        <div style={{ fontSize: "12px", fontWeight: "700", color: "#374151" }}>
+                                          {getRatingTypeLabel(note.ratingType)}
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                          {note.ratingType === RATING_TYPES.workRelated && renderRatingStars(Number(note.workRating), 16)}
+                                          {note.ratingType === RATING_TYPES.referrer && renderRatingStars(Number(note.referrerRating), 16)}
+                                          {note.ratingType === RATING_TYPES.boEmployee && renderRatingStars(Number(note.boRating), 16)}
+                                          {note.ratingType === RATING_TYPES.notRated && (
+                                            <span style={{ fontSize: "13px", color: "#6b7280" }}>Not rated yet</span>
+                                          )}
+                                        </div>
+                                        {note.ratingType === RATING_TYPES.boEmployee && (
+                                          <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.boRemarks}</div>
+                                        )}
+                                        {note.ratingType === RATING_TYPES.referrer && (
+                                          <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.referrerRemarks}</div>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                      {note.ratingType === RATING_TYPES.referrer ? note.referrerName : "-"}
+                                    </td>
+                                    <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
+                                      {note.ratedBy}
+                                    </td>
+                                  </>
+                                )}
+                                <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb", minWidth: "160px" }}>
+                                  {isEditing ? (
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                      <button
+                                        onClick={saveEditRating}
+                                        disabled={loading}
+                                        style={{ padding: "6px 14px", backgroundColor: "#16a34a", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={cancelEditRating}
+                                        disabled={loading}
+                                        style={{ padding: "6px 14px", backgroundColor: "#e5e7eb", color: "#1f2937", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : isConfirmingDelete ? (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                      <span style={{ fontSize: "12.5px", color: "#991b1b" }}>Delete this entry?</span>
+                                      <div style={{ display: "flex", gap: "8px" }}>
+                                        <button
+                                          onClick={() => deleteRatingEntry(note.id)}
+                                          disabled={loading}
+                                          style={{ padding: "6px 14px", backgroundColor: "#dc2626", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                        >
+                                          Yes
+                                        </button>
+                                        <button
+                                          onClick={() => setConfirmDeleteRatingId(null)}
+                                          disabled={loading}
+                                          style={{ padding: "6px 14px", backgroundColor: "#e5e7eb", color: "#1f2937", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: loading ? "not-allowed" : "pointer" }}
+                                        >
+                                          No
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                      <button
+                                        onClick={() => startEditRating(note)}
+                                        style={{ padding: "6px 14px", backgroundColor: "#0f766e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmDeleteRatingId(note.id)}
+                                        style={{ padding: "6px 14px", backgroundColor: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
                                   )}
-                                  {note.ratingType === RATING_TYPES.referrer && (
-                                    <div style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "pre-wrap" }}>{note.referrerRemarks}</div>
-                                  )}
-                                </div>
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.ratingType === RATING_TYPES.referrer ? note.referrerName : "-"}
-                              </td>
-                              <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
-                                {note.ratedBy}
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

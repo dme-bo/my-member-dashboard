@@ -484,7 +484,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
   /* FILTERED REQUIREMENTS (for table) */
   const filteredRequirements = useMemo(() => {
-    let list = requirementsData.filter((r) => r.status === "active");
+    const list = requirementsData;
     if (activeFilter === "All") return list;
     if (activeFilter === "Open") return list.filter((r) => r.status === "active");
     if (activeFilter === "Closed") return list.filter((r) => r.status === "completed");
