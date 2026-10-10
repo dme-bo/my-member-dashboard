@@ -16,6 +16,7 @@ import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
+import { fetchProjectApplicationRows } from "../utils/applicationSources";
 
 const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
 
@@ -77,7 +78,8 @@ export default function TempStaffPage() {
   const [selectedMember, setSelectedMember] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({ city: [], coordinator_type: [], status: [], role: [], coordinator_name: [] });
-  const [membersData, setMembersData] = useState([]); // TCS Applications
+  const [membersData, setMembersData] = useState([]); // TCS Applications (legacy tcsusersmaster)
+  const [newFlowTcsApplications, setNewFlowTcsApplications] = useState([]); // TCS-run projects from projectsmaster
   const [coordinatorsData, setCoordinatorsData] = useState([]); // Coordinators
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("applications"); // "applications" or "coordinators"
@@ -150,6 +152,21 @@ export default function TempStaffPage() {
     return () => unsubscribe();
   }, []);
 
+  // Applicants who applied through the member app to a projectsmaster posting
+  // run by TCS — fetched once (not polled like the legacy collection above)
+  // and merged into the Applications view below.
+  useEffect(() => {
+    let cancelled = false;
+    fetchProjectApplicationRows()
+      .then(({ tcsRows }) => {
+        if (!cancelled) setNewFlowTcsApplications(tcsRows);
+      })
+      .catch((error) => console.error("Error fetching TCS project applications:", error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Fetch Coordinators
   useEffect(() => {
     const q = query(collection(db, "tcscoordinatorusersmaster"));
@@ -169,7 +186,10 @@ export default function TempStaffPage() {
   }, []);
 
   // Current data
-  const currentData = viewMode === "applications" ? membersData : coordinatorsData;
+  const currentData = useMemo(
+    () => (viewMode === "applications" ? [...membersData, ...newFlowTcsApplications] : coordinatorsData),
+    [viewMode, membersData, newFlowTcsApplications, coordinatorsData]
+  );
 
   // Dynamic filter options
   const dynamicFilterOptions = useMemo(() => {
@@ -211,10 +231,17 @@ export default function TempStaffPage() {
     const fetchNotes = async () => {
       setNotesLoading(true);
       try {
-        const collectionName =
-          selectedMember.type === "coordinator" ? "tcscoordinatorusersmaster" : "tcsusersmaster";
-
-        const interactionsRef = collection(db, collectionName, selectedMember.id, "interactions");
+        // Applicants pulled in from a TCS-run projectsmaster posting are real
+        // members, so their notes live under users/{uid}/interactions — the
+        // same place MemberDetailModal reads/writes — instead of tcsusersmaster.
+        let interactionsRef;
+        if (selectedMember._newFlow) {
+          interactionsRef = collection(db, "users", selectedMember._uid, "interactions");
+        } else {
+          const collectionName =
+            selectedMember.type === "coordinator" ? "tcscoordinatorusersmaster" : "tcsusersmaster";
+          interactionsRef = collection(db, collectionName, selectedMember.id, "interactions");
+        }
         const q = query(interactionsRef, orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
 
@@ -388,10 +415,14 @@ export default function TempStaffPage() {
 
     setNotesLoading(true);
     try {
-      const collectionName =
-        selectedMember.type === "coordinator" ? "tcscoordinatorusersmaster" : "tcsusersmaster";
-
-      const ref = collection(db, collectionName, selectedMember.id, "interactions");
+      let ref;
+      if (selectedMember._newFlow) {
+        ref = collection(db, "users", selectedMember._uid, "interactions");
+      } else {
+        const collectionName =
+          selectedMember.type === "coordinator" ? "tcscoordinatorusersmaster" : "tcsusersmaster";
+        ref = collection(db, collectionName, selectedMember.id, "interactions");
+      }
       await Promise.all(
         valid.map((note) =>
           addDoc(ref, {

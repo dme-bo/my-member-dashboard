@@ -15,6 +15,7 @@ import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
+import { fetchProjectApplicationRows } from "../utils/applicationSources";
 
 const PROJECTS_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -97,18 +98,26 @@ export default function ProjectsPage() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  // Fetch Applications
+  // Fetch Applications — legacy projectusersmaster entries plus applicants who
+  // applied through the member app to a projectsmaster posting (projects run by
+  // TCS are excluded here; they're surfaced under the TCS/Temp Staffing page instead).
   useEffect(() => {
     const fetchApplications = async () => {
       try {
         setLoading(true);
         const q = query(collection(db, "projectusersmaster"), orderBy("created_time", "desc"));
-        const querySnapshot = await getDocs(q);
+        const [querySnapshot, newFlow] = await Promise.all([
+          getDocs(q),
+          fetchProjectApplicationRows().catch((error) => {
+            console.error("Error fetching projectsmaster applications:", error);
+            return { projectRows: [] };
+          }),
+        ]);
         const data = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
-        setApplications(data);
+        setApplications([...data, ...newFlow.projectRows]);
       } catch (error) {
         console.error("Error fetching applications:", error);
         showToast("Failed to load applications.", "error");
@@ -276,7 +285,12 @@ export default function ProjectsPage() {
     const loadNotes = async () => {
       setNotesLoading(true);
       try {
-        const interactionsRef = collection(db, "projectusersmaster", selectedApp.id, "interactions");
+        // Applicants pulled in from projectsmaster are real members, so their
+        // notes live under users/{uid}/interactions — the same place
+        // MemberDetailModal reads/writes — instead of projectusersmaster.
+        const interactionsRef = selectedApp._newFlow
+          ? collection(db, "users", selectedApp._uid, "interactions")
+          : collection(db, "projectusersmaster", selectedApp.id, "interactions");
         const q = query(interactionsRef, orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
 
@@ -342,7 +356,9 @@ export default function ProjectsPage() {
 
     setNotesLoading(true);
     try {
-      const ref = collection(db, "projectusersmaster", selectedApp.id, "interactions");
+      const ref = selectedApp._newFlow
+        ? collection(db, "users", selectedApp._uid, "interactions")
+        : collection(db, "projectusersmaster", selectedApp.id, "interactions");
       await Promise.all(
         validNotes.map(note =>
           addDoc(ref, {

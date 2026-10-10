@@ -15,6 +15,7 @@ import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
+import { fetchJobApplicationRows } from "../utils/applicationSources";
 
 const RECRUITMENT_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -25,6 +26,83 @@ const RECRUITMENT_GROUP_BY_OPTIONS = [
 ];
 
 const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
+
+// Live screening/interview/offer status from the external recruitment tracker
+// (proxied through /api/candidate-status to keep its API key server-side),
+// matched back to jobsmaster applicants by userId. A failed/empty fetch just
+// means no candidate gets enriched — the rest of the page still works.
+//
+// The same userId can show up multiple times (one candidate applying to
+// several jobs), each tagged with its own jobId — matching by userId alone
+// would collapse those into a single status. Records that do carry a jobId
+// are keyed by the (userId, jobId) pair; byUserIdOnly is a best-effort
+// fallback for the records that come back with jobId: null.
+async function fetchExternalCandidateStatus() {
+  const byCompositeKey = new Map();
+  const byUserIdOnly = new Map();
+  try {
+    const response = await fetch("/api/candidate-status");
+    if (!response.ok) {
+      console.error("candidate-status fetch failed:", response.status);
+      return { byCompositeKey, byUserIdOnly };
+    }
+    const data = await response.json();
+    const records = Array.isArray(data?.candidates) ? data.candidates : [];
+    records.forEach((record) => {
+      if (!record?.userId) return;
+      if (record.jobId) {
+        byCompositeKey.set(`${record.userId}:${record.jobId}`, record);
+      } else {
+        byUserIdOnly.set(record.userId, record);
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching external candidate status:", error);
+  }
+  return { byCompositeKey, byUserIdOnly };
+}
+
+// Color coding for the recruitment-tracker's finalStatus — the exact set of
+// values isn't fixed, so this buckets by keyword rather than an exact match list.
+const getFinalStatusColors = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  if (!normalized) return { backgroundColor: "#f1f5f9", color: "#475569" };
+  if (/(backout|reject|fail|drop)/.test(normalized)) return { backgroundColor: "#fee2e2", color: "#991b1b" };
+  if (/(select|offer|join|hire)/.test(normalized)) return { backgroundColor: "#d1fae5", color: "#065f46" };
+  return { backgroundColor: "#dbeafe", color: "#1e40af" };
+};
+
+// Shared table cell for the Stage / Status column — stage and final status
+// both come from the external recruitment tracker (jobsmaster candidates
+// only); legacy jobsusersmaster candidates just show "-" unless they already
+// carry their own final_status from that collection.
+function StageStatusCell({ candidate }) {
+  if (!candidate.application_stage && !candidate.final_status) {
+    return <td style={{ padding: "12px" }}>-</td>;
+  }
+  return (
+    <td style={{ padding: "12px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
+        {candidate.application_stage && (
+          <span style={{ fontSize: "11px", color: "#64748b" }}>{candidate.application_stage}</span>
+        )}
+        {candidate.final_status && (
+          <span
+            style={{
+              padding: "2px 10px",
+              borderRadius: "999px",
+              fontSize: "11px",
+              fontWeight: 700,
+              ...getFinalStatusColors(candidate.final_status),
+            }}
+          >
+            {candidate.final_status}
+          </span>
+        )}
+      </div>
+    </td>
+  );
+}
 
 function CandidateCard({ candidate, onClick }) {
   return (
@@ -52,21 +130,36 @@ function CandidateCard({ candidate, onClick }) {
         {candidate.city && <span style={kanbanChipStyle}>{candidate.city}</span>}
         {candidate.source && <span style={kanbanChipStyle}>{candidate.source}</span>}
       </div>
-      {candidate.status && (
-        <span
-          style={{
-            alignSelf: "flex-start",
-            padding: "2px 8px",
-            borderRadius: "999px",
-            fontSize: "10.5px",
-            fontWeight: 700,
-            backgroundColor: candidate.status === "Active" ? "#d1fae5" : "#fee2e2",
-            color: candidate.status === "Active" ? "#065f46" : "#991b1b",
-          }}
-        >
-          {candidate.status}
-        </span>
-      )}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+        {candidate.status && (
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: "999px",
+              fontSize: "10.5px",
+              fontWeight: 700,
+              backgroundColor: candidate.status === "Active" ? "#d1fae5" : "#fee2e2",
+              color: candidate.status === "Active" ? "#065f46" : "#991b1b",
+            }}
+          >
+            {candidate.status}
+          </span>
+        )}
+        {candidate.application_stage && <span style={kanbanChipStyle}>Stage: {candidate.application_stage}</span>}
+        {candidate.final_status && (
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: "999px",
+              fontSize: "10.5px",
+              fontWeight: 700,
+              ...getFinalStatusColors(candidate.final_status),
+            }}
+          >
+            {candidate.final_status}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -118,18 +211,43 @@ export default function RecruitmentPage() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  // Fetch Candidates
+  // Fetch Candidates — legacy jobsusersmaster entries plus applicants who
+  // applied through the member app to a jobsmaster posting. The latter are
+  // additionally enriched with live screening/interview/offer status from the
+  // external recruitment tracker, matched by userId.
   useEffect(() => {
     const fetchCandidates = async () => {
       try {
         setLoading(true);
         const q = query(collection(db, "jobsusersmaster"), orderBy("created_time", "desc"));
-        const querySnapshot = await getDocs(q);
+        const [querySnapshot, newFlowRows, { byCompositeKey, byUserIdOnly }] = await Promise.all([
+          getDocs(q),
+          fetchJobApplicationRows().catch((error) => {
+            console.error("Error fetching jobsmaster applications:", error);
+            return [];
+          }),
+          fetchExternalCandidateStatus(),
+        ]);
         const data = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
-        setCandidates(data);
+        const enrichedNewFlowRows = newFlowRows.map((row) => {
+          const externalStatus =
+            byCompositeKey.get(`${row._uid}:${row._jobId}`) || byUserIdOnly.get(row._uid);
+          if (!externalStatus) return row;
+          return {
+            ...row,
+            final_status: externalStatus.finalStatus ?? row.final_status,
+            internal_interview_status: externalStatus.internalStatus ?? row.internal_interview_status,
+            external_interview_status: externalStatus.externalStatus ?? row.external_interview_status,
+            screening_status: externalStatus.screeningStatus,
+            offer_placement_status: externalStatus.offerPlacementStatus,
+            application_stage: externalStatus.stage,
+            external_application_id: externalStatus.applicationId,
+          };
+        });
+        setCandidates([...data, ...enrichedNewFlowRows]);
       } catch (error) {
         console.error("Error fetching candidates:", error);
         alert("Failed to load candidates.");
@@ -147,7 +265,12 @@ export default function RecruitmentPage() {
     const fetchNotes = async () => {
       setNotesLoading(true);
       try {
-        const interactionsRef = collection(db, "jobsusersmaster", selectedCandidate.id, "interactions");
+        // Applicants pulled in from jobsmaster are real members, so their notes
+        // live under users/{uid}/interactions — the same place MemberDetailModal
+        // reads/writes — instead of jobsusersmaster.
+        const interactionsRef = selectedCandidate._newFlow
+          ? collection(db, "users", selectedCandidate._uid, "interactions")
+          : collection(db, "jobsusersmaster", selectedCandidate.id, "interactions");
         const q = query(interactionsRef, orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
 
@@ -233,6 +356,8 @@ export default function RecruitmentPage() {
       "Source": candidate.source || "-",
       "Client": candidate.client || "-",
       "Status": candidate.status || "-",
+      "Stage": candidate.application_stage || "-",
+      "Final Status": candidate.final_status || "-",
       "Applied Date": formatDateDDMMMYYYY(candidate.created_time),
     }));
 
@@ -428,7 +553,9 @@ export default function RecruitmentPage() {
 
     setNotesLoading(true);
     try {
-      const ref = collection(db, "jobsusersmaster", selectedCandidate.id, "interactions");
+      const ref = selectedCandidate._newFlow
+        ? collection(db, "users", selectedCandidate._uid, "interactions")
+        : collection(db, "jobsusersmaster", selectedCandidate.id, "interactions");
       await Promise.all(
         valid.map((note) =>
           addDoc(ref, {
@@ -575,11 +702,12 @@ export default function RecruitmentPage() {
               >
                 <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                   <colgroup>
-                    <col style={{ width: "25%" }} />
-                    <col style={{ width: "25%" }} />
-                    <col style={{ width: "15%" }} />
-                    <col style={{ width: "15%" }} />
-                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "22%" }} />
                   </colgroup>
                   <thead style={{ position: "sticky", top: 0, background: "#f9f9f9", zIndex: 10 }}>
                     <tr>
@@ -588,13 +716,14 @@ export default function RecruitmentPage() {
                       <th style={{ padding: "14px 12px", textAlign: "left" }}>Profile</th>
                       <th style={{ padding: "14px 12px", textAlign: "left" }}>City</th>
                       <th style={{ padding: "14px 12px", textAlign: "left" }}>Source</th>
+                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Stage / Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentRows.length === 0 ? (
                       <tr>
                         <td
-                          colSpan="5"
+                          colSpan="6"
                           style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}
                         >
                           {searchTerm || Object.values(filters).some((v) => v.length)
@@ -606,7 +735,7 @@ export default function RecruitmentPage() {
                       groupedRows.map(([label, rows]) => (
                         <Fragment key={label}>
                           <tr style={{ background: "#eef2f7" }}>
-                            <td colSpan={5} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
+                            <td colSpan={6} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
                               <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
                               {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
                             </td>
@@ -625,6 +754,7 @@ export default function RecruitmentPage() {
                                 <td style={{ padding: "12px" }}>{c.profile || "-"}</td>
                                 <td style={{ padding: "12px" }}>{c.city || "-"}</td>
                                 <td style={{ padding: "12px" }}>{c.source || "-"}</td>
+                                <StageStatusCell candidate={c} />
                               </tr>
                             ))}
                         </Fragment>
@@ -643,6 +773,7 @@ export default function RecruitmentPage() {
                           <td style={{ padding: "12px" }}>{c.profile || "-"}</td>
                           <td style={{ padding: "12px" }}>{c.city || "-"}</td>
                           <td style={{ padding: "12px" }}>{c.source || "-"}</td>
+                          <StageStatusCell candidate={c} />
                         </tr>
                       ))
                     )}
@@ -906,6 +1037,14 @@ export default function RecruitmentPage() {
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Internal Interview Status</td><td>{selectedCandidate.internal_interview_status || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>External Interview</td><td>{selectedCandidate.external_interview || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>External Interview Status</td><td>{selectedCandidate.external_interview_status || "-"}</td></tr>
+                      {selectedCandidate._newFlow && (
+                        <>
+                          <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Application Stage</td><td>{selectedCandidate.application_stage || "-"}</td></tr>
+                          <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Screening Status</td><td>{selectedCandidate.screening_status || "-"}</td></tr>
+                          <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Offer / Placement Status</td><td>{selectedCandidate.offer_placement_status || "-"}</td></tr>
+                          <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>External Application ID</td><td>{selectedCandidate.external_application_id || "-"}</td></tr>
+                        </>
+                      )}
                     </tbody>
                   </table>
                 )}
