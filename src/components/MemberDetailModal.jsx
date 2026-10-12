@@ -24,6 +24,16 @@ import SkeletonLoader from "./SkeletonLoader";
 // same company string used for this split in RequirementsPage/NewsLetterPage.
 const TCS_COMPANY_NAME = "Tata Consultancy Services Pvt Ltd";
 
+// Color coding for the recruitment-tracker's finalStatus — same bucketing
+// RecruitmentPage uses, since the exact set of status strings isn't fixed.
+const getFinalStatusColors = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  if (!normalized) return { backgroundColor: "#f1f5f9", color: "#475569" };
+  if (/(backout|reject|fail|drop)/.test(normalized)) return { backgroundColor: "#fee2e2", color: "#991b1b" };
+  if (/(select|offer|join|hire)/.test(normalized)) return { backgroundColor: "#d1fae5", color: "#065f46" };
+  return { backgroundColor: "#dbeafe", color: "#1e40af" };
+};
+
 const RATING_TYPES = {
   workRelated: "work_related",
   boEmployee: "bo_employee",
@@ -77,6 +87,13 @@ export default function MemberDetailModal({ member, onClose }) {
   const [appliedTcs, setAppliedTcs] = useState([]);
   const [appliedWorkshops, setAppliedWorkshops] = useState([]);
   const [applicationsLoading, setApplicationsLoading] = useState(false);
+
+  // BO Journey — allocations from the "allocations" collection (jobId there
+  // can point at either a jobsmaster or a projectsmaster doc) plus live
+  // application stage/status per job, matched via /api/candidate-status.
+  const [memberAllocations, setMemberAllocations] = useState([]);
+  const [allocationsLoading, setAllocationsLoading] = useState(false);
+  const [jobApplicationStatus, setJobApplicationStatus] = useState({ byJobId: new Map(), fallback: null });
 
   // BO employees — used to populate the "Logged By" / "Rated By" dropdowns
   const [boEmployees, setBoEmployees] = useState([]);
@@ -567,6 +584,82 @@ export default function MemberDetailModal({ member, onClose }) {
     };
 
     loadApplications();
+  }, [activeTab, userId]);
+
+  // BO Journey — allocations (the "allocations" collection's jobId can point at
+  // either a jobsmaster or a projectsmaster doc, so both are checked) plus each
+  // applied job's live stage/status from the same external recruitment tracker
+  // RecruitmentPage uses, matched by (userId, jobId) with a userId-only fallback.
+  useEffect(() => {
+    if (activeTab !== "bojourney" || !userId) return;
+
+    const loadAllocationsAndStatus = async () => {
+      setAllocationsLoading(true);
+      try {
+        const [allocationsSnap, statusResponse] = await Promise.all([
+          getDocs(query(collection(db, "allocations"), where("userId", "==", userId))),
+          fetch("/api/candidate-status").catch((error) => {
+            console.error("Error fetching external candidate status:", error);
+            return null;
+          }),
+        ]);
+
+        const allocations = await Promise.all(
+          allocationsSnap.docs.map(async (allocDoc) => {
+            const allocData = allocDoc.data();
+            const reqId = allocData.jobId;
+            const [jobSnap, projectSnap] = await Promise.all([
+              reqId ? getDoc(doc(db, "jobsmaster", reqId)) : Promise.resolve(null),
+              reqId ? getDoc(doc(db, "projectsmaster", reqId)) : Promise.resolve(null),
+            ]);
+
+            let title = "Unknown Requirement";
+            let company = "—";
+            let type = "Job";
+            if (jobSnap?.exists()) {
+              const jobData = jobSnap.data();
+              title = jobData.job_title || title;
+              company = jobData.job_company || company;
+              type = "Job";
+            } else if (projectSnap?.exists()) {
+              const projectData = projectSnap.data();
+              title = projectData.project_title || title;
+              company = projectData.project_company || company;
+              type = String(projectData.project_company || "").trim() === TCS_COMPANY_NAME ? "TCS" : "Project";
+            }
+
+            return {
+              id: allocDoc.id,
+              title,
+              company,
+              type,
+              city: allocData.city || "—",
+              allocatedAt: allocData.allocatedAt || null,
+            };
+          })
+        );
+        setMemberAllocations(allocations);
+
+        const byJobId = new Map();
+        let fallback = null;
+        if (statusResponse?.ok) {
+          const body = await statusResponse.json();
+          (body?.candidates || [])
+            .filter((record) => record?.userId === userId)
+            .forEach((record) => {
+              if (record.jobId) byJobId.set(record.jobId, record);
+              else fallback = fallback || record;
+            });
+        }
+        setJobApplicationStatus({ byJobId, fallback });
+      } catch (error) {
+        console.error("Error loading BO journey allocations/status:", error);
+      } finally {
+        setAllocationsLoading(false);
+      }
+    };
+
+    loadAllocationsAndStatus();
   }, [activeTab, userId]);
 
   // Seed the rating form as soon as the Rating tab is opened
@@ -1121,6 +1214,32 @@ export default function MemberDetailModal({ member, onClose }) {
 
                 <div style={{ marginTop: "32px" }}>
                   <strong style={{ fontSize: "18px", display: "block", marginBottom: "16px", color: "#1f2937" }}>
+                    Allocations ({memberAllocations.length})
+                  </strong>
+                  {allocationsLoading ? (
+                    <SkeletonLoader rows={2} compact />
+                  ) : memberAllocations.length === 0 ? (
+                    <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px", margin: 0 }}>Not allocated to any requirement yet.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {memberAllocations.map((alloc) => (
+                        <div key={alloc.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                          <div>
+                            <div style={{ fontWeight: 600, color: "#1f2937" }}>{alloc.title}</div>
+                            <div style={{ fontSize: "12.5px", color: "#475569" }}>
+                              {alloc.company} · {alloc.type}
+                              {alloc.city && alloc.city !== "—" ? ` · ${alloc.city}` : ""}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: "12.5px", color: "#6b7280" }}>Allocated: {formatDateDDMMMYYYY(alloc.allocatedAt)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: "32px" }}>
+                  <strong style={{ fontSize: "18px", display: "block", marginBottom: "16px", color: "#1f2937" }}>
                     Applications
                   </strong>
 
@@ -1159,15 +1278,36 @@ export default function MemberDetailModal({ member, onClose }) {
                           <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px", margin: 0 }}>No job applications.</p>
                         ) : (
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            {appliedJobs.map((app) => (
-                              <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-                                <div>
-                                  <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
-                                  <div style={{ fontSize: "12.5px", color: "#0c4a6e" }}>{app.company} · {app.status}</div>
+                            {appliedJobs.map((app) => {
+                              const liveStatus = jobApplicationStatus.byJobId.get(app.id) || jobApplicationStatus.fallback;
+                              return (
+                                <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
+                                    <div style={{ fontSize: "12.5px", color: "#0c4a6e" }}>{app.company} · {app.status}</div>
+                                    {liveStatus && (liveStatus.stage || liveStatus.finalStatus) && (
+                                      <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "6px", flexWrap: "wrap" }}>
+                                        {liveStatus.stage && <span style={{ fontSize: "11px", color: "#64748b" }}>{liveStatus.stage}</span>}
+                                        {liveStatus.finalStatus && (
+                                          <span
+                                            style={{
+                                              padding: "2px 10px",
+                                              borderRadius: "999px",
+                                              fontSize: "11px",
+                                              fontWeight: 700,
+                                              ...getFinalStatusColors(liveStatus.finalStatus),
+                                            }}
+                                          >
+                                            {liveStatus.finalStatus}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: "12.5px", color: "#6b7280" }}>Applied: {formatDateDDMMMYYYY(app.appliedAt)}</div>
                                 </div>
-                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>Applied: {formatDateDDMMMYYYY(app.appliedAt)}</div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>

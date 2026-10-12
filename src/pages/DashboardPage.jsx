@@ -16,6 +16,24 @@ import DualRangeSlider from '../components/DualRangeSlider';
 import SkeletonLoader from '../components/SkeletonLoader';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { parseMemberDate } from '../utils/memberFields';
+import { collection, db, getDocs } from '../firestoreClient';
+
+// Matches a member's phone against a tcscoordinatorusersmaster doc id (that
+// collection keys documents by a plain 10-digit number) regardless of
+// +91/91/0 prefixing on the member's own stored value.
+const last10Digits = (value) => String(value || '').replace(/\D/g, '').slice(-10);
+
+const toggleFilterBtnStyle = (active) => ({
+  padding: '10px 16px',
+  borderRadius: '20px',
+  border: active ? '1px solid #1976d2' : '1px solid #cbd5e1',
+  background: active ? '#1976d2' : '#fff',
+  color: active ? '#fff' : '#334155',
+  fontWeight: 700,
+  fontSize: '13px',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+});
 
 const PIE_CHART_OPTIONS = {
   responsive: true,
@@ -84,6 +102,31 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const [ageRange, setAgeRange] = useState([0, 100]);
   const [registrationDateFrom, setRegistrationDateFrom] = useState('');
   const [registrationDateTo, setRegistrationDateTo] = useState('');
+  const [regionalPartnerFilter, setRegionalPartnerFilter] = useState([]); // subset of ['Active', 'Inactive']
+  const [tcsCoordinatorOnly, setTcsCoordinatorOnly] = useState(false);
+  const [tcsCoordinatorPhones, setTcsCoordinatorPhones] = useState(() => new Set());
+
+  // Fetched once — tcscoordinatorusersmaster is a small, separate roster (not
+  // part of the users/memberRecords collection), keyed by phone number, so
+  // matching a member to it is a phone lookup rather than a field on the member.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'tcscoordinatorusersmaster'));
+        const phones = new Set();
+        snapshot.docs.forEach((docSnap) => {
+          if (docSnap.data()?.coordinator_type === 'TCS Coordinator') phones.add(docSnap.id);
+        });
+        if (!cancelled) setTcsCoordinatorPhones(phones);
+      } catch (error) {
+        console.error('Error loading TCS coordinators:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toDatePickerValue = (value) => {
     if (!value) return null;
@@ -190,11 +233,20 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         if (!Number.isFinite(age)) return false;
         if (age < ageRange[0] || age > ageRange[1]) return false;
       }
+      if (regionalPartnerFilter.length) {
+        const isActivePartner = !!member.is_regional_partner && member.regional_partner_status !== 'Inactive';
+        const isInactivePartner = !!member.is_regional_partner && member.regional_partner_status === 'Inactive';
+        const matchesActive = regionalPartnerFilter.includes('Active') && isActivePartner;
+        const matchesInactive = regionalPartnerFilter.includes('Inactive') && isInactivePartner;
+        if (!matchesActive && !matchesInactive) return false;
+      }
+      if (tcsCoordinatorOnly && !tcsCoordinatorPhones.has(last10Digits(member.phone))) return false;
       return true;
     });
   }, [
     members, categoryFilter, serviceFilter, rankFilter,
     stateFilter, cityFilter, retirementFilter, ageRange, ageBounds.min, ageBounds.max,
+    regionalPartnerFilter, tcsCoordinatorOnly, tcsCoordinatorPhones,
   ]);
 
   // Pass 2: apply date range on top of already-filtered set — avoids rescanning all 15k on date change
@@ -323,6 +375,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     setAgeRange([ageBounds.min, ageBounds.max]);
     setRegistrationDateFrom('');
     setRegistrationDateTo('');
+    setRegionalPartnerFilter([]);
+    setTcsCoordinatorOnly(false);
   };
 
   const createChartData = (counts, colors = [
@@ -795,6 +849,37 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           <div className="top-header-inner">
             <div className="filter-heading">
               <h1 style={{ margin: 0, fontSize: "30px", color: "#0f172a", fontWeight: 800 }}>Filters</h1>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                type="button"
+                style={toggleFilterBtnStyle(regionalPartnerFilter.includes('Active'))}
+                onClick={() =>
+                  setRegionalPartnerFilter((prev) =>
+                    prev.includes('Active') ? prev.filter((v) => v !== 'Active') : [...prev, 'Active']
+                  )
+                }
+              >
+                Regional Partner (Active)
+              </button>
+              <button
+                type="button"
+                style={toggleFilterBtnStyle(regionalPartnerFilter.includes('Inactive'))}
+                onClick={() =>
+                  setRegionalPartnerFilter((prev) =>
+                    prev.includes('Inactive') ? prev.filter((v) => v !== 'Inactive') : [...prev, 'Inactive']
+                  )
+                }
+              >
+                Regional Partner (Inactive)
+              </button>
+              <button
+                type="button"
+                style={toggleFilterBtnStyle(tcsCoordinatorOnly)}
+                onClick={() => setTcsCoordinatorOnly((prev) => !prev)}
+              >
+                TCS Coordinator
+              </button>
             </div>
             <button className="clear-btn" onClick={clearAllFilters}>
               Clear All

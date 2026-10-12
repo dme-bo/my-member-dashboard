@@ -186,6 +186,55 @@ function hrEmployeesDevApi() {
   }
 }
 
+function candidateStatusDevApi() {
+  const CANDIDATE_STATUS_API_URL = 'http://3.110.162.1:3001/api/external/candidate-status'
+
+  return {
+    name: 'candidate-status-dev-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'GET' || req.url !== '/api/candidate-status') {
+          return next()
+        }
+
+        res.setHeader('Content-Type', 'application/json')
+        try {
+          const env = loadEnv(server.config.mode, process.cwd(), '')
+          const apiKey = env.CANDIDATE_STATUS_API_KEY
+
+          if (!apiKey) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: 'Missing CANDIDATE_STATUS_API_KEY environment variable.' }))
+            return
+          }
+
+          const response = await fetch(CANDIDATE_STATUS_API_URL, {
+            method: 'GET',
+            headers: { 'x-api-key': apiKey },
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Candidate status API error (dev):', response.status, errorText)
+            res.statusCode = 502
+            res.end(JSON.stringify({ error: 'Failed to fetch candidate status.' }))
+            return
+          }
+
+          const data = await response.json()
+          const candidates = Array.isArray(data) ? data : data?.candidates || data?.data || []
+          res.statusCode = 200
+          res.end(JSON.stringify({ candidates }))
+        } catch (error) {
+          console.error('candidate-status (dev) error:', error)
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: 'Failed to fetch candidate status.' }))
+        }
+      })
+    },
+  }
+}
+
 function sendFollowupRemindersDevApi() {
   return {
     name: 'send-followup-reminders-dev-api',
@@ -348,6 +397,7 @@ export default defineConfig({
     allocationEmailDevApi(),
     whatsappDevApi(),
     hrEmployeesDevApi(),
+    candidateStatusDevApi(),
     firestoreDevApi(),
     sendFollowupRemindersDevApi(),
     sendAllocationSummaryDevApi(),
