@@ -11,12 +11,12 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import * as XLSX from "xlsx";
 import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
 import { fetchProjectApplicationRows } from "../utils/applicationSources";
+import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 
 const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
 
@@ -98,26 +98,6 @@ export default function TempStaffPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
 
-  // Helper: Format Date
-  const formatDateDDMMMYYYY = (dateInput) => {
-    if (!dateInput) return "-";
-    let date;
-    if (typeof dateInput === "string" && dateInput.includes("-")) {
-      date = new Date(dateInput + "T00:00:00");
-    } else if (dateInput.toDate) {
-      date = dateInput.toDate();
-    } else if (dateInput instanceof Date) {
-      date = dateInput;
-    } else {
-      return "-";
-    }
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -250,11 +230,7 @@ export default function TempStaffPage() {
           return {
             id: doc.id,
             date: data.createdAt
-              ? data.createdAt.toDate().toLocaleDateString("en-IN", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
+              ? formatDateDDMMMYYYY(data.createdAt)
               : "Unknown",
             contactPerson: data.contactPerson || selectedMember.full_name,
             notes: data.notes || "-",
@@ -447,7 +423,7 @@ export default function TempStaffPage() {
         return {
           id: doc.id,
           date: d.createdAt
-            ? d.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            ? formatDateDDMMMYYYY(d.createdAt)
             : "Unknown",
           contactPerson: d.contactPerson || selectedMember.full_name,
           notes: d.notes || "-",
@@ -465,7 +441,7 @@ export default function TempStaffPage() {
   };
 
   // Export function
-  const handleExportXLSX = () => {
+  const handleExportXLSX = async () => {
     try {
       const dataToExport = (viewMode === "applications" ? membersData : coordinatorsData).map((item) => {
         if (viewMode === "applications") {
@@ -489,6 +465,7 @@ export default function TempStaffPage() {
         }
       });
 
+      const XLSX = await import("xlsx");
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Data");

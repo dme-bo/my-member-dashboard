@@ -10,12 +10,12 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import * as XLSX from "xlsx";
 import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
 import { fetchJobApplicationRows } from "../utils/applicationSources";
+import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 
 const RECRUITMENT_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -185,26 +185,6 @@ export default function RecruitmentPage() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Format Date Helper
-  const formatDateDDMMMYYYY = (dateInput) => {
-    if (!dateInput) return "-";
-    let date;
-    if (typeof dateInput === "string" && dateInput.includes("-")) {
-      date = new Date(dateInput + "T00:00:00");
-    } else if (dateInput.toDate) {
-      date = dateInput.toDate();
-    } else if (dateInput instanceof Date) {
-      date = dateInput;
-    } else {
-      return "-";
-    }
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -279,11 +259,7 @@ export default function RecruitmentPage() {
           return {
             id: doc.id,
             date: data.createdAt
-              ? data.createdAt.toDate().toLocaleDateString("en-IN", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
+              ? formatDateDDMMMYYYY(data.createdAt)
               : "Unknown",
             contactPerson: data.contactPerson || selectedCandidate.full_name || "Candidate",
             notes: data.notes || "-",
@@ -341,7 +317,7 @@ export default function RecruitmentPage() {
   const filterLabels = { city: "City", client: "Client", profile: "Profile", source: "Source", status: "Status" };
 
   // Export to Excel function
-  const handleExportXLSX = () => {
+  const handleExportXLSX = async () => {
     if (filteredCandidates.length === 0) {
       showToast("No data to export", "error");
       return;
@@ -361,6 +337,7 @@ export default function RecruitmentPage() {
       "Applied Date": formatDateDDMMMYYYY(candidate.created_time),
     }));
 
+    const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     
     // Auto-size columns
@@ -581,7 +558,7 @@ export default function RecruitmentPage() {
         return {
           id: doc.id,
           date: d.createdAt
-            ? d.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            ? formatDateDDMMMYYYY(d.createdAt)
             : "Unknown",
           contactPerson: d.contactPerson || selectedCandidate.full_name || "Candidate",
           notes: d.notes || "-",

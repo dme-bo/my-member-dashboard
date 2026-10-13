@@ -4,6 +4,7 @@ import { FaTimes, FaPlus, FaExclamationTriangle, FaRegThumbsUp, FaCommentDots, F
 import { collection, collectionGroup, db, addDoc, getDocs, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail, getMemberCategory } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 
 const INTERACTION_TYPES = ["Lead or Project Related", "General"];
 const INTERACTION_RATINGS = ["Good", "Bad", "Neutral"];
@@ -40,10 +41,7 @@ const createEmptyForm = () => ({
   details: "",
 });
 
-const formatDateShort = (date) => {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-};
+const formatDateShort = (date) => formatDateDDMMMYYYY(date instanceof Date ? date : null);
 
 // getDocs(collectionGroup(db, "interactions")) below scans every user's
 // interactions subcollection — a full scan across ~12k users. React Router

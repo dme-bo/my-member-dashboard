@@ -16,6 +16,7 @@ import SkeletonLoader from "../components/SkeletonLoader";
 import LocationAutocompleteInput from "../components/LocationAutocompleteInput";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
+import { formatDateText } from "../utils/dateFormat";
 
 const COLLECTION_NAME = "communityjobs";
 const MAX_UPLOAD_PHOTOS = 6;
@@ -369,7 +370,7 @@ export default function CommunityJobsPage() {
         <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_location}>
           {job.job_location || "Location not specified"}
         </td>
-        <td style={{ padding: "16px", color: "#6b7280", fontSize: "13px" }}>{job.job_postedon || "—"}</td>
+        <td style={{ padding: "16px", color: "#6b7280", fontSize: "13px" }}>{formatDateText(job.job_postedon, "—")}</td>
         <td style={{ padding: "16px", textAlign: "center" }}>
           <span
             style={{
@@ -525,7 +526,7 @@ export default function CommunityJobsPage() {
 
       {postedOnFilter && (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#eff6ff", color: "#1e40af", padding: "10px 18px", borderRadius: "10px", marginBottom: "16px", fontSize: "13px", fontWeight: "600" }}>
-          Showing jobs posted on {postedOnFilter}
+          Showing jobs posted on {formatDateText(postedOnFilter)}
           <button
             onClick={() => setPostedOnFilter("")}
             style={{ background: "none", border: "none", color: "#1e40af", textDecoration: "underline", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}
@@ -826,7 +827,7 @@ function CommunityJobFields({ form, updateField, readOnly }) {
         ) : (
           <ReadOnlyRow label="Link to Apply" value="" />
         )}
-        <ReadOnlyRow label="Posted On" value={form.job_postedon} />
+        <ReadOnlyRow label="Posted On" value={formatDateText(form.job_postedon, "")} />
         <ReadOnlyRow label="Status" value={form.job_status || "Closed"} />
       </div>
     );
@@ -1007,7 +1008,7 @@ function JobCard({ job, onView, onEdit, onArchive }) {
           {job.job_isdraft ? "Draft" : "Published"}
         </span>
         {isArchived && <span style={{ fontSize: "11.5px", fontWeight: "700", color: "#991b1b" }}>Archived</span>}
-        <span style={{ fontSize: "11.5px", color: "#9ca3af", marginLeft: "auto" }}>{job.job_postedon || "—"}</span>
+        <span style={{ fontSize: "11.5px", color: "#9ca3af", marginLeft: "auto" }}>{formatDateText(job.job_postedon, "—")}</span>
       </div>
       <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
         <button

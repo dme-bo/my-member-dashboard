@@ -12,8 +12,8 @@
 // of fetchProjectApplicationRows' result and returned as tcsRows instead of
 // projectRows, matching how RequirementsPage already treats TCS-run projects
 // as Temp Staffing rather than a generic Project.
-import { collectionGroup, db, doc, getDoc, getDocs } from "../firestoreClient";
-import { getMemberName, getMemberPhone, getMemberEmail, getMemberCategory } from "./memberFields";
+import { collectionGroup, db, doc, getDoc, getDocs, prefetchDocs } from "../firestoreClient";
+import { getMemberName, getMemberPhone, getMemberEmail, getMemberCategory, cleanCityName } from "./memberFields";
 
 export const TCS_COMPANY_NAME = "Tata Consultancy Services Pvt Ltd";
 
@@ -30,6 +30,14 @@ async function resolveApplicantProfile(uid) {
 // Shaped for RecruitmentPage's candidate rows.
 export async function fetchJobApplicationRows() {
   const appliedSnap = await getDocs(collectionGroup(db, "jobs_applied"));
+  // One batched read for every job + applicant doc the rows below resolve,
+  // instead of two getDoc round trips per application row.
+  await prefetchDocs(
+    appliedSnap.docs.flatMap((d) => {
+      const uid = d.ref.parent?.parent?.id;
+      return uid ? [`jobsmaster/${d.id}`, `users/${uid}`] : [];
+    })
+  );
   const rows = await Promise.all(
     appliedSnap.docs.map(async (appliedDoc) => {
       const uid = appliedDoc.ref.parent?.parent?.id;
@@ -47,8 +55,8 @@ export async function fetchJobApplicationRows() {
         full_name: getMemberName(profile) || "Unnamed",
         contact_number: getMemberPhone(profile) || "-",
         email_id: getMemberEmail(profile) || "-",
-        city: profile.city || "-",
-        current_location: profile.city || "-",
+        city: cleanCityName(profile.city) || "-",
+        current_location: cleanCityName(profile.city) || "-",
         profile: jobData.job_title || "Untitled Job",
         client: jobData.job_company || "-",
         source: "App - Job Posting",
@@ -72,6 +80,12 @@ export async function fetchJobApplicationRows() {
 // TCS application rows (tcsRows) — split by project_company.
 export async function fetchProjectApplicationRows() {
   const appliedSnap = await getDocs(collectionGroup(db, "projects_applied"));
+  await prefetchDocs(
+    appliedSnap.docs.flatMap((d) => {
+      const uid = d.ref.parent?.parent?.id;
+      return uid ? [`projectsmaster/${d.id}`, `users/${uid}`] : [];
+    })
+  );
   const resolved = await Promise.all(
     appliedSnap.docs.map(async (appliedDoc) => {
       const uid = appliedDoc.ref.parent?.parent?.id;
@@ -89,7 +103,7 @@ export async function fetchProjectApplicationRows() {
       const fullName = getMemberName(profile) || "Unnamed";
       const phone = getMemberPhone(profile) || "-";
       const email = getMemberEmail(profile) || "-";
-      const city = profile.city || appliedData.applied_city || "-";
+      const city = cleanCityName(profile.city) || appliedData.applied_city || "-";
       const projectTitle = projectData.project_title || "Untitled Project";
       const status = projectData.project_status === "Active" ? "Active" : "Inactive";
 

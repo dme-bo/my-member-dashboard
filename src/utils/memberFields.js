@@ -6,17 +6,46 @@ const toText = (value) => {
 const toTitleCase = (text) =>
   text.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase());
 
-const normalizeLookupKey = (key) => String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+// Memoized: record keys repeat across every member (~120 distinct names), and
+// getRecordValue normalizes every key of a record on each lookup — uncached this
+// was the dominant client-side cost of normalizing ~14k members on load.
+const normalizedKeyCache = new Map();
+const normalizeLookupKey = (key) => {
+  const cached = normalizedKeyCache.get(key);
+  if (cached !== undefined) return cached;
+  const normalized = String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  normalizedKeyCache.set(key, normalized);
+  return normalized;
+};
+
+// Per-record index of normalized key -> first actual key (same "first match
+// wins" result as scanning Object.keys in order). Records are never mutated in
+// place after creation, and the WeakMap entry dies with the record.
+const keyIndexCache = new WeakMap();
 
 const getRecordValue = (record, key) => {
   if (!record) return undefined;
   const targetKey = normalizeLookupKey(key);
-  for (const actualKey of Object.keys(record)) {
-    if (normalizeLookupKey(actualKey) === targetKey) {
-      return record[actualKey];
+
+  if (typeof record !== "object") {
+    for (const actualKey of Object.keys(record)) {
+      if (normalizeLookupKey(actualKey) === targetKey) return record[actualKey];
     }
+    return undefined;
   }
-  return undefined;
+
+  let index = keyIndexCache.get(record);
+  if (!index) {
+    index = new Map();
+    for (const actualKey of Object.keys(record)) {
+      const normalized = normalizeLookupKey(actualKey);
+      if (!index.has(normalized)) index.set(normalized, actualKey);
+    }
+    keyIndexCache.set(record, index);
+  }
+
+  const matchedKey = index.get(targetKey);
+  return matchedKey === undefined ? undefined : record[matchedKey];
 };
 
 const firstPresent = (record, keys) => {
@@ -125,8 +154,39 @@ export const getMemberEmail = (record) =>
 export const getMemberState = (record) =>
   pickMemberText(record, ["state", "State"]);
 
+// Known misspellings of real cities, keyed by lowercased/space-collapsed text.
+// Deliberately a short hand-checked list: edit-distance matching would wrongly
+// merge distinct cities (Kanpur/Kannur, Patna/Satna, Jaipur/Raipur).
+const CITY_ALIASES = {
+  gaziabad: "Ghaziabad",
+  bagpat: "Baghpat",
+  "murad nagar": "Muradnagar",
+  "modi nagar": "Modinagar",
+};
+
+const titleCaseCity = (text) =>
+  text.toLowerCase().replace(/(^|[\s.-])([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
+
+// Display/filter cleanup for a stored city. Never invents or removes a city:
+// a blank/null city is returned as-is ("" ), and anything that isn't one of
+// the safe fixes below (stray spaces/trailing punctuation, ALL-CAPS, a listed
+// misspelling) comes back exactly as stored.
+export const cleanCityName = (value) => {
+  const text = toText(value);
+  if (!text) return text;
+
+  let city = text.replace(/\s+/g, " ").replace(/^[\s,.;:–-]+|[\s,.;:–-]+$/g, "");
+  if (!city) return text;
+
+  // ALL-CAPS words only (skip 3-letter-or-shorter codes and mixed symbols like "J &K").
+  // The vowel check keeps abbreviations like "KRNT" as stored.
+  if (city.length > 3 && /^[A-Z][A-Z\s.'-]+$/.test(city) && /[AEIOU]/.test(city)) city = titleCaseCity(city);
+  
+  return CITY_ALIASES[city.toLowerCase()] || city;
+};
+
 export const getMemberCity = (record) =>
-  pickMemberText(record, ["city", "City"]);
+  cleanCityName(pickMemberText(record, ["city", "City"]));
 
 export const getMemberService = (record) =>
   pickMemberText(record, ["service", "Service"]);

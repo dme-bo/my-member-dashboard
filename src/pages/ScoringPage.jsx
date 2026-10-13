@@ -10,17 +10,16 @@ import {
   computeCurrentMonthTaggingScores,
   TAGGING_GRACE_DAYS,
 } from "../utils/scoring";
+import { formatDateDDMMMYYYY, formatMonthYear } from "../utils/dateFormat";
 
 const CONFIG_DOC = doc(db, "config", "scoring");
 const DEFAULT_TARGET = 2275;
 
-const MONTH_FORMAT = { month: "short", year: "numeric" };
-const DATE_FORMAT = { day: "2-digit", month: "short", year: "numeric" };
 
 function formatRange(range) {
   const lastMonthInRange = new Date(range.end.getFullYear(), range.end.getMonth() - 1, 1);
-  const startLabel = range.start.toLocaleDateString("en-IN", MONTH_FORMAT);
-  const endLabel = lastMonthInRange.toLocaleDateString("en-IN", MONTH_FORMAT);
+  const startLabel = formatMonthYear(range.start);
+  const endLabel = formatMonthYear(lastMonthInRange);
   return `${startLabel} – ${endLabel}`;
 }
 
@@ -199,7 +198,7 @@ export default function ScoringPage({ memberRecords = [], membersLoading = false
                   <tr key={row.member.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                     <td style={tdStyle}>{getMemberName(row.member)}</td>
                     <td style={tdStyle}>{getMemberPhone(row.member)}</td>
-                    <td style={tdStyle}>{row.regDate.toLocaleDateString("en-IN", DATE_FORMAT)}</td>
+                    <td style={tdStyle}>{formatDateDDMMMYYYY(row.regDate)}</td>
                     <td style={tdStyle}>{row.daysSinceRegistration}</td>
                     <td style={tdStyle}>
                       <span style={{

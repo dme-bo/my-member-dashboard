@@ -14,6 +14,7 @@ import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
+import { formatDateDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 
 const AGENT_FILTER_LABELS = { city: "City", district: "District", state: "State", rating: "Rating" };
 const AGENT_GROUP_BY_OPTIONS = [
@@ -41,26 +42,6 @@ export default function PartnerAgentListPage() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Format Date Helper
-  const formatDateDDMMMYYYY = (dateInput) => {
-    if (!dateInput) return "-";
-    let date;
-    if (typeof dateInput === "string" && dateInput.includes("-")) {
-      date = new Date(dateInput + "T00:00:00");
-    } else if (dateInput.toDate) {
-      date = dateInput.toDate();
-    } else if (dateInput instanceof Date) {
-      date = dateInput;
-    } else {
-      return "-";
-    }
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -240,7 +221,7 @@ export default function PartnerAgentListPage() {
           return {
             id: doc.id,
             date: data.createdAt
-              ? data.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+              ? formatDateDDMMMYYYY(data.createdAt)
               : "Unknown",
             contactPerson: data.contactPerson || selectedAgent.full_name,
             notes: data.notes || "-",
@@ -324,7 +305,7 @@ export default function PartnerAgentListPage() {
         return {
           id: doc.id,
           date: d.createdAt
-            ? d.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            ? formatDateDDMMMYYYY(d.createdAt)
             : "Unknown",
           contactPerson: d.contactPerson || selectedAgent.full_name,
           notes: d.notes || "-",
@@ -664,7 +645,7 @@ export default function PartnerAgentListPage() {
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>District</td><td>{selectedAgent.district || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>State</td><td>{selectedAgent.state || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Rating</td><td>{selectedAgent.rating || "-"}</td></tr>
-                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Registration Date</td><td>{selectedAgent.registration_date || "-"}</td></tr>
+                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Registration Date</td><td>{formatDateText(selectedAgent.registration_date)}</td></tr>
                     </tbody>
                   </table>
                 )}

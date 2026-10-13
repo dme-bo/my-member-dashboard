@@ -22,6 +22,7 @@ import {
 import { collection, db, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 
 const COLLECTION_NAME = "trainingsessions";
 const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
@@ -65,9 +66,7 @@ const todayStr = () => {
 
 const formatDateDisplay = (dateStr) => {
   if (!dateStr) return "-";
-  const date = new Date(`${dateStr}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDateDDMMMYYYY(dateStr, dateStr);
 };
 
 // Trainees are stored as {id, name, phone}; older sessions may still have plain name strings.
@@ -1046,7 +1045,7 @@ Please don't miss it — we look forward to your participation!`;
             type="button"
             className={`training-reminder-btn ${session.whatsappReminderSent ? "sent" : "pending"}`}
             onClick={() => openReminderModal(session, "whatsappReminderSent")}
-            title={session.whatsappReminderSentAt ? `Last sent ${new Date(session.whatsappReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a reminder"}
+            title={session.whatsappReminderSentAt ? `Last sent ${formatDateTimeDDMMMYYYY(session.whatsappReminderSentAt)} — click to review recipients` : "Click to review registered trainees and send a reminder"}
           >
             <FaWhatsapp size={11} />
             WhatsApp Reminder
@@ -1055,7 +1054,7 @@ Please don't miss it — we look forward to your participation!`;
             type="button"
             className={`training-reminder-btn ${session.whatsappLastReminderSent ? "sent" : "pending"}`}
             onClick={() => openReminderModal(session, "whatsappLastReminderSent")}
-            title={session.whatsappLastReminderSentAt ? `Last sent ${new Date(session.whatsappLastReminderSentAt).toLocaleString("en-IN")} — click to review recipients` : "Click to review registered trainees and send a final reminder"}
+            title={session.whatsappLastReminderSentAt ? `Last sent ${formatDateTimeDDMMMYYYY(session.whatsappLastReminderSentAt)} — click to review recipients` : "Click to review registered trainees and send a final reminder"}
           >
             <FaWhatsapp size={11} />
             WhatsApp Last Reminder
@@ -2248,8 +2247,8 @@ Please don't miss it — we look forward to your participation!`;
                       <div><strong>Location:</strong> {selectedWorkshop.workshop_location || "-"}</div>
                       <div><strong>Speakers:</strong> {selectedWorkshop.workshop_speakers || "-"}</div>
                       <div>
-                        <strong>Workshop Dates:</strong> {selectedWorkshop.workshop_start_date || "-"}
-                        {selectedWorkshop.workshop_end_date ? ` to ${selectedWorkshop.workshop_end_date}` : ""}
+                        <strong>Workshop Dates:</strong> {formatDateText(selectedWorkshop.workshop_start_date)}
+                        {selectedWorkshop.workshop_end_date ? ` to ${formatDateText(selectedWorkshop.workshop_end_date)}` : ""}
                       </div>
                       {selectedWorkshop.workshop_website && (
                         <div>
@@ -2560,7 +2559,7 @@ Please don't miss it — we look forward to your participation!`;
                 </button>
                 {documentsSession.emailSentAt && (
                   <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", textAlign: "center" }}>
-                    Last sent {new Date(documentsSession.emailSentAt).toLocaleString("en-IN")}
+                    Last sent {formatDateTimeDDMMMYYYY(documentsSession.emailSentAt)}
                   </div>
                 )}
               </div>

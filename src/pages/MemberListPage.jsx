@@ -3,13 +3,12 @@ import React, { useState, useMemo, useEffect, useRef, useTransition, useCallback
 import * as ReactWindow from "react-window";
 const List = ReactWindow.FixedSizeList;
 const VariableList = ReactWindow.VariableSizeList;
-import { collection, collectionGroup, db, doc, getDocs, query, serverTimestamp, updateDoc } from "../firestoreClient";
+import { collection, collectionGroup, db, doc, getDocs, query, select, serverTimestamp, updateDoc } from "../firestoreClient";
 import DualRangeSlider from "../components/DualRangeSlider";
 import FilterAccordionList from "../components/FilterAccordionList";
 import SkeletonLoader from "../components/SkeletonLoader";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import OdooSearchBar from "../components/OdooSearchBar";
-import * as XLSX from "xlsx"; // ← Required for Excel export
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -513,7 +512,15 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           return;
         }
 
-        const snapshot = await getDocs(collection(db, "projectusersmaster"));
+        const snapshot = await getDocs(
+          query(
+            collection(db, "projectusersmaster"),
+            select(
+              "phone_number", "phone", "mobile", "contact_number", "mobile_number",
+              "projects", "Projects", "project", "Project"
+            )
+          )
+        );
         const phoneToProjects = {};
         const projectSet = new Set();
 
@@ -564,7 +571,12 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           return;
         }
 
-        const snapshot = await getDocs(query(collectionGroup(db, "interactions")));
+        const snapshot = await getDocs(
+          query(
+            collectionGroup(db, "interactions"),
+            select("ratingType", "workRating", "boRating", "referrerRating")
+          )
+        );
         const ratedIds = new Set();
 
         snapshot.docs.forEach((interactionDoc) => {
@@ -1291,7 +1303,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   }, [tagsPopover]);
 
   // Export to Excel (XLSX)
-  const handleExportXLSX = () => {
+  const handleExportXLSX = async () => {
     const dataToExport = filteredMembers.map((member) => ({
       Name: getMemberName(member),
       Mobile: getMemberPhone(member) || "",
@@ -1308,6 +1320,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       "Placement Status": member.isPlaced ? "Placed" : "Active",
     }));
 
+    const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
     // Auto-size columns

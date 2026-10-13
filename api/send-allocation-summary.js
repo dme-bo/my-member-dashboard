@@ -26,6 +26,7 @@ const DEFAULT_RECIPIENTS = [
   "tcs@briskolive.com",
   "operations.head@briskolive.com",
   "staffing.manager@briskolive.com",
+  "delivery.executive@briskolive.com",
 ].join(", ");
 
 const formatDate = (date) =>

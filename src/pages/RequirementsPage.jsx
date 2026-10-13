@@ -29,9 +29,9 @@ import {
   doc,
 } from "../firestoreClient";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
 import { normalizeMemberRecord, getMemberCategory } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 
 // Projects run by TCS are shown/filtered as "Temp Staffing" instead of
 // "Project" in this dashboard — they still live in `projectsmaster`, only
@@ -839,7 +839,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       Compensation: req.salary,
       Allocated: allocatedCounts[req.id] || 0,
       Status: req.status === "active" ? "Open" : "Closed",
-      PostedOn: req.postedOn,
+      PostedOn: formatDateText(req.postedOn, "—"),
     }));
     const csv = Papa.unparse(csvData);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -852,13 +852,13 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   // Excel (not CSV) so Excel doesn't mangle long phone numbers into
   // scientific notation or garble the "—" placeholder via encoding guesses —
   // same approach already used for exports on the Members/Projects/etc pages.
-  const exportApplicantsToXLSX = () => {
+  const exportApplicantsToXLSX = async () => {
     const dataToExport = applicants.map((app, idx) => {
       const form = app.parsedForm ?? {};
       const profile = app.profile ?? members.find((m) => m.id === app.userId) ?? null;
       const location = [profile?.city, profile?.state].filter(Boolean).join(", ") || form.personalInfo?.location || "—";
       const appliedAt = app.applied_at?.toDate
-        ? app.applied_at.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+        ? formatDateDDMMMYYYY(app.applied_at)
         : "—";
       return {
         "Sr No": idx + 1,
@@ -873,6 +873,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       };
     });
 
+    const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
     // Auto-size columns
@@ -902,7 +903,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     const job = requirementsData.find((j) => j.id === alloc.jobId);
     const member = members.find((m) => m.id === alloc.userId) || {};
     const allocatedOn = alloc.allocatedAt?.toDate
-      ? alloc.allocatedAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      ? formatDateDDMMMYYYY(alloc.allocatedAt)
       : "—";
     return {
       "Sr No": idx + 1,
@@ -910,7 +911,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       Email: member.email || "—",
       Mobile: member.phone || alloc.phone || "—",
       Gender: member.gender || "—",
-      "Date of Birth": member.dateofbirth || "—",
+      "Date of Birth": formatDateText(member.dateofbirth, "—"),
       Category: getMemberCategory(member) || member.category || "—",
       Service: member.service || "—",
       Rank: member.rank || "—",
@@ -943,13 +944,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     };
   };
 
-  const exportAllocatedMembersToXLSX = (allocList, fileNameBase) => {
+  const exportAllocatedMembersToXLSX = async (allocList, fileNameBase) => {
     if (!allocList || allocList.length === 0) {
       showToast("No allocated members to export.", "error");
       return;
     }
 
     const dataToExport = allocList.map((alloc, idx) => buildAllocatedMemberRow(alloc, idx));
+    const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
     const range = XLSX.utils.decode_range(worksheet["!ref"]);
@@ -1412,7 +1414,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               <strong>Compensation:</strong> {selectedReq.salary}
             </p>
             <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
-              <strong>Posted On:</strong> {selectedReq.postedOn}
+              <strong>Posted On:</strong> {formatDateText(selectedReq.postedOn, "—")}
             </p>
             {selectedReq.benefits && (
               <p style={{ fontSize: "16px", color: "#4b5563", marginBottom: "8px" }}>
@@ -2832,7 +2834,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     const role = form.jobInsights?.targetRole ?? form.personalInfo?.location ?? "";
                     const exp = form.totalYearsExperience ?? "";
                     const appliedAt = app.applied_at?.toDate
-                      ? app.applied_at.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                      ? formatDateDDMMMYYYY(app.applied_at)
                       : "—";
                     const isSelected = selectedApplicant?._key === app._key;
 
@@ -2872,9 +2874,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 const edu = form.education ?? [];
                 const projs = form.projects ?? [];
                 const insights = form.jobInsights ?? {};
-                const appliedAt = selectedApplicant.applied_at?.toDate
-                  ? selectedApplicant.applied_at.toDate().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
-                  : "—";
+                const appliedAt = formatDateTimeDDMMMYYYY(selectedApplicant.applied_at, "—");
 
                 const Section = ({ title, children }) => (
                   <div style={{ marginBottom: "20px" }}>

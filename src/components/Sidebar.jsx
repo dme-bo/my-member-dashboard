@@ -1,4 +1,5 @@
 // src/components/Sidebar.jsx
+import { memo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
 // Icons from react-icons (feel free to choose different ones)
@@ -24,7 +25,7 @@ import {
   FaTags              // Bulk Tag Upload
 } from "react-icons/fa";
 
-export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
+function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
   const location = useLocation();
   const isDashboardActive = location.pathname === "/";
   const isMemberListActive = location.pathname === "/memberlist";
@@ -170,3 +171,5 @@ export default function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }
     </aside>
   );
 }
+
+export default memo(Sidebar);

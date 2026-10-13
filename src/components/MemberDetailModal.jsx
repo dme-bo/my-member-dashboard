@@ -9,6 +9,7 @@ import {
   getDocs,
   doc,
   query,
+  select,
   orderBy,
   serverTimestamp,
   updateDoc,
@@ -18,6 +19,7 @@ import {
 } from "../firestoreClient";
 import { normalizeMemberRecord, getMemberName, getMemberPhone, getMemberEmail, getMemberCategory, parseMemberDate } from "../utils/memberFields";
 import SkeletonLoader from "./SkeletonLoader";
+import { formatDateDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 
 // Projects run by TCS are filed under projectsmaster like any other project,
 // but applicants should see them as a TCS application, not a generic one —
@@ -241,19 +243,6 @@ export default function MemberDetailModal({ member, onClose }) {
   });
 
 
-  // Helper: Format date to "27 Dec 2025"
-  const formatDateDDMMMYYYY = (dateInput) => {
-    if (!dateInput) return "-";
-
-    const date = parseMemberDate(dateInput);
-    if (!date) return "-";
-
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   // Inverse of the above, for pre-filling a <input type="date"> when editing
   // a saved interaction — uses local getters so it round-trips the same
@@ -397,11 +386,7 @@ export default function MemberDetailModal({ member, onClose }) {
               : "-";
 
           const interactionDate = data.createdAt
-            ? data.createdAt.toDate().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
+            ? formatDateDDMMMYYYY(data.createdAt)
             : "Unknown";
 
           return {
@@ -515,7 +500,7 @@ export default function MemberDetailModal({ member, onClose }) {
         const [jobsAppliedSnap, projectsAppliedSnap, workshopApplicantsSnap] = await Promise.all([
           getDocs(collection(db, "users", userId, "jobs_applied")),
           getDocs(collection(db, "users", userId, "projects_applied")),
-          getDocs(collectionGroup(db, "workshop_users_applied")),
+          getDocs(query(collectionGroup(db, "workshop_users_applied"), select("user_id", "uid", "userId"))),
         ]);
 
         const jobs = await Promise.all(
@@ -767,11 +752,7 @@ export default function MemberDetailModal({ member, onClose }) {
         : "-";
 
       const interactionDate = data.createdAt
-        ? data.createdAt.toDate().toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
+        ? formatDateDDMMMYYYY(data.createdAt)
         : "Unknown";
 
       return {
@@ -1120,7 +1101,7 @@ export default function MemberDetailModal({ member, onClose }) {
                 <div><strong>Email:</strong> {normalizedMember.email || "-"}</div>
                 <div><strong>Mobile:</strong> {phoneNumber || "-"}</div>
                 <div><strong>Gender:</strong> {normalizedMember.gender || "-"}</div>
-                <div><strong>Date of Birth:</strong> {normalizedMember.dateofbirth || "-"}</div>
+                <div><strong>Date of Birth:</strong> {formatDateText(normalizedMember.dateofbirth)}</div>
                 <div><strong>Current City:</strong> {normalizedMember.city || "-"}</div>
                 <div><strong>State:</strong> {normalizedMember.state || "-"}</div>
                 <div><strong>Country:</strong> {normalizedMember.country || "India"}</div>
@@ -1152,8 +1133,8 @@ export default function MemberDetailModal({ member, onClose }) {
                 <div><strong>Level:</strong> {normalizedMember.level || "-"}</div>
                 <div><strong>Trade:</strong> {normalizedMember.trade || "-"}</div>
                 <div><strong>Year of Commission:</strong> {normalizedMember.year_of_commission || "-"}</div>
-                <div><strong>Actual Retirement Date:</strong> {normalizedMember.actual_retirement_date || "-"}</div>
-                <div><strong>Planned Retirement Date:</strong> {normalizedMember.planned_retirement_date || "-"}</div>
+                <div><strong>Actual Retirement Date:</strong> {formatDateText(normalizedMember.actual_retirement_date)}</div>
+                <div><strong>Planned Retirement Date:</strong> {formatDateText(normalizedMember.planned_retirement_date)}</div>
               </div>
             )}
 
@@ -1347,7 +1328,7 @@ export default function MemberDetailModal({ member, onClose }) {
                                   <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
                                   <div style={{ fontSize: "12.5px", color: "#166534" }}>{app.organizer} · {app.status}</div>
                                 </div>
-                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>{app.date}</div>
+                                <div style={{ fontSize: "12.5px", color: "#6b7280" }}>{formatDateText(app.date, "—")}</div>
                               </div>
                             ))}
                           </div>
@@ -1391,7 +1372,7 @@ export default function MemberDetailModal({ member, onClose }) {
                   ) : "Not Uploaded"}
                 </div>
                 <div><strong>Member ID:</strong> {normalizedMember.member_id || "-"}</div>
-                <div><strong>Registration Date:</strong> {normalizedMember.registration_date || normalizedMember.entry_date || "-"}</div>
+                <div><strong>Registration Date:</strong> {formatDateText(normalizedMember.registration_date || normalizedMember.entry_date)}</div>
               </div>
             )}
 

@@ -10,12 +10,12 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import * as XLSX from "xlsx";
 import SkeletonLoader from "../components/SkeletonLoader";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
 import { fetchProjectApplicationRows } from "../utils/applicationSources";
+import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 
 const PROJECTS_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -72,26 +72,6 @@ export default function ProjectsPage() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Format Date Helper
-  const formatDateDDMMMYYYY = (dateInput) => {
-    if (!dateInput) return "-";
-    let date;
-    if (typeof dateInput === "string" && dateInput.includes("-")) {
-      date = new Date(dateInput + "T00:00:00");
-    } else if (dateInput.toDate) {
-      date = dateInput.toDate();
-    } else if (dateInput instanceof Date) {
-      date = dateInput;
-    } else {
-      return "-";
-    }
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -299,7 +279,7 @@ export default function ProjectsPage() {
           return {
             id: doc.id,
             date: data.createdAt
-              ? data.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+              ? formatDateDDMMMYYYY(data.createdAt)
               : "Unknown",
             contactPerson: data.contactPerson || selectedApp.full_name,
             notes: data.notes || "-",
@@ -384,7 +364,7 @@ export default function ProjectsPage() {
         return {
           id: doc.id,
           date: d.createdAt
-            ? d.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            ? formatDateDDMMMYYYY(d.createdAt)
             : "Unknown",
           contactPerson: d.contactPerson || selectedApp.full_name,
           notes: d.notes || "-",
@@ -402,7 +382,7 @@ export default function ProjectsPage() {
   };
 
   // Export function
-  const handleExportXLSX = () => {
+  const handleExportXLSX = async () => {
     try {
       const dataToExport = filteredApplications.map((app) => ({
         Name: app.name || "-",
@@ -413,6 +393,7 @@ export default function ProjectsPage() {
         "Date Applied": formatDateDDMMMYYYY(app.created_time) || "-",
       }));
 
+      const XLSX = await import("xlsx");
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Projects");

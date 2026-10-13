@@ -14,6 +14,7 @@ import {
 } from '@react-pdf/renderer';
 import { collection, db, getDocs, query, where, doc, getDoc, updateDoc } from '../firestoreClient';
 import SkeletonLoader from '../components/SkeletonLoader';
+import { formatDateText } from "../utils/dateFormat";
 
 // Default hyphenation breaks long words mid-syllable (e.g. "Unspeci-fied")
 // inside narrow table cells — wrapping whole words looks far cleaner.
@@ -842,7 +843,7 @@ export default function BriskOliveNewsletterApp() {
 
   const workshopOptions = workshops.map((w) => ({
     value: w.id,
-    label: `${w.workshop_title || 'Workshop'}${w.workshop_start_date ? ' • ' + w.workshop_start_date : ''}`,
+    label: `${w.workshop_title || 'Workshop'}${w.workshop_start_date ? ' • ' + formatDateText(w.workshop_start_date) : ''}`,
   }));
 
   const communityJobOptions = communityJobs.map((j) => ({

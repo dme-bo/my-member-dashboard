@@ -101,6 +101,12 @@ export function limit(n) {
   return { type: "limit", n };
 }
 
+// Field projection (server-side, via the admin SDK). Docs come back with only
+// these fields; use for large scans that read a handful of fields per doc.
+export function select(...fields) {
+  return { type: "select", fields };
+}
+
 export function startAfter(...values) {
   const resolved = values.map((v) => (v && v.__isDocSnapshot ? v.id : v));
   return { type: "startAfter", values: resolved };
@@ -175,27 +181,87 @@ export async function getDocs(ref) {
   return { docs, empty: result.empty, size: result.size, forEach: (fn) => docs.forEach(fn) };
 }
 
+// Short-lived single-doc cache. Two jobs: (1) concurrent/rapid reads of the same
+// doc share one request (list pages resolve the same job/project/user doc once
+// per application row), and (2) prefetchDocs() below can fill it from one batch
+// call. Kept to 10s so edits made elsewhere show up quickly, and any write made
+// through this client drops the affected entries immediately.
+const DOC_CACHE_TTL_MS = 10000;
+const docCache = new Map(); // path -> { at, promise }
+
+const dropCachedDoc = (path) => docCache.delete(path);
+
+// Entries only expire logically on read, so sweep stale ones once the map grows.
+function pruneDocCache() {
+  if (docCache.size < 1000) return;
+  const now = Date.now();
+  for (const [path, entry] of docCache) {
+    if (now - entry.at >= DOC_CACHE_TTL_MS) docCache.delete(path);
+  }
+}
+
+function cachedDocResult(path) {
+  const hit = docCache.get(path);
+  return hit && Date.now() - hit.at < DOC_CACHE_TTL_MS ? hit.promise : null;
+}
+
+// One round trip for many docs; later getDoc() calls for these paths are served
+// from the cache. Failures are non-fatal — getDoc() simply falls back to
+// fetching each doc itself.
+export async function prefetchDocs(paths) {
+  pruneDocCache();
+  const wanted = [...new Set(paths)].filter((path) => path && !cachedDocResult(path));
+  for (let i = 0; i < wanted.length; i += 300) {
+    const chunk = wanted.slice(i, i + 300);
+    const request = callApi({ action: "getDocsBatch", paths: chunk });
+    chunk.forEach((path) => {
+      const promise = request.then((res) => res.docs.find((d) => d.path === path));
+      promise.catch(() => {});
+      docCache.set(path, { at: Date.now(), promise });
+    });
+    try {
+      await request;
+    } catch (error) {
+      chunk.forEach((path) => dropCachedDoc(path));
+      console.warn("prefetchDocs failed (falling back to per-doc reads):", error);
+    }
+  }
+}
+
 export async function getDoc(ref) {
-  const result = await callApi({ action: "getDoc", path: ref.path });
+  let promise = cachedDocResult(ref.path);
+  if (!promise) {
+    pruneDocCache();
+    promise = callApi({ action: "getDoc", path: ref.path });
+    docCache.set(ref.path, { at: Date.now(), promise });
+    promise.catch(() => {
+      if (docCache.get(ref.path)?.promise === promise) dropCachedDoc(ref.path);
+    });
+  }
+  const result = await promise;
   const data = result.exists ? reviveTimestamps(result.data) : undefined;
   return { id: result.id, ref, exists: () => result.exists, data: () => data, __isDocSnapshot: true };
 }
 
 export async function addDoc(ref, data) {
   const result = await callApi({ action: "addDoc", path: ref.path, data });
+  dropCachedDoc(result.path);
   return makeDocRef(result.path);
 }
 
 export async function setDoc(ref, data, options) {
   await callApi({ action: "setDoc", path: ref.path, data, merge: !!options?.merge });
+  dropCachedDoc(ref.path);
 }
 
 export async function updateDoc(ref, data) {
   await callApi({ action: "updateDoc", path: ref.path, data });
+  dropCachedDoc(ref.path);
 }
 
 export async function deleteDoc(ref) {
   await callApi({ action: "deleteDoc", path: ref.path });
+  dropCachedDoc(ref.path);
 }
 
 // ---- Batch writes ----
@@ -214,6 +280,7 @@ export function writeBatch() {
     },
     async commit() {
       await callApi({ action: "batchWrite", ops });
+      ops.forEach((op) => dropCachedDoc(op.path));
     },
   };
 }

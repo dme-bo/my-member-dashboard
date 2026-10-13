@@ -24,6 +24,9 @@ function applyConstraints(ref, constraints, db) {
       query = query.orderBy(field, c.dir === "desc" ? "desc" : "asc");
     } else if (c.type === "limit") {
       query = query.limit(c.n);
+    } else if (c.type === "select") {
+      // Field projection: same reads/cost, but only the listed fields travel back.
+      query = query.select(...(c.fields || []));
     } else if (c.type === "startAfter") {
       query = query.startAfter(...(c.values || []));
     } else {
@@ -98,6 +101,25 @@ export async function handleFirestoreRequest(body, env) {
         id: snap.id,
         path: snap.ref.path,
         data: snap.exists ? marshalForClient(snap.data()) : null,
+      };
+    }
+    case "getDocsBatch": {
+      // N document reads in one round trip (admin getAll) — used to replace
+      // per-row getDoc loops. Missing docs come back with exists: false.
+      const paths = Array.isArray(body.paths) ? body.paths : null;
+      if (!paths || paths.length === 0) throw badRequest("Missing paths.");
+      if (paths.length > 500) throw badRequest("Too many paths (max 500).");
+      if (paths.some((p) => typeof p !== "string" || !p || p.split("/").length % 2 !== 0)) {
+        throw badRequest("Invalid document path.");
+      }
+      const snaps = await db.getAll(...paths.map((p) => db.doc(p)));
+      return {
+        docs: snaps.map((snap) => ({
+          exists: snap.exists,
+          id: snap.id,
+          path: snap.ref.path,
+          data: snap.exists ? marshalForClient(snap.data()) : null,
+        })),
       };
     }
     case "addDoc": {
