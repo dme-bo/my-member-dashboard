@@ -8,7 +8,9 @@ const CHIP_COLORS = ["#1976d2", "#7c3aed", "#0d9488", "#c2410c", "#be185d", "#4d
 
 const getChipColor = (index) => CHIP_COLORS[index % CHIP_COLORS.length];
 
-export default function OdooSearchBar({ value, onChange, placeholder = "Search...", chips = [] }) {
+export default function OdooSearchBar({ value, onChange, placeholder = "Search...", chips = [], variant = "default" }) {
+  // "boxed": the compact fixed-height field used on the Members list.
+  const boxed = variant === "boxed";
   return (
     <div
       style={{
@@ -18,9 +20,11 @@ export default function OdooSearchBar({ value, onChange, placeholder = "Search..
         gap: "6px",
         flex: 1,
         minWidth: "240px",
-        border: "1px solid #e2e8f0",
-        borderRadius: "8px",
-        padding: "7px 10px",
+        border: boxed ? "1px solid #dde1e7" : "1px solid #e2e8f0",
+        borderRadius: boxed ? "5px" : "8px",
+        padding: boxed ? "0 11px" : "7px 10px",
+        minHeight: boxed ? "29px" : undefined,
+        boxSizing: "border-box",
         background: "#fff",
       }}
     >
@@ -63,7 +67,7 @@ export default function OdooSearchBar({ value, onChange, placeholder = "Search..
         value={value}
         onChange={onChange}
         placeholder={chips.length ? "" : placeholder}
-        style={{ flex: 1, minWidth: "80px", border: "none", outline: "none", fontSize: "13.5px", color: "#1a2332", background: "transparent" }}
+        style={{ flex: 1, minWidth: "80px", border: "none", outline: "none", fontSize: boxed ? "12px" : "13.5px", color: "#1a2332", background: "transparent" }}
       />
     </div>
   );

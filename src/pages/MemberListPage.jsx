@@ -7,7 +7,8 @@ import { collection, collectionGroup, db, doc, getDocs, query, select, serverTim
 import DualRangeSlider from "../components/DualRangeSlider";
 import FilterAccordionList from "../components/FilterAccordionList";
 import SkeletonLoader from "../components/SkeletonLoader";
-import OdooViewToolbar from "../components/OdooViewToolbar";
+import OdooViewToolbar, { ListIcon, KanbanIcon, ChevronDownIcon } from "../components/OdooViewToolbar";
+import { boxedButtonStyle } from "../utils/uiStyles";
 import OdooSearchBar from "../components/OdooSearchBar";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import DatePicker from "react-datepicker";
@@ -26,6 +27,7 @@ import {
   parseMemberSkills,
   parseMemberDate,
 } from "../utils/memberFields";
+import { EMPTY_REQUIREMENT_DATA, loadRequirementApplicants } from "../utils/requirementApplicants";
 
 const toDatePickerValue = (value) => {
   if (!value) return null;
@@ -57,11 +59,14 @@ const parseDateBoundary = (value, endOfDay) => {
 const SUPPORTING_DATA_TTL_MS = 60_000;
 let projectLinksCache = null; // { timestamp, phoneToProjects, projectList }
 let ratedMembersCache = null; // { timestamp, ratedIds }
+
 let tagsCache = null; // { timestamp, tags }
 
 // ─── Virtual list constants ───────────────────────────────────────────────────
-const GRID_TEMPLATE = "1fr 130px 150px 130px 110px 120px 110px 200px 150px";
-const ROW_HEIGHT = 68;
+// checkbox | Name | Mobile | Category | Service | Rank | State | City | Tags | Regional Partner
+// Sized so every column fits at ~1000px of table width (Name takes the slack).
+const GRID_TEMPLATE = "36px minmax(110px, 1fr) 112px 84px 74px 58px 108px 92px 156px 114px";
+const ROW_HEIGHT = 42;
 const COL_HEADERS = ["Name", "Mobile", "Category", "Service", "Rank", "State", "City", "Tags", "Regional Partner"];
 
 // The vetting checklist reviewed before designating a member a Regional
@@ -168,9 +173,9 @@ const KANBAN_CARD_ROW_HEIGHT = 212;
 const KANBAN_CARD_MIN_WIDTH = 240;
 
 const cellStyle = {
-  padding: "0 14px",
-  fontSize: "13px",
-  color: "#475569",
+  padding: "0 10px",
+  fontSize: "12px",
+  color: "#5b6572",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -211,7 +216,7 @@ const GroupHeaderRow = React.memo(({ style, group, collapsed, onToggle }) => (
 ));
 
 const VirtualRow = React.memo(({ index, style, data }) => {
-  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal, collapsedGroups, onToggleGroup } = data;
+  const { items, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal, collapsedGroups, onToggleGroup, selectedIds, onToggleSelect } = data;
   const member = items[index];
 
   if (member.__type === "group") {
@@ -227,15 +232,24 @@ const VirtualRow = React.memo(({ index, style, data }) => {
         ...style,
         display: "grid",
         gridTemplateColumns: GRID_TEMPLATE,
-        borderBottom: "1px solid #f1f5f9",
+        borderBottom: "1px solid #eceff3",
         cursor: "pointer",
-        backgroundColor: index % 2 === 0 ? "#fff" : "#fafbfc",
+        backgroundColor: selectedIds?.has(member.id) ? "#f0f7ff" : "#fff",
         alignItems: "center",
         boxSizing: "border-box",
       }}
       onClick={() => onMemberClick(member)}
     >
-      <div style={{ ...cellStyle, fontWeight: 600, color: "#0f172a" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          aria-label={`Select ${member.__name || "member"}`}
+          checked={!!selectedIds?.has(member.id)}
+          onChange={() => onToggleSelect(member.id)}
+          style={{ width: "13px", height: "13px", cursor: "pointer", accentColor: "#1976d2" }}
+        />
+      </div>
+      <div style={{ ...cellStyle, fontWeight: 500, color: "#111827" }}>
         {member.__name || "—"}
       </div>
       <div style={cellStyle}>{member.phone_number || "—"}</div>
@@ -249,13 +263,13 @@ const VirtualRow = React.memo(({ index, style, data }) => {
           <span
             key={tag}
             title={tag}
-            style={{ display: "inline-flex", alignItems: "center", gap: "3px", maxWidth: "80px", padding: "3px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "11px", fontWeight: 600, flexShrink: 1, minWidth: 0 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "3px", maxWidth: "80px", padding: "2px 6px", borderRadius: "3px", background: "#eef2f7", color: "#475569", fontSize: "10.5px", fontWeight: 500, flexShrink: 1, minWidth: 0 }}
           >
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tag}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); openRemoveTagConfirm(member, tag); }}
-              style={{ width: "14px", height: "14px", borderRadius: "50%", border: "none", background: "#cbd5e1", color: "#0f172a", fontSize: "10px", cursor: "pointer", padding: 0, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              style={{ width: "12px", height: "12px", border: "none", background: "transparent", color: "#64748b", fontSize: "12px", cursor: "pointer", padding: 0, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
             >
               ×
             </button>
@@ -276,7 +290,7 @@ const VirtualRow = React.memo(({ index, style, data }) => {
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); openTagModal(member); }}
-          style={{ padding: "3px 8px", borderRadius: "999px", border: "1px solid #1976d2", background: "#e3f2fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap", flexShrink: 0 }}
+          style={{ padding: "2px 7px", borderRadius: "3px", border: "1px solid #cfd6df", background: "#fff", color: "#334155", fontWeight: 500, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap", flexShrink: 0 }}
         >
           + Tag
         </button>
@@ -288,9 +302,9 @@ const VirtualRow = React.memo(({ index, style, data }) => {
           style={
             member.is_regional_partner
               ? member.regional_partner_status === "Inactive"
-                ? { padding: "3px 10px", borderRadius: "999px", border: "1px solid #a16207", background: "#fef9c3", color: "#a16207", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
-                : { padding: "3px 10px", borderRadius: "999px", border: "1px solid #15803d", background: "#dcfce7", color: "#15803d", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
-              : { padding: "3px 10px", borderRadius: "999px", border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569", fontWeight: 700, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
+                ? { padding: "3px 9px", borderRadius: "3px", border: "1px solid #a16207", background: "#fef9c3", color: "#a16207", fontWeight: 600, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
+                : { padding: "3px 9px", borderRadius: "3px", border: "1px solid #15803d", background: "#dcfce7", color: "#15803d", fontWeight: 600, cursor: "pointer", fontSize: "11px", whiteSpace: "nowrap" }
+              : { padding: "3px 9px", borderRadius: "3px", border: "1px solid #bcd6f2", background: "#eef5fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" }
           }
         >
           {member.is_regional_partner ? "★ Regional Partner" : "Mark Partner"}
@@ -377,9 +391,161 @@ const KanbanRow = React.memo(({ index, style, data }) => {
   );
 });
 
+const FAVORITES_STORAGE_KEY = "memberListFavorites";
+
+// Matches OdooViewToolbar's own view-toggle button look (not exported from
+// there — exporting a non-component breaks that file's Fast Refresh).
+const viewButtonStyle = (active) => ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "28px",
+  height: "27px",
+  background: active ? "#e3f2fd" : "#fff",
+  border: "none",
+  color: active ? "#1976d2" : "#64748b",
+  cursor: "pointer",
+});
+
+// Reset Filters / Export.
+const headerButtonStyle = {
+  height: "29px",
+  padding: "0 12px",
+  background: "#fff",
+  border: "1px solid #dde1e7",
+  color: "#334155",
+  borderRadius: "5px",
+  cursor: "pointer",
+  fontWeight: 500,
+  fontSize: "12px",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+};
+
+const pagerButtonStyle = (disabled) => ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "26px",
+  height: "26px",
+  padding: 0,
+  borderRadius: "5px",
+  border: "1px solid #dde1e7",
+  background: disabled ? "#f8fafc" : "#fff",
+  color: disabled ? "#cbd5e1" : "#475569",
+  cursor: disabled ? "not-allowed" : "pointer",
+});
+
+const StarIcon = ({ filled }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
+);
+
+// Same bordered look as the Filters / Group By buttons beside it.
+const favoritesButtonStyle = (active) => boxedButtonStyle(active);
+
+// Odoo-style "Favorites" menu — saves the current search/filter/group-by
+// state under a name in localStorage, so staff can jump back to a search
+// they use often (e.g. "Unplaced ex-Army, Delhi NCR") without rebuilding it.
+function FavoritesMenu({ favorites, onApply, onDelete, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const submitSave = () => {
+    const trimmed = draftName.trim();
+    if (!trimmed) return;
+    onSave(trimmed);
+    setDraftName("");
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} style={favoritesButtonStyle(favorites.length > 0)}>
+        <StarIcon filled={favorites.length > 0} /> Favorites <ChevronDownIcon />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            right: 0,
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "8px",
+            boxShadow: "0 8px 24px rgba(15,23,42,0.14)",
+            width: "260px",
+            maxHeight: "min(70vh, 420px)",
+            overflowY: "auto",
+            zIndex: 50,
+          }}
+        >
+          {favorites.length === 0 ? (
+            <div style={{ padding: "14px", fontSize: "12.5px", color: "#94a3b8", fontStyle: "italic" }}>
+              No favorites saved yet.
+            </div>
+          ) : (
+            <div style={{ padding: "4px 0" }}>
+              {favorites.map((fav) => (
+                <div
+                  key={fav.id}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", fontSize: "13px" }}
+                >
+                  <span
+                    onClick={() => { onApply(fav); setOpen(false); }}
+                    style={{ flex: 1, color: "#334155", fontWeight: 500, cursor: "pointer" }}
+                  >
+                    {fav.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(fav.id)}
+                    title="Remove favorite"
+                    style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "15px", padding: "2px 6px", lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ borderTop: "1px solid #e5e7eb", padding: "10px 14px", display: "flex", gap: "8px" }}>
+            <input
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitSave()}
+              placeholder="Save current search as..."
+              style={{ flex: 1, minWidth: 0, padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12.5px" }}
+            />
+            <button
+              type="button"
+              onClick={submitSave}
+              style={{ padding: "6px 12px", borderRadius: "6px", border: "none", background: "#1976d2", color: "#fff", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MemberListPage({ onMemberClick, memberRecords = [], membersLoading = false }) {
   const pageShellStyle = {
-    padding: "20px",
+    padding: 0,
     maxWidth: "100%",
     width: "100%",
     margin: "0 auto",
@@ -416,6 +582,17 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [availableProjects, setAvailableProjects] = useState([]);
   const [memberProjectsByPhone, setMemberProjectsByPhone] = useState({});
   const [ratedMemberIds, setRatedMemberIds] = useState(() => new Set());
+  const [requirementData, setRequirementData] = useState(EMPTY_REQUIREMENT_DATA);
+  // Row checkboxes. Export downloads the ticked members when any are ticked.
+  const [selectedMemberIds, setSelectedMemberIds] = useState(() => new Set());
+  const toggleSelectMember = useCallback((id) => {
+    setSelectedMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const [selectedTags, setSelectedTags] = useState([]);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
@@ -441,6 +618,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     State: [],
     Education: [],
     Project: [],
+    Requirement: [],
     Status: "All",
     "Placement Status": "All",
     Experience: [],
@@ -450,6 +628,26 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "Is Tagged?": new URLSearchParams(window.location.search).get("tagged") === "yes" ? ["Yes"] : [],
     "Regional Partner": [],
   }));
+
+  // Saved search/filter presets — see FavoritesMenu above.
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (error) {
+      console.error("Error loading favorites:", error);
+      return [];
+    }
+  });
+
+  const persistFavorites = (next) => {
+    setFavorites(next);
+    try {
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.error("Error saving favorites:", error);
+    }
+  };
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
 
@@ -601,6 +799,19 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     void loadRatedMembers();
   }, []);
 
+  // "Requirement" filter: every job, project and TCS-run project (Temp Staff)
+  // that has at least one applicant, mapped to the members who applied to it.
+  // Shared loader (utils/requirementApplicants.js) — also used by the Dashboard.
+  useEffect(() => {
+    let cancelled = false;
+    loadRequirementApplicants()
+      .then((data) => {
+        if (!cancelled) setRequirementData(data);
+      })
+      .catch((error) => console.error("Error loading requirement filter data:", error));
+    return () => { cancelled = true; };
+  }, []);
+
   const memberIndex = useMemo(() => {
     // `member` is already normalized once in App.jsx's Layout (normalizeMemberRecord),
     // so full_name/phone_number/category/etc. are already direct properties here.
@@ -736,6 +947,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       State:            toSorted(stateSet),
       Education:        toSorted(educationSet),
       Project:          availableProjects.filter((p) => p !== "All"),
+      Requirement:      requirementData.labels,
       Status:           toSorted(statusSet),
       Tags:             Array.from(skillsSet).sort((a, b) => a.localeCompare(b)),
       "BO Tags":      Array.from(dataTagsSet).sort((a, b) => a.localeCompare(b)),
@@ -745,7 +957,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       "Is Tagged?":     ["Yes", "No"],
       "Regional Partner": ["Active", "Inactive"],
     };
-  }, [memberIndex, availableProjects]);
+  }, [memberIndex, availableProjects, requirementData]);
 
   const ageBounds = useMemo(() => {
     const ages = memberIndex.map((member) => member.age_years).filter((age) => Number.isFinite(age));
@@ -813,6 +1025,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         State: [],
         Education: [],
         Project: [],
+        Requirement: [],
         Status: "All",
         "Placement Status": "All",
         Experience: [],
@@ -827,6 +1040,38 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       setRegistrationDateTo("");
       setAgeRange([ageBounds.min, ageBounds.max]);
     });
+  };
+
+  const saveCurrentAsFavorite = (name) => {
+    const snapshot = {
+      id: Date.now().toString(36),
+      name,
+      searchTerm,
+      sidebarFilters,
+      retirementStatus,
+      registrationDateFrom,
+      registrationDateTo,
+      ageRange,
+      groupBy,
+    };
+    persistFavorites([...favorites, snapshot]);
+  };
+
+  const applyFavorite = (fav) => {
+    startTransition(() => {
+      setSearchTerm(fav.searchTerm || "");
+      setSidebarFilters(fav.sidebarFilters || {});
+      setRetirementStatus(fav.retirementStatus || "All");
+      setRegistrationDateFrom(fav.registrationDateFrom || "");
+      setRegistrationDateTo(fav.registrationDateTo || "");
+      setAgeRange(fav.ageRange || [ageBounds.min, ageBounds.max]);
+      setGroupBy(fav.groupBy || null);
+    });
+    setCurrentPage(1);
+  };
+
+  const deleteFavorite = (id) => {
+    persistFavorites(favorites.filter((f) => f.id !== id));
   };
 
   const parseExperienceRange = (range) => {
@@ -968,6 +1213,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
           continue;
         }
 
+        if (key === "Requirement") {
+          if (!values.some((v) => requirementData.membersByLabel.get(v)?.has(member.id))) {
+            matchesSidebar = false;
+          }
+          if (!matchesSidebar) break;
+          continue;
+        }
+
         const dbField = fieldMap[key];
         if (!dbField) continue;
         let memberValue;
@@ -995,7 +1248,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     });
 
     return list;
-  }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, retirementStatus, registrationDateFrom, registrationDateTo, ageRange, ageBounds.min, ageBounds.max]);
+  }, [memberIndex, debouncedSearchTerm, filterPlaced, sidebarFilters, requirementData, retirementStatus, registrationDateFrom, registrationDateTo, ageRange, ageBounds.min, ageBounds.max]);
 
   const totalItems = filteredMembers.length;
   const totalPages = rowsPerPage === Infinity ? 1 : Math.max(1, Math.ceil(totalItems / rowsPerPage));
@@ -1033,6 +1286,23 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   }, [groupedMembers, collapsedGroups]);
 
   const listSourceItems = groupBy ? groupedFlatItems : pageMembers;
+
+  // Header checkbox: ticks / unticks every member row currently listed.
+  const visibleMemberRows = useMemo(() => listSourceItems.filter((item) => item.__type !== "group"), [listSourceItems]);
+  const allVisibleSelected = visibleMemberRows.length > 0 && visibleMemberRows.every((member) => selectedMemberIds.has(member.id));
+  const someVisibleSelected = !allVisibleSelected && visibleMemberRows.some((member) => selectedMemberIds.has(member.id));
+  const toggleSelectAllVisible = () => {
+    setSelectedMemberIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleMemberRows.forEach((member) => next.delete(member.id));
+      else visibleMemberRows.forEach((member) => next.add(member.id));
+      return next;
+    });
+  };
+  const selectedVisibleCount = useMemo(
+    () => filteredMembers.reduce((count, member) => (selectedMemberIds.has(member.id) ? count + 1 : count), 0),
+    [filteredMembers, selectedMemberIds]
+  );
 
   const kanbanSourceItems = groupBy ? groupedFlatItems : filteredMembers;
 
@@ -1214,8 +1484,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
       openPartnerModal,
       collapsedGroups,
       onToggleGroup: toggleGroupCollapsed,
+      selectedIds: selectedMemberIds,
+      onToggleSelect: toggleSelectMember,
     }),
-    [listSourceItems, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal, collapsedGroups, toggleGroupCollapsed]
+    [listSourceItems, onMemberClick, openTagModal, openRemoveTagConfirm, openTagsPopover, openPartnerModal, collapsedGroups, toggleGroupCollapsed, selectedMemberIds, toggleSelectMember]
   );
 
   const kanbanRowItemData = useMemo(
@@ -1275,6 +1547,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     "City",
     "Education",
     "Project",
+    "Requirement",
     "Tags",
     "BO Tags",
     "Experience",
@@ -1304,7 +1577,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
 
   // Export to Excel (XLSX)
   const handleExportXLSX = async () => {
-    const dataToExport = filteredMembers.map((member) => ({
+    // Ticked rows (that are still in the filtered list) if any, otherwise everything filtered.
+    const selectedForExport = filteredMembers.filter((member) => selectedMemberIds.has(member.id));
+    const exportMembers = selectedForExport.length ? selectedForExport : filteredMembers;
+    const dataToExport = exportMembers.map((member) => ({
       Name: getMemberName(member),
       Mobile: getMemberPhone(member) || "",
       Email: getMemberEmail(member) || "",
@@ -1577,10 +1853,30 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         z-index: 10200;
       }
     `}</style>
-      {/* Header Card: search bar with filter/group chips, Filters/Group By/View, Total Badge, Export */}
-      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
+      {/* Header band: title/Reset+Export, then search+Filters/Group By/Favorites, then total count+pagination+view toggle */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e1e5ea", padding: "21px 22px 13px" }}>
+        {/* Row 1: title, Reset Filters + Export */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+            <h1 style={{ margin: 0, fontSize: "21px", fontWeight: 600, color: "#111827", letterSpacing: "-0.01em" }}>Members List</h1>
+            <span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 400 }}>{totalItems.toLocaleString()} Members</span>
+          </div>
+          <div style={{ display: "flex", gap: "7px" }}>
+            <button onClick={clearFilters} style={headerButtonStyle}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Reset Filters
+            </button>
+            <button onClick={handleExportXLSX} style={headerButtonStyle}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+          </div>
+        </div>
+
+        {/* Row 2: search, Filters / Group By / Favorites */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "7px", marginBottom: "14px" }}>
           <OdooSearchBar
+            variant="boxed"
             value={searchTerm}
             onChange={(e) => {
               const nextValue = e.target.value;
@@ -1592,90 +1888,36 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
             chips={filterChips}
           />
 
-          <OdooViewToolbar
-            quickFilters={quickFilters}
-            advancedContent={advancedFiltersPanel}
-            groupByOptions={MEMBER_GROUP_BY_OPTIONS}
-            groupBy={groupBy}
-            onGroupByChange={setGroupBy}
-            view={viewMode}
-            onViewChange={setViewMode}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: "7px", marginLeft: "auto" }}>
+            <OdooViewToolbar
+              variant="boxed"
+              quickFilters={quickFilters}
+              advancedContent={advancedFiltersPanel}
+              groupByOptions={MEMBER_GROUP_BY_OPTIONS}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              showViewToggle={false}
+            />
+            <FavoritesMenu
+              favorites={favorites}
+              onApply={applyFavorite}
+              onDelete={deleteFavorite}
+              onSave={saveCurrentAsFavorite}
+            />
+          </div>
+        </div>
 
-          {/* Total Members Badge */}
-          <span style={{ backgroundColor: "#e3f2fd", color: "#1565c0", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "700", whiteSpace: "nowrap", marginLeft: "auto", border: "1px solid #bbdefb" }}>
-            {totalItems.toLocaleString()} Members
+        {/* Row 3: breadcrumb, pagination range + view toggle */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+          <span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 400 }}>
+            {groupBy
+              ? `Grouped by ${MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`
+              : "All members"}
           </span>
 
-          {/* Export Button */}
-          <button
-            onClick={handleExportXLSX}
-            style={{
-              padding: "9px 18px",
-              backgroundColor: "white",
-              border: "1px solid #e2e8f0",
-              color: "#475569",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "13px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export
-          </button>
-        </div>
-      </div>
-
-      <div style={{ width: "100%", margin: "0", padding: "0" }} ref={kanbanContainerRef}>
-        <div style={{ border: "1px solid #eee", borderRadius: "8px", background: "#fff", overflow: "hidden" }}>
-          {viewMode === "list" && (
-            <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, background: "#1976d2", position: "sticky", top: 0, zIndex: 1 }}>
-              {COL_HEADERS.map((col) => (
-                <div key={col} style={{ padding: "12px 14px", color: "#fff", fontWeight: 700, fontSize: "12.5px", letterSpacing: "0.01em" }}>
-                  {col}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {filteredMembers.length === 0 ? (
-            <div style={{ padding: "48px 20px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
-              No members match your filters
-            </div>
-          ) : viewMode === "kanban" ? (
-            <VariableList
-              height={listHeight}
-              width="100%"
-              itemCount={kanbanRows.length}
-              itemSize={kanbanRowHeight}
-              itemData={kanbanRowItemData}
-              overscanCount={4}
-            >
-              {KanbanRow}
-            </VariableList>
-          ) : (
-            <List
-              height={listHeight}
-              width="100%"
-              itemCount={listSourceItems.length}
-              itemSize={ROW_HEIGHT}
-              itemData={virtualRowItemData}
-              overscanCount={6}
-            >
-              {VirtualRow}
-            </List>
-          )}
-
-          {/* Pagination footer — only meaningful for the flat, ungrouped list;
-              grouping/Kanban already show everything via virtualization. */}
-          {!groupBy && viewMode === "list" ? (
-            <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "12.5px", color: "#64748b" }}>Rows per page:</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            {!groupBy && viewMode === "list" ? (
+              <>
                 <select
                   value={rowsPerPage === Infinity ? "all" : rowsPerPage}
                   onChange={(e) => {
@@ -1683,37 +1925,127 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                     setRowsPerPage(value);
                     setCurrentPage(1);
                   }}
-                  style={{ padding: "4px 8px", borderRadius: "8px", border: "1.5px solid #e2e8f0", fontSize: "13px", background: "#fff", cursor: "pointer" }}
+                  style={{ height: "26px", padding: "0 4px", borderRadius: "5px", border: "1px solid #dde1e7", fontSize: "11.5px", color: "#334155", background: "#fff", cursor: "pointer" }}
                 >
                   <option value="all">All</option>
                   {[100, 500, 1000, 5000].map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
-                <button
-                  disabled={safeCurrentPage <= 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
-                  style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage <= 1 ? "#f1f5f9" : "#1976d2", color: safeCurrentPage <= 1 ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage <= 1 ? "not-allowed" : "pointer" }}
-                >
-                  ‹ Prev
-                </button>
-                <span style={{ fontSize: "13px", color: "#475569", fontWeight: 600, minWidth: "80px", textAlign: "center" }}>
-                  Page {safeCurrentPage} / {totalPages}
+                <span style={{ fontSize: "12px", color: "#111827", fontWeight: 500, whiteSpace: "nowrap", margin: "0 2px" }}>
+                  {rowsPerPage === Infinity
+                    ? `${totalItems.toLocaleString()} / ${totalItems.toLocaleString()}`
+                    : `${totalItems === 0 ? 0 : pageStart + 1}–${(pageStart + pageMembers.length).toLocaleString()} / ${totalItems.toLocaleString()}`}
                 </span>
                 <button
+                  type="button"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  title="Previous page"
+                  style={pagerButtonStyle(safeCurrentPage <= 1)}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                </button>
+                <button
+                  type="button"
                   disabled={safeCurrentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => p + 1)}
-                  style={{ padding: "4px 14px", borderRadius: "8px", border: "1.5px solid #e2e8f0", background: safeCurrentPage >= totalPages ? "#f1f5f9" : "#1976d2", color: safeCurrentPage >= totalPages ? "#94a3b8" : "#fff", fontWeight: 600, fontSize: "13px", cursor: safeCurrentPage >= totalPages ? "not-allowed" : "pointer" }}
+                  title="Next page"
+                  style={pagerButtonStyle(safeCurrentPage >= totalPages)}
                 >
-                  Next ›
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
                 </button>
-              </div>
+              </>
+            ) : (
+              <span style={{ fontSize: "12px", color: "#111827", fontWeight: 500 }}>
+                {totalItems.toLocaleString()} member{totalItems !== 1 ? "s" : ""}
+              </span>
+            )}
+
+            <div style={{ display: "flex", gap: "1px", background: "#dde1e7", border: "1px solid #dde1e7", borderRadius: "5px", overflow: "hidden", marginLeft: "2px" }}>
+              <button type="button" onClick={() => setViewMode("list")} title="List view" style={viewButtonStyle(viewMode === "list")}>
+                <ListIcon />
+              </button>
+              <button type="button" onClick={() => setViewMode("kanban")} title="Kanban view" style={viewButtonStyle(viewMode === "kanban")}>
+                <KanbanIcon />
+              </button>
             </div>
-          ) : (
-            <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
-              Showing all {totalItems.toLocaleString()} matching member{totalItems !== 1 ? "s" : ""}
-            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "21px 22px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px 12px" }}>
+          <h2 style={{ margin: 0, fontSize: "12.5px", fontWeight: 600, color: "#111827" }}>Members Master List</h2>
+          {!groupBy && viewMode === "list" && (
+            <span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 400 }}>
+              {pageMembers.length.toLocaleString()} member{pageMembers.length !== 1 ? "s" : ""} on this page · Page {safeCurrentPage} of {totalPages}
+              {selectedVisibleCount > 0 ? ` · ${selectedVisibleCount.toLocaleString()} selected` : ""}
+            </span>
           )}
+        </div>
+
+        <div style={{ width: "100%", margin: "0", padding: "0" }} ref={kanbanContainerRef}>
+          <div style={{ border: "1px solid #dde3ea", borderRadius: "5px", background: "#fff", overflow: "hidden" }}>
+            {viewMode === "list" && (
+              <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, background: "#1976d2", position: "sticky", top: 0, zIndex: 1, alignItems: "center", height: "34px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all listed members"
+                    checked={allVisibleSelected}
+                    ref={(el) => { if (el) el.indeterminate = someVisibleSelected; }}
+                    onChange={toggleSelectAllVisible}
+                    style={{ width: "13px", height: "13px", cursor: "pointer", accentColor: "#ffffff" }}
+                  />
+                </div>
+                {COL_HEADERS.map((col) => (
+                  <div key={col} style={{ padding: "0 10px", color: "#fff", fontWeight: 600, fontSize: "11px", letterSpacing: "0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {col}{col === "Name" ? " ↑" : ""}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {filteredMembers.length === 0 ? (
+              <div style={{ padding: "48px 20px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
+                No members match your filters
+              </div>
+            ) : viewMode === "kanban" ? (
+              <VariableList
+                height={listHeight}
+                width="100%"
+                itemCount={kanbanRows.length}
+                itemSize={kanbanRowHeight}
+                itemData={kanbanRowItemData}
+                overscanCount={4}
+              >
+                {KanbanRow}
+              </VariableList>
+            ) : (
+              <List
+                height={listHeight}
+                width="100%"
+                itemCount={listSourceItems.length}
+                itemSize={ROW_HEIGHT}
+                itemData={virtualRowItemData}
+                overscanCount={6}
+              >
+                {VirtualRow}
+              </List>
+            )}
+
+            {!groupBy && viewMode === "list" && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: "35px", padding: "0 12px", background: "#f5f7fa", borderTop: "1px solid #e1e5ea", fontSize: "11px", color: "#6b7280" }}>
+                <span>
+                  {totalItems.toLocaleString()} member{totalItems !== 1 ? "s" : ""}
+                </span>
+                <span>
+                  Page {safeCurrentPage} / {totalPages}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

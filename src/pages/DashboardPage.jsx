@@ -5,6 +5,7 @@ import {
   FaClock,
   FaUserPlus,
   FaCalendarAlt,
+  FaClipboardCheck,
 } from 'react-icons/fa';
 import { Pie, Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
@@ -15,8 +16,49 @@ import 'react-datepicker/dist/react-datepicker.css';
 import DualRangeSlider from '../components/DualRangeSlider';
 import SkeletonLoader from '../components/SkeletonLoader';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
+import * as ReactWindow from 'react-window';
+import useDebouncedValue from '../hooks/useDebouncedValue';
 import { parseMemberDate } from '../utils/memberFields';
+import { formatDateDDMMMYYYY } from '../utils/dateFormat';
 import { collection, db, getDocs } from '../firestoreClient';
+import { EMPTY_REQUIREMENT_DATA, loadRequirementApplicants } from '../utils/requirementApplicants';
+
+const REQUIREMENT_TYPE_FILTERS = [
+  { key: 'All', label: 'All' },
+  { key: 'Job', label: 'Jobs' },
+  { key: 'Project', label: 'Projects' },
+  { key: 'TCS', label: 'TCS (Temp Staff)' },
+];
+
+const REQUIREMENT_TYPE_LABELS = { Job: 'Job', Project: 'Project', TCS: 'TCS' };
+
+// The raw-data view can hold every member (~14k rows), so it is virtualized:
+// only the rows on screen are in the DOM.
+const RawDataList = ReactWindow.FixedSizeList;
+const RAW_DATA_ROW_HEIGHT = 46;
+
+function RawDataRow({ index, style, data }) {
+  const { rows, labelsByMember, onRowClick } = data;
+  const member = rows[index];
+  const appliedFor = (labelsByMember.get(member.id) || []).join('; ') || '-';
+  return (
+    <div
+      className={`raw-data-row${onRowClick ? ' clickable' : ''}`}
+      style={style}
+      onClick={onRowClick ? () => onRowClick(member) : undefined}
+    >
+      <div title={member.full_name || ''}>{member.full_name || '-'}</div>
+      <div>{member.phone_number || member.phone || '-'}</div>
+      <div title={member.email || ''}>{member.email || '-'}</div>
+      <div title={member.category || ''}>{member.category || '-'}</div>
+      <div title={member.service || ''}>{member.service || '-'}</div>
+      <div title={member.rank || ''}>{member.rank || '-'}</div>
+      <div title={member.city || ''}>{member.city || '-'}</div>
+      <div title={member.state || ''}>{member.state || '-'}</div>
+      <div title={appliedFor}>{appliedFor}</div>
+    </div>
+  );
+}
 
 // Matches a member's phone against a tcscoordinatorusersmaster doc id (that
 // collection keys documents by a plain 10-digit number) regardless of
@@ -89,7 +131,7 @@ const BAR_CHART_OPTIONS = {
 
 const CHART_DATALABELS_PLUGINS = [ChartDataLabels];
 
-export default function DashboardPage({ memberRecords = [], membersLoading = false }) {
+export default function DashboardPage({ memberRecords = [], membersLoading = false, onMemberClick }) {
   const [members, setMembers] = useState(memberRecords);
   const [loading, setLoading] = useState(membersLoading);
 
@@ -105,6 +147,33 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const [regionalPartnerFilter, setRegionalPartnerFilter] = useState([]); // subset of ['Active', 'Inactive']
   const [tcsCoordinatorOnly, setTcsCoordinatorOnly] = useState(false);
   const [tcsCoordinatorPhones, setTcsCoordinatorPhones] = useState(() => new Set());
+  // Applicants: who applied to which job / project / TCS (Temp Staff) requirement.
+  const [requirementData, setRequirementData] = useState(EMPTY_REQUIREMENT_DATA);
+  const [requirementTypeFilter, setRequirementTypeFilter] = useState('All');
+  const [rawDataView, setRawDataView] = useState(null); // { title, subtitle, rows }
+  const [rawDataSearch, setRawDataSearch] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    loadRequirementApplicants()
+      .then((data) => {
+        if (!cancelled) setRequirementData(data);
+      })
+      .catch((error) => console.error('Error loading applicants:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Escape closes the raw-data view.
+  useEffect(() => {
+    if (!rawDataView) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setRawDataView(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [rawDataView]);
 
   // Fetched once — tcscoordinatorusersmaster is a small, separate roster (not
   // part of the users/memberRecords collection), keyed by phone number, so
@@ -280,6 +349,142 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   }, [filteredMembersNoDateRange, registrationDateFrom, registrationDateTo]);
 
 
+  // Applicants — everything below respects the dashboard filters above, so a
+  // block's count is "applicants among the members currently in view".
+  const memberById = useMemo(() => {
+    const map = new Map();
+    for (const member of members) map.set(member.id, member);
+    return map;
+  }, [members]);
+
+  const filteredIdSet = useMemo(() => new Set(filteredMembers.map((member) => member.id)), [filteredMembers]);
+
+  const appliedMemberCount = useMemo(() => {
+    let count = 0;
+    requirementData.appliedIds.forEach((id) => {
+      if (filteredIdSet.has(id)) count += 1;
+    });
+    return count;
+  }, [requirementData, filteredIdSet]);
+
+  const requirementBlocks = useMemo(() => {
+    return requirementData.requirements
+      .map((requirement) => {
+        let count = 0;
+        requirement.memberIds.forEach((id) => {
+          if (filteredIdSet.has(id)) count += 1;
+        });
+        return { ...requirement, count };
+      })
+      .filter((block) => block.count > 0)
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [requirementData, filteredIdSet]);
+
+  const visibleRequirementBlocks = useMemo(
+    () =>
+      requirementTypeFilter === 'All'
+        ? requirementBlocks
+        : requirementBlocks.filter((block) => block.type === requirementTypeFilter),
+    [requirementBlocks, requirementTypeFilter]
+  );
+
+  // Opens the raw member rows behind a block. Rows are the applicants that are
+  // also inside the current dashboard filters, so the table always adds up to
+  // the number shown on the block.
+  const openRawDataRows = (title, subtitle, memberRows) => {
+    // A-Z by name, with members that have no name at the end.
+    const rows = [...memberRows].sort((a, b) => {
+      const nameA = String(a.full_name || '').trim();
+      const nameB = String(b.full_name || '').trim();
+      if (!nameA !== !nameB) return nameA ? -1 : 1;
+      return nameA.localeCompare(nameB);
+    });
+    setRawDataSearch('');
+    setRawDataView({ title, subtitle, rows });
+  };
+
+  const openRawData = (title, subtitle, memberIds) => {
+    const rows = [];
+    memberIds.forEach((id) => {
+      if (!filteredIdSet.has(id)) return;
+      const member = memberById.get(id);
+      if (member) rows.push(member);
+    });
+    openRawDataRows(title, subtitle, rows);
+  };
+
+  // Same rule (and same member set) as the Registered Today / Last 3 Months
+  // numbers in registrationAnalytics: dashboard filters except the date range.
+  const openRegisteredSince = (title, subtitle, boundary) => {
+    openRawDataRows(
+      title,
+      subtitle,
+      filteredMembersNoDateRange.filter((member) => {
+        const parsedDate = member.__registrationDate || parseMemberDate(member.registration_date);
+        return parsedDate && parsedDate >= boundary;
+      })
+    );
+  };
+
+  const openTotalMembers = () => openRawDataRows('Total Members', 'All members in the current view', filteredMembers);
+
+  const openRegisteredToday = () => {
+    const now = new Date();
+    openRegisteredSince(
+      'Registered Today',
+      'Members who registered today',
+      new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    );
+  };
+
+  const openLast3Months = () => {
+    const now = new Date();
+    const boundary = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    openRegisteredSince('Last 3 Months', `Members who registered since ${formatDateDDMMMYYYY(boundary)}`, boundary);
+  };
+
+  // Search inside the open raw-data view (all blocks share it). The haystack
+  // per row is built once per opened view, so typing only does substring checks.
+  const debouncedRawDataSearch = useDebouncedValue(rawDataSearch, 150);
+
+  const rawDataHaystacks = useMemo(() => {
+    if (!rawDataView) return [];
+    return rawDataView.rows.map((member) =>
+      [
+        member.full_name,
+        member.phone_number || member.phone,
+        member.email,
+        member.category,
+        member.service,
+        member.rank,
+        member.city,
+        member.state,
+        (requirementData.labelsByMember.get(member.id) || []).join(' '),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+    );
+  }, [rawDataView, requirementData]);
+
+  const searchedRawRows = useMemo(() => {
+    if (!rawDataView) return [];
+    const term = debouncedRawDataSearch.trim().toLowerCase();
+    if (!term) return rawDataView.rows;
+    const matches = [];
+    for (let i = 0; i < rawDataView.rows.length; i += 1) {
+      if (rawDataHaystacks[i].includes(term)) matches.push(rawDataView.rows[i]);
+    }
+    return matches;
+  }, [rawDataView, rawDataHaystacks, debouncedRawDataSearch]);
+
+  const onBlockKeyDown = (event, action) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      action();
+    }
+  };
+
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
     if (loading || !filteredMembers.length) return null;
@@ -377,6 +582,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     setRegistrationDateTo('');
     setRegionalPartnerFilter([]);
     setTcsCoordinatorOnly(false);
+    setRequirementTypeFilter('All');
   };
 
   const createChartData = (counts, colors = [
@@ -665,6 +871,263 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .card-icon.red { background: #475569; }
         .card-icon.new { background: #43a047; }
         .card-icon.quarter { background: #fb8c00; }
+        .card-icon.applied { background: #00897b; }
+
+        .stat-card.clickable,
+        .requirement-block {
+          cursor: pointer;
+        }
+
+        .stat-card.clickable:focus-visible,
+        .requirement-block:focus-visible {
+          outline: 2px solid #1976d2;
+          outline-offset: 2px;
+        }
+
+        .requirement-section {
+          background: #ffffff;
+          border-radius: 10px;
+          padding: 20px;
+          margin-bottom: 40px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
+          border: 1px solid #f1f5f9;
+        }
+
+        .requirement-section-header {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .requirement-section-header h3 {
+          margin: 0;
+          font-size: 1rem;
+          font-weight: 700;
+          color: #1a2332;
+        }
+
+        .requirement-type-filter {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .requirement-type-filter button {
+          padding: 7px 14px;
+          border-radius: 20px;
+          border: 1px solid #cbd5e1;
+          background: #fff;
+          color: #334155;
+          font-weight: 700;
+          font-size: 13px;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .requirement-type-filter button.active {
+          background: #1976d2;
+          border-color: #1976d2;
+          color: #fff;
+        }
+
+        .requirement-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+          gap: 14px;
+          max-height: 420px;
+          overflow-y: auto;
+          padding: 2px;
+        }
+
+        .requirement-block {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 14px;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #f8fafc;
+          transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+        }
+
+        .requirement-block:hover {
+          transform: translateY(-2px);
+          border-color: #1976d2;
+          box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+        }
+
+        .requirement-type {
+          align-self: flex-start;
+          padding: 2px 10px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 700;
+          color: #fff;
+          background: #1976d2;
+        }
+
+        .requirement-type.project { background: #43a047; }
+        .requirement-type.tcs { background: #fb8c00; }
+
+        .requirement-title {
+          font-weight: 700;
+          font-size: 14px;
+          color: #0f172a;
+          line-height: 1.3;
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+
+        .requirement-company {
+          font-size: 12.5px;
+          color: #64748b;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .requirement-count {
+          margin-top: 6px;
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1976d2;
+        }
+
+        .requirement-count span {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #64748b;
+        }
+
+        .requirement-empty {
+          padding: 18px;
+          text-align: center;
+          color: #64748b;
+          font-size: 14px;
+        }
+
+        .raw-data-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.5);
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+
+        .raw-data-modal {
+          background: #fff;
+          border-radius: 12px;
+          width: min(1100px, 100%);
+          max-height: 85vh;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.3);
+        }
+
+        .raw-data-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 18px 22px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .raw-data-header h2 {
+          margin: 0;
+          font-size: 1.2rem;
+          color: #0f172a;
+        }
+
+        .raw-data-header p {
+          margin: 4px 0 0;
+          font-size: 13px;
+          color: #64748b;
+        }
+
+        .raw-data-close {
+          border: none;
+          background: transparent;
+          font-size: 28px;
+          line-height: 1;
+          cursor: pointer;
+          color: #475569;
+        }
+
+        .raw-data-body {
+          overflow: auto;
+          padding: 0 6px 6px;
+        }
+
+        .raw-data-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .raw-data-search {
+          width: 280px;
+          max-width: 40vw;
+          padding: 9px 14px;
+          border: 1px solid #cbd5e1;
+          border-radius: 20px;
+          font-size: 13px;
+          color: #0f172a;
+          outline: none;
+        }
+
+        .raw-data-search:focus {
+          border-color: #1976d2;
+          box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15);
+        }
+
+        .raw-data-grid {
+          min-width: 1000px;
+        }
+
+        .raw-data-row {
+          display: grid;
+          grid-template-columns: 1.5fr 1.1fr 1.9fr 1fr 1fr 0.8fr 1fr 1.1fr 2.2fr;
+          align-items: center;
+          gap: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          color: #0f172a;
+          border-bottom: 1px solid #eef2f6;
+          box-sizing: border-box;
+        }
+
+        .raw-data-row > div {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .raw-data-row.raw-data-head {
+          height: 40px;
+          background: #f1f5f9;
+          font-weight: 700;
+          color: #334155;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+        }
+
+        .raw-data-row.clickable {
+          cursor: pointer;
+        }
+
+        .raw-data-row.clickable:hover {
+          background: #f0f7ff;
+        }
 
         .card-label {
           font-size: 1rem;
@@ -988,7 +1451,14 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         {hasData ? (
           <>
             <div className="stats-grid">
-              <div className="stat-card">
+              <div
+                className="stat-card clickable"
+                role="button"
+                tabIndex={0}
+                title="Show the raw data"
+                onClick={openTotalMembers}
+                onKeyDown={(event) => onBlockKeyDown(event, openTotalMembers)}
+              >
                 <div className="card-icon blue">
                   <FaUsers size={28} />
                 </div>
@@ -1004,7 +1474,14 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                 <div className="card-value">{analytics.avgExp}</div>
               </div>
 
-              <div className="stat-card">
+              <div
+                className="stat-card clickable"
+                role="button"
+                tabIndex={0}
+                title="Show the raw data"
+                onClick={openRegisteredToday}
+                onKeyDown={(event) => onBlockKeyDown(event, openRegisteredToday)}
+              >
                 <div className="card-icon new">
                   <FaUserPlus size={28} />
                 </div>
@@ -1012,13 +1489,89 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                 <div className="card-value">{registrationAnalytics?.registeredToday ?? 0}</div>
               </div>
 
-              <div className="stat-card">
+              <div
+                className="stat-card clickable"
+                role="button"
+                tabIndex={0}
+                title="Show the raw data"
+                onClick={openLast3Months}
+                onKeyDown={(event) => onBlockKeyDown(event, openLast3Months)}
+              >
                 <div className="card-icon quarter">
                   <FaCalendarAlt size={28} />
                 </div>
                 <div className="card-label">Last 3 Months</div>
                 <div className="card-value">{registrationAnalytics?.registered3Months ?? 0}</div>
               </div>
+
+              <div
+                className="stat-card clickable"
+                role="button"
+                tabIndex={0}
+                title="Show the raw data"
+                onClick={() =>
+                  openRawData('Applied Members', 'Members who applied to any job or project', requirementData.appliedIds)
+                }
+                onKeyDown={(event) =>
+                  onBlockKeyDown(event, () =>
+                    openRawData('Applied Members', 'Members who applied to any job or project', requirementData.appliedIds)
+                  )
+                }
+              >
+                <div className="card-icon applied">
+                  <FaClipboardCheck size={28} />
+                </div>
+                <div className="card-label">Applied Members</div>
+                <div className="card-value">{appliedMemberCount.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div className="requirement-section">
+              <div className="requirement-section-header">
+                <h3>Requirement Wise Applicants</h3>
+                <div className="requirement-type-filter">
+                  {REQUIREMENT_TYPE_FILTERS.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={requirementTypeFilter === option.key ? 'active' : ''}
+                      onClick={() => setRequirementTypeFilter(option.key)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {visibleRequirementBlocks.length === 0 ? (
+                <div className="requirement-empty">No applicants for the current filters.</div>
+              ) : (
+                <div className="requirement-grid">
+                  {visibleRequirementBlocks.map((block) => {
+                    const subtitle = `${REQUIREMENT_TYPE_LABELS[block.type]}${block.company ? ` • ${block.company}` : ''}`;
+                    const open = () => openRawData(block.title, subtitle, block.memberIds);
+                    return (
+                      <div
+                        key={block.id}
+                        className="requirement-block"
+                        role="button"
+                        tabIndex={0}
+                        title="Show the raw data"
+                        onClick={open}
+                        onKeyDown={(event) => onBlockKeyDown(event, open)}
+                      >
+                        <span className={`requirement-type ${block.type.toLowerCase()}`}>
+                          {REQUIREMENT_TYPE_LABELS[block.type]}
+                        </span>
+                        <div className="requirement-title">{block.title}</div>
+                        <div className="requirement-company">{block.company || ' '}</div>
+                        <div className="requirement-count">
+                          {block.count.toLocaleString()} <span>applicant{block.count === 1 ? '' : 's'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="charts-grid">
@@ -1093,6 +1646,86 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           </div>
         )}
       </div>
+
+      {rawDataView && (
+        <div className="raw-data-overlay" onClick={() => setRawDataView(null)}>
+          <div
+            className="raw-data-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={rawDataView.title}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="raw-data-header">
+              <div>
+                <h2>{rawDataView.title}</h2>
+                <p>
+                  {rawDataView.subtitle} · {searchedRawRows.length.toLocaleString()}
+                  {searchedRawRows.length !== rawDataView.rows.length
+                    ? ` of ${rawDataView.rows.length.toLocaleString()}`
+                    : ''}{' '}
+                  member{rawDataView.rows.length === 1 ? '' : 's'}
+                </p>
+              </div>
+              <div className="raw-data-header-actions">
+                <input
+                  type="search"
+                  className="raw-data-search"
+                  placeholder="Search name, mobile, email, city..."
+                  aria-label="Search members"
+                  value={rawDataSearch}
+                  onChange={(event) => setRawDataSearch(event.target.value)}
+                  autoFocus
+                />
+                <button type="button" className="raw-data-close" aria-label="Close" onClick={() => setRawDataView(null)}>
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="raw-data-body">
+              <div className="raw-data-grid">
+                <div className="raw-data-row raw-data-head">
+                  <div>Name</div>
+                  <div>Mobile</div>
+                  <div>Email</div>
+                  <div>Category</div>
+                  <div>Service</div>
+                  <div>Rank</div>
+                  <div>City</div>
+                  <div>State</div>
+                  <div>Applied For</div>
+                </div>
+                {searchedRawRows.length === 0 ? (
+                  <div className="requirement-empty">No matching members.</div>
+                ) : (
+                  <RawDataList
+                    height={Math.min(
+                      searchedRawRows.length * RAW_DATA_ROW_HEIGHT,
+                      Math.max(240, Math.floor(window.innerHeight * 0.85) - 150)
+                    )}
+                    itemCount={searchedRawRows.length}
+                    itemSize={RAW_DATA_ROW_HEIGHT}
+                    width="100%"
+                    itemKey={(index, data) => data.rows[index].id}
+                    itemData={{
+                      rows: searchedRawRows,
+                      labelsByMember: requirementData.labelsByMember,
+                      onRowClick: onMemberClick
+                        ? (member) => {
+                            setRawDataView(null);
+                            onMemberClick(member);
+                          }
+                        : null,
+                    }}
+                  >
+                    {RawDataRow}
+                  </RawDataList>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

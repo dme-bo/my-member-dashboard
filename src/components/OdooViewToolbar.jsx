@@ -6,6 +6,7 @@
 // Group By: a curated list of one-click fields with a checkmark on the
 // active one, plus a small "Add custom group" picker for parity with Odoo.
 import React, { useEffect, useRef, useState } from "react";
+import { boxedButtonStyle } from "../utils/uiStyles";
 
 const iconStyle = { width: "14px", height: "14px", flexShrink: 0 };
 
@@ -23,7 +24,7 @@ const GroupIcon = () => (
   </svg>
 );
 
-const ListIcon = () => (
+export const ListIcon = () => (
   <svg style={iconStyle} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <line x1="4" y1="6" x2="20" y2="6" />
     <line x1="4" y1="12" x2="20" y2="12" />
@@ -31,7 +32,7 @@ const ListIcon = () => (
   </svg>
 );
 
-const KanbanIcon = () => (
+export const KanbanIcon = () => (
   <svg style={iconStyle} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <rect x="3" y="4" width="5" height="16" rx="1" />
     <rect x="10" y="4" width="5" height="10" rx="1" />
@@ -53,7 +54,14 @@ const ChevronIcon = ({ open }) => (
   </svg>
 );
 
-const linkButtonStyle = (active) => ({
+// Down chevron for the "boxed" trigger buttons (Filters / Group By / Favorites).
+export const ChevronDownIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
+const linkButtonStyle = (active, boxed = false) => boxed ? boxedButtonStyle(active) : ({
   display: "flex",
   alignItems: "center",
   gap: "6px",
@@ -111,7 +119,7 @@ function useClickOutside(ref, onOutside) {
   }, [ref, onOutside]);
 }
 
-function FiltersMenu({ quickFilters, advancedContent }) {
+function FiltersMenu({ quickFilters, advancedContent, boxed }) {
   const [open, setOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const ref = useRef(null);
@@ -134,8 +142,8 @@ function FiltersMenu({ quickFilters, advancedContent }) {
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((v) => !v)} style={linkButtonStyle(hasActiveQuick)}>
-        <FilterIcon /> Filters
+      <button type="button" onClick={() => setOpen((v) => !v)} style={linkButtonStyle(hasActiveQuick, boxed)}>
+        <FilterIcon /> Filters {boxed && <ChevronDownIcon />}
       </button>
       {open && (
         <div
@@ -208,7 +216,7 @@ function FiltersMenu({ quickFilters, advancedContent }) {
   );
 }
 
-function GroupByMenu({ groupByOptions, groupBy, onGroupByChange }) {
+function GroupByMenu({ groupByOptions, groupBy, onGroupByChange, boxed }) {
   const [open, setOpen] = useState(false);
   const [customField, setCustomField] = useState(groupByOptions[0]?.key || "");
   const ref = useRef(null);
@@ -216,8 +224,8 @@ function GroupByMenu({ groupByOptions, groupBy, onGroupByChange }) {
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((v) => !v)} style={linkButtonStyle(!!groupBy)}>
-        <GroupIcon /> Group By
+      <button type="button" onClick={() => setOpen((v) => !v)} style={linkButtonStyle(!!groupBy, boxed)}>
+        <GroupIcon /> Group By {boxed && <ChevronDownIcon />}
       </button>
       {open && (
         <div style={dropdownPanelStyle}>
@@ -282,13 +290,15 @@ export default function OdooViewToolbar({
   view,
   onViewChange,
   showViewToggle = true,
+  variant = "default",
 }) {
+  const boxed = variant === "boxed";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-      <FiltersMenu quickFilters={quickFilters} advancedContent={advancedContent} />
+    <div style={{ display: "flex", alignItems: "center", gap: boxed ? "8px" : "2px" }}>
+      <FiltersMenu quickFilters={quickFilters} advancedContent={advancedContent} boxed={boxed} />
 
       {groupByOptions.length > 0 && (
-        <GroupByMenu groupByOptions={groupByOptions} groupBy={groupBy} onGroupByChange={onGroupByChange} />
+        <GroupByMenu groupByOptions={groupByOptions} groupBy={groupBy} onGroupByChange={onGroupByChange} boxed={boxed} />
       )}
 
       {showViewToggle && (
