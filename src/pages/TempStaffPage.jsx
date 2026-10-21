@@ -11,12 +11,19 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import SkeletonLoader from "../components/SkeletonLoader";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
+import FavoritesMenu from "../components/FavoritesMenu";
 import { fetchProjectApplicationRows } from "../utils/applicationSources";
 import { formatDateDDMMMYYYY } from "../utils/dateFormat";
+import SelectionActionMenu from "../components/SelectionActionMenu";
+import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
+import SortArrow from "../components/SortArrow";
+
+// Default order (and the "third click" state): Full Name A→Z.
+const DEFAULT_SORT = { key: "full_name", dir: "asc" };
 
 const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
 
@@ -86,6 +93,16 @@ export default function TempStaffPage() {
   const [groupBy, setGroupBy] = useState(null);
   const [kanbanView, setKanbanView] = useState("list");
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const raw = localStorage.getItem("tcsPageFavorites");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Modal states
   const [activeTab, setActiveTab] = useState("personal");
@@ -97,6 +114,25 @@ export default function TempStaffPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
+
+  // Column sorting. The 4th column's key differs per viewMode, so reset the
+  // sort to the default whenever viewMode changes.
+  const { sort, setSort, toggleSort } = useTableSort(DEFAULT_SORT);
+  const [sortViewMode, setSortViewMode] = useState(viewMode);
+  if (sortViewMode !== viewMode) {
+    setSortViewMode(viewMode);
+    setSort(DEFAULT_SORT);
+  }
+  const handleSort = (key) => {
+    toggleSort(key);
+    setCurrentPage(1);
+  };
+  const sortTh = (key, label, className = "tcs-th") => (
+    <th className={className} {...sortHeaderProps(key, sort, handleSort)}>
+      {label}
+      <SortArrow active={sort.key === key} dir={sort.dir} />
+    </th>
+  );
 
 
   const showToast = (message, type = "success") => {
@@ -295,12 +331,22 @@ export default function TempStaffPage() {
       list = list.filter((m) => filters.coordinator_name.includes(String(m.coordinator_name || "").trim()));
     }
 
-    list.sort((a, b) =>
-      (a.full_name || "").trim().toLowerCase().localeCompare((b.full_name || "").trim().toLowerCase())
-    );
+    // Accessors mirror what each cell displays.
+    const accessors = {
+      full_name: (m) => String(m.full_name || "").trim(),
+      contact_number: (m) => String(m.contact_number || "").trim(),
+      city: (m) =>
+        viewMode === "applications"
+          ? String(m.city || "").trim()
+          : Array.isArray(m.locations)
+          ? m.locations.map((l) => l.city).join(", ").trim()
+          : "",
+      coordinator_name: (m) => String(m.coordinator_name || "").trim(),
+      coordinator_type: (m) => String(m.coordinator_type || "").trim(),
+    };
 
-    return list;
-  }, [searchTerm, filters, currentData, viewMode]);
+    return sortRows(list, sort, accessors);
+  }, [searchTerm, filters, currentData, viewMode, sort]);
 
   const totalPages = Math.ceil(filteredAndSortedMembers.length / (rowsPerPage === Infinity ? 1 : rowsPerPage));
   const currentRows = rowsPerPage === Infinity
@@ -441,9 +487,11 @@ export default function TempStaffPage() {
   };
 
   // Export function
-  const handleExportXLSX = async () => {
+  // Action → Export: only the ticked rows.
+  const handleExportSelected = async () => {
     try {
-      const dataToExport = (viewMode === "applications" ? membersData : coordinatorsData).map((item) => {
+      const source = viewMode === "applications" ? membersData : coordinatorsData;
+      const dataToExport = source.filter((item) => selectedIds.has(item.id)).map((item) => {
         if (viewMode === "applications") {
           return {
             Name: item.name || "-",
@@ -523,23 +571,138 @@ export default function TempStaffPage() {
     </>
   );
 
-  if (loading) {
-    return (
-      <SkeletonLoader
-        rows={8}
-        fullPage
-        label={`Loading ${viewMode === "applications" ? "TCS Applications" : "Coordinators"}…`}
-      />
-    );
-  }
+  const persistFavorites = (next) => {
+    setFavorites(next);
+    try {
+      localStorage.setItem("tcsPageFavorites", JSON.stringify(next));
+    } catch {
+      /* ignore storage errors */
+    }
+  };
+  const saveCurrentAsFavorite = (name) => {
+    persistFavorites([...favorites, { id: String(Date.now()), name, searchTerm, filters, groupBy }]);
+  };
+  const applyFavorite = (fav) => {
+    setSearchTerm(fav.searchTerm || "");
+    setFilters({ city: [], coordinator_type: [], status: [], role: [], coordinator_name: [], ...(fav.filters || {}) });
+    setGroupBy(fav.groupBy || null);
+    setCurrentPage(1);
+  };
+  const deleteFavorite = (id) => persistFavorites(favorites.filter((f) => f.id !== id));
+
+  const allPageSelected = currentRows.length > 0 && currentRows.every((r) => selectedIds.has(r.id));
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (currentRows.every((r) => next.has(r.id))) currentRows.forEach((r) => next.delete(r.id));
+      else currentRows.forEach((r) => next.add(r.id));
+      return next;
+    });
+  };
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const rangeStart = rowsPerPage === Infinity ? 1 : (currentPage - 1) * rowsPerPage + 1;
+  const rangeEnd = rowsPerPage === Infinity
+    ? filteredAndSortedMembers.length
+    : Math.min(currentPage * rowsPerPage, filteredAndSortedMembers.length);
+
+  const renderRow = (item) => (
+    <tr key={item.id} className="tcs-row" onClick={() => openModal(item)}>
+      <td className="tcs-td" onClick={(e) => e.stopPropagation()}>
+        <input
+          className="tcs-cb"
+          type="checkbox"
+          aria-label={`Select ${item.full_name || "row"}`}
+          checked={selectedIds.has(item.id)}
+          onChange={() => toggleSelected(item.id)}
+        />
+      </td>
+      <td className="tcs-td">{item.full_name || "-"}</td>
+      <td className="tcs-td tcs-num">{item.contact_number || "-"}</td>
+      <td className="tcs-td">
+        {viewMode === "applications"
+          ? item.city || "-"
+          : Array.isArray(item.locations)
+          ? item.locations.map((l) => l.city).join(", ") || "-"
+          : "-"}
+      </td>
+      <td className="tcs-td">
+        {viewMode === "applications" ? item.coordinator_name || "-" : item.coordinator_type || "-"}
+      </td>
+    </tr>
+  );
+
 
   return (
-    <div className="member-list-page">
+    <div className="member-list-page tcs-page page-fill">
+      <style>{`
+        /* Header band + table mirror the Members Master List (MemberListPage). */
+        .tcs-page { padding: 0 !important; max-width: none; background: #fff; min-height: calc(100vh - 64px); width: 100%; box-sizing: border-box; }
+        .tcs-header { background: #fff; padding: 32px 32px 16px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
+        .tcs-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+        .tcs-title { display: flex; align-items: baseline; gap: 12px; }
+        .tcs-title h1 { margin: 0; font-size: 28px; font-weight: 600; color: #111827; letter-spacing: -0.01em; }
+        .tcs-title span { font-size: 14px; color: #64748b; font-weight: 400; }
+        .tcs-outline-btn { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 400; color: #334155; cursor: pointer; white-space: nowrap; }
+        .tcs-primary-btn { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; color: #334155; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; white-space: nowrap; }
+        .tcs-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .member-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .member-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .member-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .tcs-meta-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; }
+        .tcs-meta-left { display: flex; align-items: center; gap: 16px; }
+        .tcs-meta-right { display: flex; align-items: center; gap: 6px; }
+        .tcs-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+        .tcs-range { font-size: 13px; color: #111827; font-weight: 600; white-space: nowrap; margin: 0 2px; }
+        .tcs-joined { display: flex; gap: 6px; }
+        .tcs-icon-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #dde1e7; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; padding: 0; }
+        .tcs-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; cursor: not-allowed; }
+        .tcs-joined.tcs-view-toggle { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
+        .tcs-view-toggle .tcs-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0; color: #64748b; }
+        .tcs-view-toggle .tcs-icon-btn[aria-pressed="true"] { background: #e3f2fd; color: #1976d2; }
+        .tcs-table-wrap { background: #fff; border-top: 1px solid #dde1e7; overflow-x: auto; }
+        .tcs-table { width: 100%; min-width: 820px; border-collapse: collapse; }
+        .tcs-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; position: sticky; top: 0; z-index: 2; }
+        .tcs-td { height: 49px; padding: 0 10px; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; white-space: nowrap; vertical-align: middle; }
+        .tcs-td:nth-child(2) { font-weight: 500; color: #111827; }
+        .tcs-num { text-align: right; }
+        .tcs-row { cursor: pointer; background: #fff; }
+        .tcs-row:nth-child(odd) { background: #f8fafc; }
+        .tcs-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .tcs-th .tcs-cb { width: 14px; height: 14px; accent-color: #ffffff; }
+        .tcs-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; margin-left: 6px; }
+        .tcs-group-row td { height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600; cursor: pointer; background: #f1f5f9; color: #334155; border-bottom: 1px solid #dde1e7; }
+        .tcs-page .content-with-sidebar { margin-top: 0; gap: 0; }
+        .tcs-page .table-container { border: none; border-radius: 0; box-shadow: none; }
+        .tcs-empty { padding: 48px 20px; text-align: center; color: #94a3b8; font-size: 14px; }
+        @media (max-width: 640px) { .tcs-header { padding: 20px 16px 12px; } }
+      `}</style>
 
-      {/* Header Card */}
-      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" }}>
+      {/* Header block */}
+      <div className="tcs-header page-header-band">
+        <div className="tcs-title-row">
+          <div className="tcs-title">
+            <h1>{viewMode === "applications" ? "TCS Applications" : "TCS Coordinators"}</h1>
+            <span>{filteredAndSortedMembers.length.toLocaleString()} {viewMode === "applications" ? "Applications" : "Coordinators"}</span>
+          </div>
+          <button type="button" className="tcs-outline-btn" onClick={clearFilters}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+            Reset Filters
+          </button>
+        </div>
+
+        <div className="tcs-controls-row">
           <OdooSearchBar
+            variant="boxed"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -549,46 +712,91 @@ export default function TempStaffPage() {
             chips={filterChips}
           />
 
-          <OdooViewToolbar
-            quickFilters={[]}
-            advancedContent={advancedFiltersPanel}
-            groupByOptions={groupByOptions}
-            groupBy={groupBy}
-            onGroupByChange={setGroupBy}
-            view={kanbanView}
-            onViewChange={setKanbanView}
-          />
+          <div className="member-toolbar-group">
+            <OdooViewToolbar
+              variant="boxed"
+              quickFilters={[]}
+              advancedContent={advancedFiltersPanel}
+              groupByOptions={groupByOptions}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              showViewToggle={false}
+            />
+            <FavoritesMenu
+              favorites={favorites}
+              onApply={applyFavorite}
+              onDelete={deleteFavorite}
+              onSave={saveCurrentAsFavorite}
+            />
+          </div>
+        </div>
 
-          {/* Total Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto" }}>
-            Total Applications:- <strong>{filteredAndSortedMembers.length}</strong>
-          </span>
-
-          {/* Export Button */}
-          <button
-            onClick={handleExportXLSX}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #1f2937",
-              color: "#1f2937",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            ⬇️ Export
-          </button>
+        <div className="tcs-meta-row">
+          <SelectionActionMenu count={selectedIds.size} onExport={handleExportSelected} onClear={() => setSelectedIds(new Set())} />
+          <div className="tcs-meta-left">
+          </div>
+          <div className="tcs-meta-right">
+            <select
+              className="tcs-select"
+              aria-label="Records per page"
+              value={rowsPerPage === Infinity ? "all" : rowsPerPage}
+              onChange={(e) => {
+                const value = e.target.value === "all" ? Infinity : Number(e.target.value);
+                setRowsPerPage(value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="all">All</option>
+              <option value={100}>100</option>
+              <option value={500}>500</option>
+              <option value={1000}>1000</option>
+              <option value={5000}>5000</option>
+            </select>
+            <span className="tcs-range">
+              {filteredAndSortedMembers.length === 0
+                ? "0 / 0"
+                : `${rangeStart.toLocaleString()}–${rangeEnd.toLocaleString()} / ${filteredAndSortedMembers.length.toLocaleString()}`}
+            </span>
+            <div className="tcs-joined">
+              <button
+                type="button"
+                className="tcs-icon-btn"
+                aria-label="Previous page"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+              <button
+                type="button"
+                className="tcs-icon-btn"
+                aria-label="Next page"
+                disabled={currentPage === totalPages || rowsPerPage === Infinity || totalPages === 0}
+                onClick={() => setCurrentPage((p) => p + 1)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+            </div>
+            <div className="tcs-joined tcs-view-toggle">
+              <button type="button" className="tcs-icon-btn" aria-label="List view" aria-pressed={kanbanView === "list"} onClick={() => setKanbanView("list")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </button>
+              <button type="button" className="tcs-icon-btn" aria-label="Kanban view" aria-pressed={kanbanView === "kanban"} onClick={() => setKanbanView("kanban")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="10" /><rect x="16" y="4" width="4" height="13" /></svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="content-with-sidebar">
-        <div className="table-container">
-          {kanbanView === "kanban" ? (
-            <div style={{ minHeight: "400px", maxHeight: "70vh", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff", padding: "12px" }}>
+      <div className="content-with-sidebar page-fill-mid">
+        <div className="table-container page-fill-mid" style={{ width: "100%" }}>
+          {loading ? (
+            <TableLoadingSpinner label={`Loading ${viewMode === "applications" ? "TCS Applications" : "Coordinators"}…`} />
+          ) : kanbanView === "kanban" ? (
+            <div className="page-fill-scroll" style={{ background: "#fff", padding: "16px 32px" }}>
               {currentRows.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
+                <div className="tcs-empty">
                   {searchTerm || Object.values(filters).some((v) => v.length)
                     ? "No records found matching your criteria"
                     : `No ${viewMode === "applications" ? "applications" : "coordinators"} registered yet`}
@@ -598,10 +806,10 @@ export default function TempStaffPage() {
                   <div key={label} style={{ marginBottom: "12px" }}>
                     <div
                       onClick={() => toggleGroupCollapsed(label)}
-                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2e6", color: "#2f4a22", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}
                     >
                       <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                      {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                      {label} <span className="tcs-pill">{rows.length}</span>
                     </div>
                     {!collapsedGroups.has(label) && (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
@@ -621,28 +829,31 @@ export default function TempStaffPage() {
               )}
             </div>
           ) : (
-          <div style={{ height: "70vh", minHeight: "400px", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-              <colgroup>
-                <col style={{ width: "35%" }} />
-                <col style={{ width: "25%" }} />
-                <col style={{ width: "20%" }} />
-                <col style={{ width: "20%" }} />
-              </colgroup>
-              <thead style={{ position: "sticky", top: 0, background: "#f9f9f9", zIndex: 10 }}>
+          <div className="tcs-table-wrap page-fill-scroll">
+            <table className="tcs-table">
+              <thead>
                 <tr>
-                  <th style={{ padding: "14px 12px", textAlign: "left" }}>Full Name</th>
-                  <th style={{ padding: "14px 12px", textAlign: "left" }}>Mobile</th>
-                  <th style={{ padding: "14px 12px", textAlign: "left" }}>City / Locations</th>
-                  <th style={{ padding: "14px 12px", textAlign: "left" }}>
-                    {viewMode === "applications" ? "Coordinator" : "Type"}
+                  <th className="tcs-th" style={{ width: "36px" }}>
+                    <input
+                      className="tcs-cb"
+                      type="checkbox"
+                      aria-label="Select all rows on this page"
+                      checked={allPageSelected}
+                      onChange={toggleSelectAllOnPage}
+                    />
                   </th>
+                  {sortTh("full_name", "Full Name")}
+                  {sortTh("contact_number", "Mobile", "tcs-th tcs-num")}
+                  {sortTh("city", "City / Locations")}
+                  {viewMode === "applications"
+                    ? sortTh("coordinator_name", "Coordinator")
+                    : sortTh("coordinator_type", "Type")}
                 </tr>
               </thead>
               <tbody>
                 {currentRows.length === 0 ? (
                   <tr>
-                    <td colSpan="4" style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
+                    <td colSpan="5" className="tcs-empty">
                       {searchTerm || Object.values(filters).some((v) => v.length)
                         ? "No records found matching your criteria"
                         : `No ${viewMode === "applications" ? "applications" : "coordinators"} registered yet`}
@@ -651,114 +862,22 @@ export default function TempStaffPage() {
                 ) : groupedRows ? (
                   groupedRows.map(([label, rows]) => (
                     <Fragment key={label}>
-                      <tr style={{ background: "#eef2f7" }}>
-                        <td colSpan={4} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
+                      <tr className="tcs-group-row">
+                        <td colSpan={5} onClick={() => toggleGroupCollapsed(label)}>
                           <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                          {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
+                          {label} <span className="tcs-pill">{rows.length}</span>
                         </td>
                       </tr>
-                      {!collapsedGroups.has(label) &&
-                        rows.map((item) => (
-                          <tr
-                            key={item.id}
-                            onClick={() => openModal(item)}
-                            style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                          >
-                            <td style={{ padding: "12px" }}>{item.full_name || "-"}</td>
-                            <td style={{ padding: "12px" }}>{item.contact_number || "-"}</td>
-                            <td style={{ padding: "12px" }}>
-                              {viewMode === "applications"
-                                ? item.city || "-"
-                                : Array.isArray(item.locations)
-                                ? item.locations.map((l) => l.city).join(", ") || "-"
-                                : "-"}
-                            </td>
-                            <td style={{ padding: "12px" }}>
-                              {viewMode === "applications" ? item.coordinator_name || "-" : item.coordinator_type || "-"}
-                            </td>
-                          </tr>
-                        ))}
+                      {!collapsedGroups.has(label) && rows.map((item) => renderRow(item))}
                     </Fragment>
                   ))
                 ) : (
-                  currentRows.map((item) => (
-                    <tr
-                      key={item.id}
-                      onClick={() => openModal(item)}
-                      style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                    >
-                      <td style={{ padding: "12px" }}>{item.full_name || "-"}</td>
-                      <td style={{ padding: "12px" }}>{item.contact_number || "-"}</td>
-                      <td style={{ padding: "12px" }}>
-                        {viewMode === "applications"
-                          ? item.city || "-"
-                          : Array.isArray(item.locations)
-                          ? item.locations.map((l) => l.city).join(", ") || "-"
-                          : "-"}
-                      </td>
-                      <td style={{ padding: "12px" }}>
-                        {viewMode === "applications" ? item.coordinator_name || "-" : item.coordinator_type || "-"}
-                      </td>
-                    </tr>
-                  ))
+                  currentRows.map((item) => renderRow(item))
                 )}
               </tbody>
             </table>
           </div>
           )}
-
-          {/* Pagination */}
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "20px 10px", flexWrap: "wrap", gap: "15px" }}>
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <span style={{ marginRight: "10px" }}>Rows per page:</span>
-              <select
-                value={rowsPerPage === Infinity ? "all" : rowsPerPage}
-                onChange={(e) => {
-                  const value = e.target.value === "all" ? Infinity : Number(e.target.value);
-                  setRowsPerPage(value);
-                  setCurrentPage(1);
-                }}
-                style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #ccc" }}
-              >
-                <option value="all">All</option>
-                <option value={100}>100</option>
-                <option value={500}>500</option>
-                <option value={1000}>1000</option>
-                <option value={5000}>5000</option>
-              </select>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-                style={{
-                  padding: "8px 14px",
-                  background: "#1976d2",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "4px",
-                  opacity: currentPage === 1 ? 0.5 : 1,
-                }}
-              >
-                Previous
-              </button>
-              <span>Page {currentPage} of {totalPages || 1}</span>
-              <button
-                disabled={currentPage === totalPages || rowsPerPage === Infinity}
-                onClick={() => setCurrentPage((p) => p + 1)}
-                style={{
-                  padding: "8px 14px",
-                  background: "#1976d2",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "4px",
-                  opacity: (currentPage === totalPages || rowsPerPage === Infinity) ? 0.5 : 1,
-                }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 

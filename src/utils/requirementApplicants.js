@@ -22,14 +22,24 @@ export const EMPTY_REQUIREMENT_DATA = {
   labelsByMember: new Map(),
 };
 
-// requirement id -> Set of applicant member ids
+// Firestore Timestamp / {seconds} / ISO string / Date -> epoch ms (null if unknown)
+const toMs = (value) => {
+  if (!value) return null;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  const seconds = value.seconds ?? value._seconds;
+  if (typeof seconds === "number") return seconds * 1000;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+// requirement id -> Map(applicant member id -> applied_at ms | null)
 const applicantsById = (snapshot) => {
   const map = new Map();
   snapshot.docs.forEach((appliedDoc) => {
     const memberId = appliedDoc.ref.parent?.parent?.id;
     if (!memberId) return;
-    if (!map.has(appliedDoc.id)) map.set(appliedDoc.id, new Set());
-    map.get(appliedDoc.id).add(memberId);
+    if (!map.has(appliedDoc.id)) map.set(appliedDoc.id, new Map());
+    map.get(appliedDoc.id).set(memberId, toMs(appliedDoc.data()?.applied_at));
   });
   return map;
 };
@@ -47,7 +57,7 @@ async function fetchRequirementApplicants() {
 
   const requirements = [];
   const usedLabels = new Set();
-  const addRequirement = (id, type, title, company, memberIds) => {
+  const addRequirement = (id, type, title, company, appliedAt) => {
     const prefix = type === "TCS" ? "TCS" : type;
     let label =
       type === "TCS"
@@ -55,20 +65,20 @@ async function fetchRequirementApplicants() {
         : `${prefix}: ${title}${company ? ` • ${company}` : ""}`;
     if (usedLabels.has(label.toLowerCase())) label = `${label} (#${id.slice(0, 5)})`;
     usedLabels.add(label.toLowerCase());
-    requirements.push({ id, type, title, company, label, memberIds });
+    requirements.push({ id, type, title, company, label, memberIds: new Set(appliedAt.keys()), appliedAt });
   };
 
   // Only requirements somebody actually applied to are useful here.
   jobsSnap.docs.forEach((jobDoc) => {
-    const memberIds = jobApplicants.get(jobDoc.id);
-    if (!memberIds) return;
+    const appliedAt = jobApplicants.get(jobDoc.id);
+    if (!appliedAt) return;
     const data = jobDoc.data() || {};
-    addRequirement(jobDoc.id, "Job", data.job_title || "Untitled Job", String(data.job_company || "").trim(), memberIds);
+    addRequirement(jobDoc.id, "Job", data.job_title || "Untitled Job", String(data.job_company || "").trim(), appliedAt);
   });
 
   projectsSnap.docs.forEach((projectDoc) => {
-    const memberIds = projectApplicants.get(projectDoc.id);
-    if (!memberIds) return;
+    const appliedAt = projectApplicants.get(projectDoc.id);
+    if (!appliedAt) return;
     const data = projectDoc.data() || {};
     const company = String(data.project_company || "").trim();
     addRequirement(
@@ -76,7 +86,7 @@ async function fetchRequirementApplicants() {
       company === TCS_COMPANY_NAME ? "TCS" : "Project",
       data.project_title || "Untitled Project",
       company,
-      memberIds
+      appliedAt
     );
   });
 

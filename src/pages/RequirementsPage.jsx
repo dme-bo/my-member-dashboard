@@ -2,19 +2,16 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
+import FavoritesMenu from "../components/FavoritesMenu";
 import {
-  FaBriefcase,
-  FaCheckCircle,
-  FaHourglassHalf,
   FaUsers,
   FaSearch,
   FaEye,
   FaTrashAlt,
-  FaSortUp,
-  FaSortDown,
-  FaSort,
   FaFileExport,
 } from "react-icons/fa";
+import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
+import SortArrow from "../components/SortArrow";
 import {
   collection,
   collectionGroup,
@@ -31,12 +28,16 @@ import {
 import Papa from "papaparse";
 import { normalizeMemberRecord, getMemberCategory } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
+import SelectionActionMenu from "../components/SelectionActionMenu";
 
 // Projects run by TCS are shown/filtered as "Temp Staffing" instead of
 // "Project" in this dashboard — they still live in `projectsmaster`, only
 // their display category changes here.
 const TCS_TEMP_STAFFING_COMPANY = "Tata Consultancy Services Pvt Ltd";
+
+const REQUIREMENTS_FAVORITES_KEY = "requirementsPageFavorites";
 
 const REQUIREMENTS_FILTERS = ["All", "Open", "Closed", "Projects", "Recruitment", "Temp Staffing"];
 
@@ -178,7 +179,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     return REQUIREMENTS_FILTERS.includes(requested) ? requested : "All";
   });
   const [requirementsSearchTerm, setRequirementsSearchTerm] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: "postedOn", direction: "desc" });
+  const { sort: reqSort, toggleSort: toggleReqSort } = useTableSort({ key: "postedOn", dir: "desc" });
   const [groupBy, setGroupBy] = useState(null);
   const [kanbanView, setKanbanView] = useState("list");
 
@@ -220,7 +221,23 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSizeAllocate, setPageSizeAllocate] = useState(100);
   const [requirementsCurrentPage, setRequirementsCurrentPage] = useState(1);
-  const [requirementsPageSize, setRequirementsPageSize] = useState(50);
+  const [requirementsPageSize, setRequirementsPageSize] = useState(100);
+  const [selectedReqIds, setSelectedReqIds] = useState([]);
+  const [reqFavorites, setReqFavorites] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(REQUIREMENTS_FAVORITES_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(REQUIREMENTS_FAVORITES_KEY, JSON.stringify(reqFavorites));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [reqFavorites]);
 
   // Toast & loading
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -553,26 +570,32 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       );
     });
 
-    list.sort((a, b) => {
-      let aVal = a[sortConfig.key];
-      let bVal = b[sortConfig.key];
-      if (sortConfig.key === "postedOn") {
-        const parseDate = (dateStr) => {
-          if (!dateStr || dateStr === "—") return new Date(0);
-          const [d, m, y] = dateStr.split("-");
-          return new Date(`${y}-${m}-${d}`);
-        };
-        aVal = parseDate(aVal);
-        bVal = parseDate(bVal);
-      }
-      if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-      return 0;
+    const parseDate = (dateStr) => {
+      if (!dateStr || dateStr === "—") return 0;
+      const [d, m, y] = dateStr.split("-");
+      const t = new Date(`${y}-${m}-${d}`).getTime();
+      return Number.isNaN(t) ? null : t;
+    };
+    list = sortRows(list, reqSort, {
+      postedOn: (r) => parseDate(r.postedOn),
+      type: (r) => getTypeLabel(r.type),
+      title: (r) => r.title,
+      company: (r) => r.company,
+      location: (r) => r.location,
+      salary: (r) => r.salary,
+      allocated: (r) => allocatedCounts[r.id] || 0,
+      applicants: (r) => applicantCounts[r.id] || 0,
+      status: (r) => (r.status === "active" ? "Open" : "Closed"),
     });
 
     const start = (requirementsCurrentPage - 1) * requirementsPageSize;
     return list.slice(start, start + requirementsPageSize);
-  }, [filteredRequirements, requirementsSearchTerm, sortConfig, requirementsCurrentPage, requirementsPageSize]);
+  }, [filteredRequirements, requirementsSearchTerm, reqSort, allocatedCounts, applicantCounts, requirementsCurrentPage, requirementsPageSize]);
+
+  const handleReqSort = (key) => {
+    toggleReqSort(key);
+    setRequirementsCurrentPage(1);
+  };
 
   const requirementsTotalPages = Math.ceil(filteredRequirements.length / requirementsPageSize);
 
@@ -599,111 +622,55 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     const liveCount = allocatedCounts[req.id] || 0;
     const appCount = applicantCounts[req.id] || 0;
     return (
-      <tr
-        key={req.id}
-        style={{
-          backgroundColor: "white",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-          borderRadius: "12px",
-          transition: "all 0.3s",
-          opacity: req.status === "completed" ? 0.7 : 1,
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")}
-        onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,0.05)")}
-      >
-        <td style={{ padding: "16px", fontWeight: "600", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
-          <span
-            style={{
-              backgroundColor: getTypeBadgeColors(req.type).bg,
-              color: getTypeBadgeColors(req.type).color,
-              padding: "6px 14px",
-              borderRadius: "20px",
-              fontSize: "13px",
-              fontWeight: "600",
-            }}
-          >
-            {getTypeLabel(req.type)}
-          </span>
+      <tr key={req.id} className={selectedReqIds.includes(req.id) ? "req-row is-selected" : "req-row"}>
+        <td className="req-td">
+          <input
+            className="req-cb"
+            type="checkbox"
+            aria-label={`Select ${req.title}`}
+            checked={selectedReqIds.includes(req.id)}
+            onChange={(e) =>
+              setSelectedReqIds((prev) => (e.target.checked ? [...prev, req.id] : prev.filter((id) => id !== req.id)))
+            }
+          />
         </td>
-        <td style={{ padding: "16px" }}>
-          <div
-            style={{
-              maxWidth: "250px",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              fontWeight: "600",
-              color: "#1f2937",
-            }}
-            title={req.title}
-          >
-            {req.title}
-          </div>
+        <td className="req-td">
+          <span className="req-type">{getTypeLabel(req.type)}</span>
         </td>
-        <td style={{ padding: "16px", color: "#4b5563" }}>{req.company}</td>
-        <td
-          style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }}
-          title={req.location}
-        >
-          {formatLocationSummary(req.location, req.locationList)}
+        <td className="req-td">
+          <span className="req-trunc" title={req.title}>{req.title}</span>
         </td>
-        <td style={{ padding: "16px", color: "#4b5563", fontSize: "13px" }}>{req.salary}</td>
-        <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", color: "#10b981" }}>
-          {liveCount}
+        <td className="req-td">
+          <span className="req-trunc" title={req.company}>{req.company}</span>
         </td>
-        <td style={{ padding: "16px", textAlign: "center" }}>
+        <td className="req-td">
+          <span className="req-trunc" title={req.location}>{formatLocationSummary(req.location, req.locationList)}</span>
+        </td>
+        <td className="req-td req-num">{req.salary}</td>
+        <td className="req-td req-num">{liveCount}</td>
+        <td className="req-td req-num">
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); fetchApplicants(req); }}
             title={appCount > 0 ? `View ${appCount} applicant${appCount !== 1 ? "s" : ""}` : "No applicants yet"}
-            style={{
-              background: appCount > 0 ? "#eff6ff" : "transparent",
-              border: appCount > 0 ? "1.5px solid #1976d2" : "1.5px solid #e2e8f0",
-              borderRadius: "20px",
-              color: appCount > 0 ? "#1976d2" : "#94a3b8",
-              fontWeight: 700,
-              fontSize: "15px",
-              minWidth: "44px",
-              padding: "4px 14px",
-              cursor: "pointer",
-              lineHeight: 1.5,
-            }}
+            className="req-count-pill"
           >
             {appCount}
           </button>
         </td>
-        <td style={{ padding: "16px", textAlign: "center" }}>
-          <span
-            style={{
-              backgroundColor: req.status === "active" ? "#dcfce7" : "#fee2e2",
-              color: req.status === "active" ? "#166534" : "#991b1b",
-              padding: "8px 16px",
-              borderRadius: "20px",
-              fontSize: "13px",
-              fontWeight: "600",
-            }}
-          >
+        <td className="req-td">
+          <span className={req.status === "active" ? "req-open" : "req-closed"}>
             {req.status === "active" ? "Open" : "Closed"}
           </span>
         </td>
-        <td style={{ padding: "16px", textAlign: "center", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
+        <td className="req-td">
           <button
+            type="button"
+            className="req-act"
             onClick={() => {
               setSelectedReq(req);
               setShowJobModal(true);
             }}
-            style={{
-              padding: "8px 18px",
-              backgroundColor: "#1976d2",
-              color: "white",
-              border: "none",
-              borderRadius: "20px",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "600",
-              transition: "background-color 0.3s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1565c0")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1976d2")}
           >
             View Details
           </button>
@@ -800,14 +767,6 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     }
   };
 
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
-  };
-
   const handleStatClick = (type) => {
     if (type === "allocated") {
       setShowAllAllocationsModal(true);
@@ -830,8 +789,10 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 4000);
   };
 
-  const exportToCSV = () => {
-    const csvData = filteredRequirements.map((req) => ({
+  // Action → Export: only the ticked rows.
+  const exportSelectedToCSV = () => {
+    const rows = filteredRequirements.filter((r) => selectedReqIds.includes(r.id));
+    const csvData = rows.map((req) => ({
       Type: getTypeLabel(req.type),
       Title: req.title,
       Company: req.company,
@@ -972,9 +933,6 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     XLSX.writeFile(workbook, `${safeName}_allocated_members.xlsx`);
   };
 
-  if (loading) {
-    return <SkeletonLoader rows={6} fullPage label="Loading Requirements…" />;
-  }
 
   if (error) {
     return (
@@ -1022,7 +980,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   }
 
   return (
-    <div className="dashboard-container" style={{ backgroundColor: "#f4f6f9", minHeight: "100vh", padding: "20px" }}>
+    <div className="dashboard-container page-fill" style={{ backgroundColor: "#fff", padding: 0, color: "#212529" }}>
       {/* TOAST */}
       {toast.show && (
         <div
@@ -1045,6 +1003,69 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         </div>
       )}
       <style jsx>{`
+        .req-page { display: flex; flex-direction: column; width: 100%; }
+        .req-header { background: #fff; padding: 12px 32px 10px; border-bottom: 1px solid #e3e7ed; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+        .req-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+        .req-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; }
+        .req-title h1 { margin: 0; font-size: 22px; font-weight: 600; color: #1d2127; }
+        .req-title { align-items: center !important; }
+        .req-stats { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .req-stat { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+        .req-stat::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .req-stat b { font-size: 13px; font-weight: 700; }
+        .req-stat:hover { filter: brightness(0.96); }
+        .req-stat-total { background: #eef2e6; border-color: #cfd9c0; color: #2f4a22; }
+        .req-stat-active { background: #e3f1e3; border-color: #b7dbb9; color: #1f5c26; }
+        .req-stat-completed { background: #fde8e8; border-color: #f5c2c2; color: #9b1c1c; }
+        .req-stat-allocated { background: #e3f2fd; border-color: #b6d7f5; color: #1565c0; }
+        .req-outline-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; background: #fff; border: 1px solid #dde1e7; border-radius: 6px; color: #334155; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .req-outline-btn:hover { background: #f6f8fa; }
+        .req-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .req-controls-row .member-toolbar-group { border: 1px solid #dde1e7; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .req-controls-row .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .req-controls-row .member-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .req-controls-row .member-toolbar-group > div:first-child > div:first-child button { border-left: none !important; border-radius: 6px 0 0 6px !important; }
+        .req-controls-row .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .req-meta-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+        .req-meta-left, .req-meta-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+        .req-primary-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; background: #fff; color: #334155; border: 1px solid #dde1e7; border-radius: 6px; font-size: 13px; font-weight: 400; cursor: pointer; white-space: nowrap; }
+        .req-primary-btn:hover { background: #f8fafc; }
+        .req-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+        .req-range { font-size: 13px; color: #111827; font-weight: 600; white-space: nowrap; }
+        .req-joined { display: flex; }
+        .req-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #dde1e7; background: #fff; color: #475569; cursor: pointer; padding: 0; }
+        .req-icon-btn:disabled { color: #b8bec7; cursor: default; }
+        .req-icon-btn:not(:disabled):hover { background: #f2f3f5; }
+        .req-body { background: #fff; flex: 1; border-top: 1px solid #dde1e7; }
+        .req-table { width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+        /* Fixed widths for the short columns; Title / Company / Location share the rest. */
+        .req-table th:nth-child(1) { width: 36px; }
+        .req-table th:nth-child(2) { width: 120px; }
+        .req-table th:nth-child(6) { width: 160px; }
+        .req-table th:nth-child(7) { width: 80px; }
+        .req-table th:nth-child(8) { width: 90px; }
+        .req-table th:nth-child(9) { width: 84px; }
+        .req-table th:nth-child(10) { width: 116px; }
+        .req-td { overflow: hidden; text-overflow: ellipsis; }
+        .req-th { height: 42px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; border-bottom: 1px solid #1565c0; position: sticky; top: 0; z-index: 1; }
+        .req-sortable { cursor: pointer; user-select: none; }
+        .req-td { height: 46px; padding: 0 10px; border-bottom: 1px solid #edf0f3; font-size: 13px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
+        .req-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .req-row { background: #fff; }
+        .req-row:nth-child(odd) { background: #f7f8fb; }
+        .req-row.is-selected { background: #e3f2fd; }
+        .req-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .req-th .req-cb { width: 14px; height: 14px; accent-color: #fff; }
+        .req-th svg { color: #fff; vertical-align: -1px; margin-left: 2px; }
+        .req-trunc { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+        .req-type, .req-open, .req-closed, .req-count-pill { display: inline-flex; align-items: center; justify-content: center; height: 22px; padding: 0 10px; border-radius: 11px; font-size: 12px; font-weight: 600; }
+        .req-type { background: #eef1f5; color: #3c4047; }
+        .req-open, .req-count-pill { background: #e3f1e3; color: #1f5c26; }
+        .req-closed { background: #fbe9e9; color: #9b1c1c; }
+        .req-count-pill { border: 0; min-width: 28px; cursor: pointer; background: none !important; color: #3c4047 !important; font-size: 13px; font-weight: 400; padding: 0 4px; justify-content: flex-end; }
+        .req-count-pill:hover { color: #1976d2 !important; text-decoration: underline; }
+        .req-act { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 4px; font: inherit; font-size: 13px; color: #3c4047; cursor: pointer; }
+        .req-act:hover { background: #f2f3f5; }
         @keyframes slideIn {
           from { transform: translateX(100%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
@@ -1052,161 +1073,171 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
       `}</style>
 
       {/* HEADER */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", paddingBottom: "10px" }}>
-        <div style={{ display: "flex", gap: "10px" }}>
-          {REQUIREMENTS_FILTERS.map((filter) => (
+      <div className="req-page page-fill-mid">
+        <div className="req-header page-header-band">
+          {/* Row 1: title + stats, Reset Filters */}
+          <div className="req-title-row">
+            <div className="req-title">
+              <h1>
+                {activeFilter === "All" ? "Requirements Allocations" : `${activeFilter} Requirements`}
+              </h1>
+              <span className="req-stats">
+                {[
+                  { type: "total", label: "Total", value: stats.total },
+                  { type: "active", label: "Open", value: stats.active },
+                  { type: "completed", label: "Closed", value: stats.completed },
+                  { type: "allocated", label: "Allocated members", value: stats.totalAllocated },
+                ].map((s) => (
+                  <button key={s.type} type="button" className={`req-stat req-stat-${s.type}`} onClick={() => handleStatClick(s.type)} title="View details">
+                    <b>{s.value.toLocaleString()}</b> {s.label}
+                  </button>
+                ))}
+              </span>
+            </div>
             <button
-              key={filter}
-              className={`filter-btn ${activeFilter === filter ? "active" : ""}`}
-              onClick={() => setActiveFilter(filter)}
-              style={{
-                padding: "8px 16px",
-                borderRadius: "30px",
-                backgroundColor: activeFilter === filter ? "#1976d2" : "#e5e7eb",
-                color: activeFilter === filter ? "white" : "#1f2937",
-                fontWeight: "700",
-                border: "none",
-                cursor: "pointer",
-                boxShadow:
-                  "0 2px 1px -1px rgba(0,0,0,0.2), 0 1px 1px 0 rgba(0,0,0,0.14), 0 1px 3px 0 rgba(0,0,0,0.12)",
-                transition: "box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+              type="button"
+              className="req-outline-btn"
+              onClick={() => {
+                setActiveFilter("All");
+                setRequirementsSearchTerm("");
+                setGroupBy(null);
+                setRequirementsCurrentPage(1);
               }}
             >
-              {filter}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Reset Filters
             </button>
-          ))}
-        </div>
-        <button
-          onClick={exportToCSV}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#10b981",
-            color: "white",
-            borderRadius: "30px",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontWeight: "700",
-            boxShadow:
-              "0 2px 1px -1px rgba(0,0,0,0.2), 0 1px 1px 0 rgba(0,0,0,0.14), 0 1px 3px 0 rgba(0,0,0,0.12)",
-          }}
-        >
-          <FaFileExport /> Export CSV
-        </button>
-      </header>
-
-      {/* STATS GRID – NOW DYNAMIC */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px", marginBottom: "40px" }}>
-        {[
-          {
-            type: "total",
-            label: activeFilter === "All" ? "Total Requirements" : `${activeFilter} Requirements`,
-            icon: FaBriefcase,
-            color: "#3b82f6",
-            value: stats.total,
-          },
-          {
-            type: "active",
-            label: "Open Requirements",
-            icon: FaHourglassHalf,
-            color: "#22c55e",
-            value: stats.active,
-          },
-          {
-            type: "completed",
-            label: "Closed Requirements",
-            icon: FaCheckCircle,
-            color: "#06b6d4",
-            value: stats.completed,
-          },
-          {
-            type: "allocated",
-            label: "Allocated Members (in view)",
-            icon: FaUsers,
-            color: "#a855f7",
-            value: stats.totalAllocated,
-          },
-        ].map((stat) => (
-          <div
-            key={stat.type}
-            onClick={() => handleStatClick(stat.type)}
-            style={{
-              cursor: "pointer",
-              backgroundColor: "white",
-              borderRadius: "16px",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-              padding: "20px",
-              transition: "transform 0.3s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <div style={{ backgroundColor: stat.color, color: "white", padding: "16px", borderRadius: "50%" }}>
-                <stat.icon size={32} />
-              </div>
-              <div>
-                <p style={{ fontSize: "16px", color: "#6b7280" }}>{stat.label}</p>
-                <p style={{ fontSize: "32px", fontWeight: "bold", color: "#1f2937" }}>{stat.value}</p>
-              </div>
-            </div>
           </div>
-        ))}
-      </div>
 
-      {/* REQUIREMENTS SECTION */}
-      <div
-        style={{
-          backgroundColor: "white",
-          borderRadius: "16px",
-          padding: "30px",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-          minHeight: "600px",
-          width: "100%",
-          minWidth: "min(100%, 1100px)",
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "16px" }}>
-          <h2 style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#1f2937" }}>
-            {activeFilter === "All" && "All Requirements"}
-            {activeFilter === "Open" && "Open Requirements"}
-            {activeFilter === "Closed" && "Closed Requirements"}
-            {activeFilter === "Projects" && "Projects"}
-            {activeFilter === "Recruitment" && "Recruitment"}
-            {activeFilter === "Temp Staffing" && "Temp Staffing"}
-            <span style={{ marginLeft: "10px", color: "#10b981", fontSize: "20px" }}>
-              ({filteredRequirements.length})
-            </span>
-          </h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", minWidth: "320px", maxWidth: "620px" }}>
+          {/* Row 2: search, Filters / Group By / Favorites */}
+          <div className="req-controls-row">
             <OdooSearchBar
+              variant="boxed"
               value={requirementsSearchTerm}
               onChange={(e) => setRequirementsSearchTerm(e.target.value)}
               placeholder="Search by title, company, location..."
-              chips={groupBy ? [{ key: "groupBy", label: `Group: ${REQUIREMENTS_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []}
+              chips={[
+                ...(activeFilter !== "All" ? [{ key: "filter", label: `Filter: ${activeFilter}`, onRemove: () => setActiveFilter("All") }] : []),
+                ...(groupBy ? [{ key: "groupBy", label: `Group: ${REQUIREMENTS_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
+              ]}
             />
-            <OdooViewToolbar
-              quickFilters={[]}
-              groupByOptions={REQUIREMENTS_GROUP_BY_OPTIONS}
-              groupBy={groupBy}
-              onGroupByChange={setGroupBy}
-              view={kanbanView}
-              onViewChange={setKanbanView}
-            />
+            <div className="member-toolbar-group">
+              <OdooViewToolbar
+                variant="boxed"
+                quickFilters={REQUIREMENTS_FILTERS.filter((f) => f !== "All").map((f) => ({
+                  key: f,
+                  label: f,
+                  active: activeFilter === f,
+                  onToggle: () => setActiveFilter(activeFilter === f ? "All" : f),
+                }))}
+                groupByOptions={REQUIREMENTS_GROUP_BY_OPTIONS}
+                groupBy={groupBy}
+                onGroupByChange={setGroupBy}
+                showViewToggle={false}
+              />
+              <FavoritesMenu
+                favorites={reqFavorites}
+                onApply={(fav) => {
+                  setActiveFilter(REQUIREMENTS_FILTERS.includes(fav.activeFilter) ? fav.activeFilter : "All");
+                  setGroupBy(fav.groupBy || null);
+                  setRequirementsSearchTerm(fav.search || "");
+                  setRequirementsCurrentPage(1);
+                }}
+                onDelete={(id) => setReqFavorites((prev) => prev.filter((f) => f.id !== id))}
+                onSave={(name) =>
+                  setReqFavorites((prev) => [
+                    ...prev,
+                    { id: `${Date.now()}`, name, activeFilter, groupBy, search: requirementsSearchTerm },
+                  ])
+                }
+              />
+            </div>
+          </div>
+
+          {/* Row 3: actions left, pager + view toggle right */}
+          <div className="req-meta-row">
+            <SelectionActionMenu count={selectedReqIds.length} onExport={exportSelectedToCSV} onClear={() => setSelectedReqIds([])} />
+            <div className="req-meta-left">
+            </div>
+            <div className="req-meta-right">
+              <select
+                aria-label="Records per page"
+                className="req-select"
+                value={requirementsPageSize}
+                onChange={(e) => {
+                  setRequirementsPageSize(Number(e.target.value));
+                  setRequirementsCurrentPage(1);
+                }}
+              >
+                {[10, 25, 50, 100, "All"].map((size) => (
+                  <option key={size} value={size === "All" ? filteredRequirements.length : size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <span className="req-range">
+                {filteredRequirements.length === 0
+                  ? "0 / 0"
+                  : `${(requirementsCurrentPage - 1) * requirementsPageSize + 1}–${Math.min(requirementsCurrentPage * requirementsPageSize, filteredRequirements.length)} / ${filteredRequirements.length}`}
+              </span>
+              <div className="req-joined">
+                <button
+                  type="button"
+                  className="req-icon-btn"
+                  aria-label="Previous page"
+                  disabled={requirementsCurrentPage <= 1}
+                  onClick={() => setRequirementsCurrentPage((p) => p - 1)}
+                  style={{ borderRadius: "6px 0 0 6px" }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+                </button>
+                <button
+                  type="button"
+                  className="req-icon-btn"
+                  aria-label="Next page"
+                  disabled={requirementsCurrentPage >= requirementsTotalPages}
+                  onClick={() => setRequirementsCurrentPage((p) => p + 1)}
+                  style={{ borderRadius: "0 6px 6px 0", marginLeft: "-1px" }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+              </div>
+              <div className="req-joined">
+                <button
+                  type="button"
+                  className="req-icon-btn"
+                  aria-label="List view"
+                  aria-pressed={kanbanView === "list"}
+                  onClick={() => setKanbanView("list")}
+                  style={{ borderRadius: "6px 0 0 6px", ...(kanbanView === "list" ? { background: "#e8f1fb", color: "#1976D2" } : {}) }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+                </button>
+                <button
+                  type="button"
+                  className="req-icon-btn"
+                  aria-label="Kanban view"
+                  aria-pressed={kanbanView === "kanban"}
+                  onClick={() => setKanbanView("kanban")}
+                  style={{ borderRadius: "0 6px 6px 0", marginLeft: "-1px", ...(kanbanView === "kanban" ? { background: "#e8f1fb", color: "#1976D2" } : {}) }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="10" /><rect x="16" y="4" width="4" height="13" /></svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {displayedRequirements.length === 0 ? (
+        {/* REQUIREMENTS SECTION */}
+        <div className="req-body page-fill-mid">
+        {loading ? (
+          <TableLoadingSpinner label="Loading requirements…" />
+        ) : displayedRequirements.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px", color: "#666" }}>
             <p style={{ fontSize: "16px" }}>No Requirements found.</p>
           </div>
         ) : kanbanView === "kanban" ? (
-          <div>
+          <div className="page-fill-scroll" style={{ padding: "16px 32px" }}>
             {groupedRequirements
               ? groupedRequirements.map(([label, items]) => (
                   <div key={label} style={{ marginBottom: "20px" }}>
@@ -1243,52 +1274,41 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               )}
           </div>
         ) : (
-          <div style={{ overflowX: "auto", minWidth: "100%" }}>
-            <table
-              style={{
-                width: "100%",
-                minWidth: "1100px",
-                tableLayout: "fixed",
-                borderCollapse: "separate",
-                borderSpacing: "0 10px",
-                fontSize: "14px",
-              }}
-            >
+          <div className="page-fill-scroll" style={{ minWidth: "100%" }}>
+            <table className="req-table">
               <thead>
-                <tr style={{ backgroundColor: "#1976d2", color: "white", borderRadius: "12px" }}>
-                  <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
-                    Type
+                <tr>
+                  <th className="req-th" style={{ width: "36px" }}>
+                    <input
+                      className="req-cb"
+                      type="checkbox"
+                      aria-label="Select all requirements"
+                      checked={displayedRequirements.length > 0 && displayedRequirements.every((r) => selectedReqIds.includes(r.id))}
+                      onChange={(e) =>
+                        setSelectedReqIds(e.target.checked ? displayedRequirements.map((r) => r.id) : [])
+                      }
+                    />
                   </th>
-                  <th
-                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
-                    onClick={() => handleSort("title")}
-                  >
-                    Title {sortConfig.key === "title" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
-                  </th>
-                  <th
-                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
-                    onClick={() => handleSort("company")}
-                  >
-                    Company {sortConfig.key === "company" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
-                  </th>
-                  <th
-                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
-                    onClick={() => handleSort("location")}
-                  >
-                    Location {sortConfig.key === "location" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
-                  </th>
-                  <th
-                    style={{ padding: "16px", textAlign: "left", fontWeight: "700", cursor: "pointer" }}
-                    onClick={() => handleSort("salary")}
-                  >
-                    Compensation {sortConfig.key === "salary" ? (sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />) : <FaSort />}
-                  </th>
-                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Allocated</th>
-                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Applicants</th>
-                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700" }}>Status</th>
-                  <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
-                    Actions
-                  </th>
+                  {[
+                    ["type", "Type", false],
+                    ["title", "Title", false],
+                    ["company", "Company", false],
+                    ["location", "Location", false],
+                    ["salary", "Compensation", true],
+                    ["allocated", "Allocated", true],
+                    ["applicants", "Applicants", true],
+                    ["status", "Status", false],
+                  ].map(([key, label, numeric]) => (
+                    <th
+                      key={key}
+                      className={numeric ? "req-th req-sortable req-num" : "req-th req-sortable"}
+                      {...sortHeaderProps(key, reqSort, handleReqSort)}
+                    >
+                      {label}
+                      <SortArrow active={reqSort.key === key} dir={reqSort.dir} />
+                    </th>
+                  ))}
+                  <th className="req-th">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1296,7 +1316,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   ? groupedRequirements.map(([label, items]) => (
                       <Fragment key={label}>
                         <tr>
-                          <td colSpan={9} style={{ padding: "10px 16px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
+                          <td colSpan={10} style={{ height: "40px", padding: "0 12px", fontWeight: 600, fontSize: "13px", color: "#334155", background: "#f1f5f9", borderBottom: "1px solid #dde1e7" }}>
                             {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
                           </td>
                         </tr>
@@ -1308,62 +1328,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             </table>
           </div>
         )}
-
-        {/* Requirements Pagination */}
-        {requirementsTotalPages > 1 && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px", flexWrap: "wrap", gap: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "14px", color: "#6b7280" }}>Rows per page:</span>
-              <select
-                value={requirementsPageSize}
-                onChange={(e) => {
-                  setRequirementsPageSize(Number(e.target.value));
-                  setRequirementsCurrentPage(1);
-                }}
-                style={{ padding: "10px 14px", borderRadius: "12px", border: "2px solid #e2e8f0", backgroundColor: "white" }}
-              >
-                {[10, 25, 50, 100, "All"].map((size) => (
-                  <option key={size} value={size === "All" ? filteredRequirements.length : size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-              <button
-                disabled={requirementsCurrentPage === 1}
-                onClick={() => setRequirementsCurrentPage((p) => p - 1)}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "12px",
-                  background: requirementsCurrentPage === 1 ? "#e5e7eb" : "#1976d2",
-                  color: "white",
-                  border: "none",
-                  fontWeight: "600",
-                }}
-              >
-                Previous
-              </button>
-              <span style={{ padding: "10px", fontSize: "14px", color: "#1f2937" }}>
-                Page {requirementsCurrentPage} of {requirementsTotalPages}
-              </span>
-              <button
-                disabled={requirementsCurrentPage === requirementsTotalPages}
-                onClick={() => setRequirementsCurrentPage((p) => p + 1)}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "12px",
-                  background: requirementsCurrentPage === requirementsTotalPages ? "#e5e7eb" : "#1976d2",
-                  color: "white",
-                  border: "none",
-                  fontWeight: "600",
-                }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* ------------------ MODALS ------------------ */}

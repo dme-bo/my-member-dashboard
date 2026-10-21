@@ -70,7 +70,7 @@ const getRatingTypeLabel = (ratingType) => {
   }
 };
 
-export default function MemberDetailModal({ member, onClose }) {
+export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPartner }) {
   const [activeTab, setActiveTab] = useState("personal");
   const [newNotesList, setNewNotesList] = useState([]);
   const [ratingDraft, setRatingDraft] = useState(null);
@@ -1069,6 +1069,21 @@ export default function MemberDetailModal({ member, onClose }) {
                 {normalizedMember.email || "N/A"}
               </p> */}
             </div>
+
+            {(onOpenTag || onOpenPartner) && (
+              <div style={{ display: "flex", gap: "8px", marginRight: "16px" }}>
+                {onOpenTag && (
+                  <button type="button" onClick={onOpenTag} style={{ height: "28px", padding: "0 12px", borderRadius: "4px", border: "1px solid #fff", background: "transparent", color: "#fff", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}>
+                    + Tag
+                  </button>
+                )}
+                {onOpenPartner && (
+                  <button type="button" onClick={onOpenPartner} style={{ height: "28px", padding: "0 12px", borderRadius: "4px", border: "1px solid #fff", background: "transparent", color: "#fff", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}>
+                    Regional Partner
+                  </button>
+                )}
+              </div>
+            )}
 
             <div style={{ marginRight: "16px", marginTop: "2px" }}>
               {renderStars()}

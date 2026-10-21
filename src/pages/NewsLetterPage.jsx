@@ -6,14 +6,16 @@ import {
   View,
   Document,
   StyleSheet,
-  PDFDownloadLink,
-  PDFViewer,
+  pdf,
   Link,
   Image,
   Font,
 } from '@react-pdf/renderer';
 import { collection, db, getDocs, query, where, doc, getDoc, updateDoc } from '../firestoreClient';
-import SkeletonLoader from '../components/SkeletonLoader';
+import OdooSearchBar from '../components/OdooSearchBar';
+import OdooViewToolbar from '../components/OdooViewToolbar';
+import FavoritesMenu from '../components/FavoritesMenu';
+import TableLoadingSpinner from '../components/TableLoadingSpinner';
 import { formatDateText } from "../utils/dateFormat";
 
 // Default hyphenation breaks long words mid-syllable (e.g. "Unspeci-fied")
@@ -215,7 +217,7 @@ const CustomCheckboxOption = (props) => (
 
 const CustomMenu = (props) => {
   const { children, ...rest } = props;
-  const options = props.options || [];
+  const options = (props.options || []).flatMap((o) => o.options || [o]);
   const selected = props.getValue() || [];
   const isAllSelected = options.length > 0 && selected.length === options.length;
 
@@ -278,6 +280,41 @@ const customSelectStyles = {
   }),
   menu: (base) => ({ ...base, zIndex: 1000 }),
 };
+
+// Compact underline-style selects for the "Include in newsletter" sidebar.
+const sidebarSelectStyles = {
+  ...customSelectStyles,
+  control: (base, state) => ({
+    ...base,
+    minHeight: '30px',
+    fontSize: '12px',
+    border: 'none',
+    borderBottom: `1px solid ${state.isFocused ? '#1976d2' : '#dde1e7'}`,
+    borderRadius: 0,
+    boxShadow: 'none',
+    background: 'transparent',
+    ':hover': { borderBottomColor: '#94a3b8' },
+  }),
+  valueContainer: (base) => ({ ...base, padding: '0 2px', maxHeight: '96px', overflowY: 'auto' }),
+  placeholder: (base) => ({ ...base, color: '#94a3b8', fontSize: '12px' }),
+  indicatorSeparator: () => ({ display: 'none' }),
+  dropdownIndicator: (base) => ({ ...base, padding: '4px', color: '#64748b' }),
+  clearIndicator: (base) => ({ ...base, padding: '4px' }),
+  multiValueLabel: (base) => ({ ...base, color: '#2c5e1f', fontSize: '11px' }),
+  menuPortal: (base) => ({ ...base, zIndex: 3000 }),
+  groupHeading: (base) => ({ ...base, fontSize: '11px', color: '#64748b', textTransform: 'none', fontWeight: 600 }),
+};
+
+const NEWSLETTER_SECTIONS = [
+  { key: 'jobs', label: 'Jobs', placeholder: 'Select jobs to include...' },
+  { key: 'projects', label: 'Projects', placeholder: 'Select projects to include...' },
+  { key: 'workshops', label: 'Workshops', placeholder: 'Select workshops to include...' },
+  { key: 'communityJobs', label: 'Community Jobs', placeholder: 'Select community jobs to include...' },
+  { key: 'tempStaffing', label: 'Temp Staffing', placeholder: 'Select temp staffing assignments to include...' },
+];
+const NEWSLETTER_FAVORITES_KEY = 'newsletterFavorites';
+// Preview zoom steps (percent); null = fit the whole page.
+const ZOOM_STEPS = [50, 75, 100, 125, 150, 200];
 
 // ── PDF Document Component (full structure) ────────────────────────────────
 // The document component assembles jobs, projects, partner stats, and config content.
@@ -643,6 +680,23 @@ export default function BriskOliveNewsletterApp() {
   const scrollContainerRef = useRef(null);
   const scrollPosition = useRef(0);
 
+  // Header band: search / Filters (sections shown) / Group By / Favorites.
+  const [searchTerm, setSearchTerm] = useState('');
+  const [hiddenSections, setHiddenSections] = useState(() => new Set());
+  const [groupBy, setGroupBy] = useState(null); // null | 'company'
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(NEWSLETTER_FAVORITES_KEY)) || []; } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(NEWSLETTER_FAVORITES_KEY, JSON.stringify(favorites)); } catch { /* storage unavailable */ }
+  }, [favorites]);
+
+  // Generated PDF (blob URL + page count) and the preview's page / zoom.
+  const [pdfFile, setPdfFile] = useState({ url: null, pages: 0 });
+  const [generating, setGenerating] = useState(false);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [zoomIndex, setZoomIndex] = useState(null); // index into ZOOM_STEPS, null = fit
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -834,11 +888,13 @@ export default function BriskOliveNewsletterApp() {
   const jobOptions = jobs.map((j) => ({
     value: j.id,
     label: `${j.job_company || '?'} • ${j.job_title || 'Position'}`,
+    company: j.job_company,
   }));
 
   const projectOptions = projects.map((p) => ({
     value: p.id,
     label: `${p.project_company || '?'} • ${p.project_title || 'Project'}`,
+    company: p.project_company,
   }));
 
   const workshopOptions = workshops.map((w) => ({
@@ -849,11 +905,13 @@ export default function BriskOliveNewsletterApp() {
   const communityJobOptions = communityJobs.map((j) => ({
     value: j.id,
     label: `${j.job_company || '?'} • ${j.job_designation || 'Position'}`,
+    company: j.job_company,
   }));
 
   const tempStaffingProjectOptions = tempStaffingProjects.map((p) => ({
     value: p.id,
     label: p.project_title || 'Assignment',
+    company: p.project_company,
   }));
 
   // PDFViewer/PDFDownloadLink regenerate the entire PDF whenever the `document`
@@ -897,115 +955,236 @@ export default function BriskOliveNewsletterApp() {
     [filteredJobs, filteredProjects, filteredWorkshops, filteredCommunityJobs, filteredTempStaffingProjects, regionalPartners, content]
   );
 
-    if (loading) {
-    return <SkeletonLoader rows={6} fullPage label="Loading Newsletter…" />;
-  }
+  // Each sidebar section: its full option list, selection and setter.
+  const sections = {
+    jobs: { options: jobOptions, value: selectedJobs, set: setSelectedJobs },
+    projects: { options: projectOptions, value: selectedProjects, set: setSelectedProjects },
+    workshops: { options: workshopOptions, value: selectedWorkshops, set: setSelectedWorkshops },
+    communityJobs: { options: communityJobOptions, value: selectedCommunityJobs, set: setSelectedCommunityJobs },
+    tempStaffing: { options: tempStaffingProjectOptions, value: selectedTempStaffingProjects, set: setSelectedTempStaffingProjects },
+  };
+
+  // Search narrows each dropdown's options; Group By → Company groups them.
+  const visibleOptions = (options) => {
+    const term = searchTerm.trim().toLowerCase();
+    const matched = term ? options.filter((o) => o.label.toLowerCase().includes(term)) : options;
+    if (groupBy !== 'company') return matched;
+    const groups = new Map();
+    matched.forEach((o) => {
+      const key = o.company || 'No company';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    });
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([label, opts]) => ({ label, options: opts }));
+  };
+
+  const toggleSection = (key) =>
+    setHiddenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  // Filters menu ticks the sections that are shown; none hidden = all ticked.
+  const quickFilters = NEWSLETTER_SECTIONS.map((sec) => ({
+    key: sec.key,
+    label: sec.label,
+    active: hiddenSections.size > 0 && !hiddenSections.has(sec.key),
+    onToggle: () => {
+      if (hiddenSections.size === 0) {
+        // First click: show only this section.
+        setHiddenSections(new Set(NEWSLETTER_SECTIONS.filter((x) => x.key !== sec.key).map((x) => x.key)));
+      } else {
+        toggleSection(sec.key);
+      }
+    },
+  }));
+  const filterChips = [
+    ...(hiddenSections.size ? [{ key: 'sections', label: `Showing: ${NEWSLETTER_SECTIONS.filter((x) => !hiddenSections.has(x.key)).map((x) => x.label).join(', ') || 'none'}`, onRemove: () => setHiddenSections(new Set()) }] : []),
+    ...(groupBy ? [{ key: 'group', label: 'Group: Company', onRemove: () => setGroupBy(null) }] : []),
+  ];
+
+  const resetSelection = () => {
+    NEWSLETTER_SECTIONS.forEach((sec) => sections[sec.key].set([]));
+    setSearchTerm('');
+    setHiddenSections(new Set());
+    setGroupBy(null);
+    setPreviewPage(1);
+  };
+  const saveCurrentAsFavorite = (name) =>
+    setFavorites((prev) => [
+      ...prev,
+      { id: `${Date.now()}`, name, selection: Object.fromEntries(NEWSLETTER_SECTIONS.map((sec) => [sec.key, sections[sec.key].value.map((o) => o.value)])) },
+    ]);
+  const applyFavorite = (fav) => {
+    NEWSLETTER_SECTIONS.forEach((sec) => {
+      const ids = new Set(fav.selection?.[sec.key] || []);
+      sections[sec.key].set(sections[sec.key].options.filter((o) => ids.has(o.value)));
+    });
+    setPreviewPage(1);
+  };
+  const deleteFavorite = (id) => setFavorites((prev) => prev.filter((fav) => fav.id !== id));
+
+  // Build the PDF once per change (debounced) and show it in a plain iframe,
+  // so the header can drive page navigation and zoom via the URL fragment.
+  useEffect(() => {
+    if (loading) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setGenerating(true);
+      try {
+        const blob = await pdf(newsletterDocumentElement).toBlob();
+        const raw = await blob.text();
+        const pages = (raw.match(/\/Type\s*\/Page(?![s\w])/g) || []).length || 1;
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setPdfFile((prev) => {
+          if (prev.url) URL.revokeObjectURL(prev.url);
+          return { url, pages };
+        });
+        setPreviewPage((p) => Math.min(p, pages));
+      } catch (err) {
+        console.error('PDF generation failed:', err);
+      } finally {
+        if (!cancelled) setGenerating(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [newsletterDocumentElement, loading]);
+
+  const pdfUrlRef = useRef(null);
+  pdfUrlRef.current = pdfFile.url;
+  useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
+
+  const zoomFragment = zoomIndex === null ? 'view=Fit' : `zoom=${ZOOM_STEPS[zoomIndex]}`;
+  const previewSrc = pdfFile.url ? `${pdfFile.url}#toolbar=0&navpanes=0&page=${previewPage}&${zoomFragment}` : null;
+  const zoomOut = () => setZoomIndex((z) => (z === null ? 1 : Math.max(0, z - 1)));
+  const zoomIn = () => setZoomIndex((z) => (z === null ? 2 : Math.min(ZOOM_STEPS.length - 1, z + 1)));
+  const pdfFileName = `Newsletter_${formatNewsletterDate().replace(/ /g, '_')}.pdf`;
 
   return (
-    <div className="newsletter-app">
+    <div className="newsletter-app page-fill">
 
-      <header className="app-header">
-        <button
-          type="button"
-          className="edit-content-btn"
-          onClick={() => {
-            setEditedContent(structuredClone(content || {}));
-            setShowEditModal(true);
-          }}
-        >
-          Edit Content
-        </button>
-      </header>
-
-      <div className="selectors-container">
-        <div className="select-group">
-          <label>Select Jobs ({selectedJobs.length}/{jobOptions.length})</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
-            options={jobOptions}
-            value={selectedJobs}
-            onChange={setSelectedJobs}
-            placeholder="Select jobs to include..."
-            styles={customSelectStyles}
-          />
+      <div className="nl-header page-header-band">
+        <div className="nl-title-row">
+          <div className="nl-title">
+            <h1>Newsletter</h1>
+            <span>Choose what to include, then preview the PDF</span>
+          </div>
+          <button type="button" className="nl-outline-btn" onClick={resetSelection}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+            Reset Selection
+          </button>
         </div>
 
-        <div className="select-group">
-          <label>Select Projects ({selectedProjects.length}/{projectOptions.length})</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
-            options={projectOptions}
-            value={selectedProjects}
-            onChange={setSelectedProjects}
-            placeholder="Select projects to include..."
-            styles={customSelectStyles}
+        <div className="nl-controls-row">
+          <OdooSearchBar
+            variant="boxed"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search jobs, projects, workshops to include..."
+            chips={filterChips}
           />
+          <div className="member-toolbar-group">
+            <OdooViewToolbar
+              variant="boxed"
+              quickFilters={quickFilters}
+              groupByOptions={[{ key: 'company', label: 'Company' }]}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              showViewToggle={false}
+            />
+            <FavoritesMenu favorites={favorites} onApply={applyFavorite} onDelete={deleteFavorite} onSave={saveCurrentAsFavorite} />
+          </div>
         </div>
 
-        <div className="select-group">
-          <label>Select Workshops ({selectedWorkshops.length}/{workshopOptions.length})</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
-            options={workshopOptions}
-            value={selectedWorkshops}
-            onChange={setSelectedWorkshops}
-            placeholder="Select workshops to include..."
-            styles={customSelectStyles}
-          />
-        </div>
-
-        <div className="select-group">
-          <label>Select Community Jobs ({selectedCommunityJobs.length}/{communityJobOptions.length})</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
-            options={communityJobOptions}
-            value={selectedCommunityJobs}
-            onChange={setSelectedCommunityJobs}
-            placeholder="Select community jobs to include..."
-            styles={customSelectStyles}
-          />
-        </div>
-
-        <div className="select-group">
-          <label>Select Temp Staffing ({selectedTempStaffingProjects.length}/{tempStaffingProjectOptions.length})</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
-            options={tempStaffingProjectOptions}
-            value={selectedTempStaffingProjects}
-            onChange={setSelectedTempStaffingProjects}
-            placeholder="Select temp staffing assignments to include..."
-            styles={customSelectStyles}
-          />
-        </div>
-      </div>
-
-      <div className="pdf-preview-container">
-        <PDFViewer className="pdf-viewer">
-          {newsletterDocumentElement}
-        </PDFViewer>
-      </div>
-
-      <div className="download-section">
-        <PDFDownloadLink
-          document={newsletterDocumentElement}
-          fileName={`Newsletter_${formatNewsletterDate().replace(/ /g, '_')}.pdf`}
-        >
-          {({ loading }) => (
-            <button type="button" disabled={loading} className="download-btn">
-              {loading ? 'Generating...' : 'Download PDF'}
+        <div className="nl-meta-row">
+          <div className="nl-meta-left">
+            <button
+              type="button"
+              className="nl-primary-btn"
+              disabled={loading}
+              onClick={() => {
+                setEditedContent(structuredClone(content || {}));
+                setShowEditModal(true);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+              Edit Content
             </button>
-          )}
-        </PDFDownloadLink>
+            <a
+              className={`nl-outline-btn${!pdfFile.url || generating ? ' is-disabled' : ''}`}
+              href={pdfFile.url || undefined}
+              download={pdfFileName}
+              aria-disabled={!pdfFile.url || generating}
+              onClick={(e) => { if (!pdfFile.url || generating) e.preventDefault(); }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11" /><path d="M7 11l5 5 5-5" /><path d="M5 20h14" /></svg>
+              {generating ? 'Generating…' : 'Download PDF'}
+            </a>
+          </div>
+          <div className="nl-meta-right">
+            <span className="nl-range">Page {pdfFile.pages ? previewPage : 0} / {pdfFile.pages}</span>
+            <button type="button" className="nl-icon-btn" aria-label="Previous page" disabled={previewPage <= 1} onClick={() => setPreviewPage((p) => p - 1)}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <button type="button" className="nl-icon-btn" aria-label="Next page" disabled={previewPage >= pdfFile.pages} onClick={() => setPreviewPage((p) => p + 1)}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+            <div className="nl-zoom" role="group" aria-label="Zoom">
+              <button type="button" aria-label="Zoom out" title={zoomIndex === null ? 'Fit page' : `${ZOOM_STEPS[zoomIndex]}%`} disabled={zoomIndex === 0} onClick={zoomOut}>−</button>
+              <button type="button" aria-label="Zoom in" title={zoomIndex === null ? 'Fit page' : `${ZOOM_STEPS[zoomIndex]}%`} disabled={zoomIndex === ZOOM_STEPS.length - 1} onClick={zoomIn}>+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="nl-body page-fill-mid">
+        {loading ? (
+          <TableLoadingSpinner label="Loading newsletter…" />
+        ) : (
+          <div className="nl-split">
+            <aside className="nl-sidebar" aria-label="Include in newsletter">
+              <h2>Include in newsletter</h2>
+              {NEWSLETTER_SECTIONS.filter((sec) => !hiddenSections.has(sec.key)).map((sec) => {
+                const section = sections[sec.key];
+                return (
+                  <div className="nl-field" key={sec.key}>
+                    <label>
+                      {sec.label} <span>({section.value.length}/{section.options.length})</span>
+                    </label>
+                    <Select
+                      isMulti
+                      aria-label={sec.label}
+                      closeMenuOnSelect={false}
+                      components={{ Option: CustomCheckboxOption, Menu: CustomMenu }}
+                      options={visibleOptions(section.options)}
+                      value={section.value}
+                      onChange={(v) => { section.set(v || []); setPreviewPage(1); }}
+                      placeholder={sec.placeholder}
+                      styles={sidebarSelectStyles}
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
+                    />
+                  </div>
+                );
+              })}
+            </aside>
+
+            <section className="nl-preview" aria-label="Newsletter preview">
+              {previewSrc ? (
+                <iframe
+                  key={previewSrc}
+                  className={`nl-paper${zoomIndex === null ? '' : ' is-zoomed'}`}
+                  title={`Newsletter preview, page ${previewPage} of ${pdfFile.pages}`}
+                  src={previewSrc}
+                />
+              ) : (
+                <TableLoadingSpinner label="Building preview…" />
+              )}
+              {generating && previewSrc && <div className="nl-preview-busy">Updating preview…</div>}
+            </section>
+          </div>
+        )}
       </div>
 
       {/* ── EDIT MODAL ────────────────────────────────────────────────────── */}
@@ -1199,86 +1378,51 @@ export default function BriskOliveNewsletterApp() {
           width: 100%;
           max-width: 100%;
           margin: 0;
-          padding: 2rem 1.5rem;
           box-sizing: border-box;
+          background: #fff;
         }
-
-        .app-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2.5rem;
-          gap: 342px;
-        }
-
-        .app-header h1 {
-              color: white;
-    background-color: #1976d2;
-    font-size: 2.9rem;
-    margin: 0;
-    padding: 1.2rem 8rem;
-    border-radius: 12px;
-    display: inline-block;
-        }
-
-        .edit-content-btn {
-          background: #1976d2;
-          color: white;
-          border: none;
-          padding: 0.8rem 1.8rem;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 1.1rem;
-          margin-left: auto;
-        }
-
-        .selectors-container {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 2rem;
-          margin-bottom: 2.5rem;
-        }
-
-        .select-group label {
-          display: block;
-          font-weight: 600;
-          margin-bottom: 0.6rem;
-          color: #1976d2;
-        }
-
-        .pdf-preview-container {
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-          margin-bottom: 2rem;
-          height: 900px;
-          background: white;
-          min-width: 100%;
-        }
-
-        .pdf-viewer {
-          width: 100%;
-          height: 100%;
-          border: none;
-        }
-
-        .download-section {
-          text-align: center;
-        }
-
-        .download-btn {
-          background: #1976d2;
-          color: white;
-          padding: 1rem 3rem;
-          border: none;
-          border-radius: 10px;
-          font-size: 1.3rem;
-          cursor: pointer;
-        }
-
-        .download-btn:disabled {
-          background: #9ca3af;
-          cursor: not-allowed;
+        .nl-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .nl-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+        .nl-title h1 { margin: 0; }
+        .nl-title span { font-size: 14px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nl-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .member-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .member-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .member-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .nl-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .nl-meta-left, .nl-meta-right { display: flex; align-items: center; gap: 8px; }
+        .nl-meta-right { gap: 6px; }
+        .nl-outline-btn, .nl-primary-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; text-decoration: none; box-sizing: border-box; }
+        .nl-outline-btn { border: 1px solid #dde1e7; background: #fff; color: #334155; }
+        .nl-outline-btn:hover { background: #f8fafc; }
+        .nl-outline-btn.is-disabled { color: #94a3b8; cursor: not-allowed; }
+        .nl-primary-btn { border: 1px solid #1976d2; background: #1976d2; color: #fff; font-weight: 600; }
+        .nl-primary-btn:hover { background: #1565c0; }
+        .nl-primary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .nl-range { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; margin-right: 2px; }
+        .nl-icon-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #dde1e7; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; }
+        .nl-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; cursor: not-allowed; }
+        .nl-zoom { display: flex; margin-left: 6px; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; }
+        .nl-zoom button { width: 30px; height: 28px; padding: 0; border: none; background: #fff; color: #334155; font-size: 16px; line-height: 1; cursor: pointer; }
+        .nl-zoom button + button { border-left: 1px solid #dde1e7; }
+        .nl-zoom button:disabled { color: #cbd5e1; cursor: not-allowed; }
+        .nl-body { border-top: 1px solid #dde1e7; }
+        .nl-split { flex: 1 1 auto; min-height: 0; display: flex; }
+        .nl-sidebar { flex: 0 0 240px; box-sizing: border-box; padding: 18px 16px; border-right: 1px solid #dde1e7; background: #fff; overflow-y: auto; }
+        .nl-sidebar h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; color: #111827; }
+        .nl-field + .nl-field { margin-top: 14px; }
+        .nl-field label { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 600; color: #1d2127; }
+        .nl-field label span { font-weight: 400; color: #64748b; }
+        .nl-preview { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; justify-content: center; padding: 16px 24px; background: #e9ebe6; overflow: hidden; }
+        .nl-paper { height: 100%; aspect-ratio: 210 / 297; max-width: 100%; border: none; background: #fff; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12); }
+        .nl-paper.is-zoomed { aspect-ratio: auto; width: 100%; }
+        .nl-preview-busy { position: absolute; top: 12px; right: 16px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); color: #475569; font-size: 12px; }
+        @media (max-width: 767px) {
+          .nl-split { flex-direction: column; }
+          .nl-sidebar { flex: none; border-right: none; border-bottom: 1px solid #dde1e7; max-height: 45%; }
+          .nl-title span { display: none; }
         }
 
         .modal-overlay {

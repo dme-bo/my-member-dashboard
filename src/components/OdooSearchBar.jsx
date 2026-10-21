@@ -21,9 +21,9 @@ export default function OdooSearchBar({ value, onChange, placeholder = "Search..
         flex: 1,
         minWidth: "240px",
         border: boxed ? "1px solid #dde1e7" : "1px solid #e2e8f0",
-        borderRadius: boxed ? "5px" : "8px",
+        borderRadius: boxed ? "6px" : "8px",
         padding: boxed ? "0 11px" : "7px 10px",
-        minHeight: boxed ? "29px" : undefined,
+        minHeight: boxed ? "34px" : undefined,
         boxSizing: "border-box",
         background: "#fff",
       }}
@@ -67,7 +67,7 @@ export default function OdooSearchBar({ value, onChange, placeholder = "Search..
         value={value}
         onChange={onChange}
         placeholder={chips.length ? "" : placeholder}
-        style={{ flex: 1, minWidth: "80px", border: "none", outline: "none", fontSize: boxed ? "12px" : "13.5px", color: "#1a2332", background: "transparent" }}
+        style={{ flex: 1, minWidth: "80px", border: "none", outline: "none", fontSize: boxed ? "13px" : "13.5px", color: "#1a2332", background: "transparent" }}
       />
     </div>
   );

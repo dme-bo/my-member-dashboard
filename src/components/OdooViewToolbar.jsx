@@ -125,7 +125,9 @@ function FiltersMenu({ quickFilters, advancedContent, boxed }) {
   const ref = useRef(null);
   useClickOutside(ref, () => setOpen(false));
 
-  const hasActiveQuick = quickFilters.some((f) => f.active);
+  // isDefault: an always-on choice (e.g. the default category) that should not
+  // light the Filters button as if the user had narrowed the list.
+  const hasActiveQuick = quickFilters.some((f) => f.active && !f.isDefault);
 
   // Quick filters render as groups separated by dividers, mirroring Odoo's
   // layout — each `group` in the list starts a new visual section.

@@ -10,19 +10,33 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import SkeletonLoader from "../components/SkeletonLoader";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
+import FavoritesMenu from "../components/FavoritesMenu";
 import { fetchProjectApplicationRows } from "../utils/applicationSources";
 import { formatDateDDMMMYYYY } from "../utils/dateFormat";
+import SelectionActionMenu from "../components/SelectionActionMenu";
+import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
+import SortArrow from "../components/SortArrow";
 
 const PROJECTS_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
   { key: "projects", label: "Project" },
 ];
 
-const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
+const PROJECTS_FAVORITES_KEY = "projectsPageFavorites";
+
+// Column sort accessors — each returns what the matching table cell shows.
+const PROJECTS_SORT_ACCESSORS = {
+  full_name: (a) => (a.full_name || "").trim(),
+  phone_number: (a) => String(a.phone_number ?? "").trim(),
+  city: (a) => (a.city || "").trim(),
+  projects: (a) => (a.projects || "").trim(),
+};
+
+const kanbanChipStyle ={ padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
 
 function ApplicationCard({ app, onClick }) {
   return (
@@ -63,6 +77,22 @@ export default function ProjectsPage() {
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Default order: Full Name A→Z (same as before column sorting existed).
+  const { sort, toggleSort: toggleSortRaw } = useTableSort({ key: "full_name", dir: "asc" });
+  const toggleSort = (key) => {
+    toggleSortRaw(key);
+    setCurrentPage(1);
+  };
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const raw = localStorage.getItem(PROJECTS_FAVORITES_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Modal states
   const [selectedApp, setSelectedApp] = useState(null);
@@ -134,6 +164,25 @@ export default function ProjectsPage() {
   const filterKeys = ["city", "projects"];
   const filterLabels = { city: "City", projects: "Project" };
 
+  const persistFavorites = (next) => {
+    setFavorites(next);
+    try {
+      localStorage.setItem(PROJECTS_FAVORITES_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.error("Error saving favorites:", error);
+    }
+  };
+  const saveCurrentAsFavorite = (name) => {
+    persistFavorites([...favorites, { id: Date.now().toString(36), name, searchTerm, filters, groupBy }]);
+  };
+  const applyFavorite = (fav) => {
+    setSearchTerm(fav.searchTerm || "");
+    setFilters({ city: [], projects: [], ...(fav.filters || {}) });
+    setGroupBy(fav.groupBy || null);
+    setCurrentPage(1);
+  };
+  const deleteFavorite = (id) => persistFavorites(favorites.filter((f) => f.id !== id));
+
   const clearFilters = () => {
     setFilters({ city: [], projects: [] });
     setSearchTerm("");
@@ -171,13 +220,9 @@ export default function ProjectsPage() {
     return true;
   });
 
-  // Sort by name
-  filteredApplications.sort((a, b) =>
-    (a.full_name || "").trim().toLowerCase().localeCompare((b.full_name || "").trim().toLowerCase())
-  );
-
-  return filteredApplications;
-  }, [applications, filters, searchTerm]);
+  // Sort by the selected column (default: Full Name ascending)
+  return sortRows(filteredApplications, sort, PROJECTS_SORT_ACCESSORS);
+  }, [applications, filters, searchTerm, sort]);
 
   // Pagination
   const totalItems = filteredApplications.length;
@@ -382,9 +427,11 @@ export default function ProjectsPage() {
   };
 
   // Export function
-  const handleExportXLSX = async () => {
+  // Action → Export: only the ticked rows.
+  const handleExportSelected = async () => {
     try {
-      const dataToExport = filteredApplications.map((app) => ({
+      const rows = filteredApplications.filter((a) => selectedIds.has(a.id));
+      const dataToExport = rows.map((app) => ({
         Name: app.name || "-",
         Phone: app.phone || "-",
         City: app.city || "-",
@@ -405,16 +452,141 @@ export default function ProjectsPage() {
     }
   };
 
-  if (loading) {
-    return <SkeletonLoader rows={8} fullPage label="Loading applications…" />;
-  }
+  const rangeStart = totalItems === 0 ? 0 : (rowsPerPage === Infinity ? 1 : (currentPage - 1) * rowsPerPage + 1);
+  const rangeEnd = rowsPerPage === Infinity ? totalItems : Math.min(currentPage * rowsPerPage, totalItems);
+  const prevDisabled = currentPage === 1;
+  const nextDisabled = currentPage === totalPages || rowsPerPage === Infinity || totalItems === 0;
+  const allRowsSelected = currentRows.length > 0 && currentRows.every((a) => selectedIds.has(a.id));
+  const someRowsSelected = !allRowsSelected && currentRows.some((a) => selectedIds.has(a.id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allRowsSelected) currentRows.forEach((a) => next.delete(a.id));
+      else currentRows.forEach((a) => next.add(a.id));
+      return next;
+    });
+  };
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const emptyMessage = searchTerm || Object.values(filters).some((v) => v.length)
+    ? "No applications found matching your criteria"
+    : "No project applications registered yet";
+
+  const renderRow = (app) => (
+    <tr key={app.id} className="pj-row" onClick={() => openModal(app)}>
+      <td className="pj-td" style={{ width: 36 }} onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          className="pj-cb"
+          aria-label={`Select ${app.full_name || "application"}`}
+          checked={selectedIds.has(app.id)}
+          onChange={() => toggleSelectOne(app.id)}
+        />
+      </td>
+      <td className="pj-td">{app.full_name || "-"}</td>
+      <td className="pj-td pj-num">{app.phone_number || "-"}</td>
+      <td className="pj-td">{app.city || "-"}</td>
+      <td className="pj-td">{app.projects || "-"}</td>
+    </tr>
+  );
+
 
   return (
-    <div className="member-list-page">
-      {/* Header Card with Search, Filters/Group By/View, Total Badge, Export */}
-      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" }}>
+    <div className="member-list-page pj-page page-fill">
+      <style>{`
+        .pj-page { padding: 0 !important; background: #f4f6f9; color: #212529; min-height: calc(100vh - 64px); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .pj-header { background: #fff; padding: 32px 32px 16px; border-bottom: 1px solid #dde1e7; display: flex; flex-direction: column; gap: 16px; }
+        .pj-header > * { min-height: 34px; }
+        .pj-row-flex { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+        .pj-title-row { justify-content: space-between; }
+        .pj-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+        .pj-title h1 { margin: 0; font-size: 28px; font-weight: 600; color: #111827; letter-spacing: -0.01em; }
+        .pj-title span { font-size: 14px; color: #64748b; font-weight: 400; }
+        .pj-outline-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; white-space: nowrap; }
+        .pj-outline-btn:hover { background: #f6f8fa; }
+        .pj-primary-btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 1px solid #2f4a22; background: #2f4a22; color: #fff; border-radius: 6px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .pj-primary-btn:hover { background: #3d5e2d; }
+        .pj-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .pj-toolbar-group > div:first-child { gap: 0 !important; }
+        .pj-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .pj-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .pj-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .pj-meta-row { justify-content: space-between; gap: 10px; }
+        .pj-meta-left, .pj-meta-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+        .pj-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+        .pj-range { font-size: 13px; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pj-joined { display: flex; }
+        .pj-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #dde1e7; background: #fff; color: #475569; cursor: pointer; padding: 0; }
+        .pj-icon-btn + .pj-icon-btn { margin-left: -1px; }
+        .pj-icon-btn:first-child { border-radius: 6px 0 0 6px; }
+        .pj-icon-btn:last-child { border-radius: 0 6px 6px 0; }
+        .pj-icon-btn:disabled { color: #b8bec7; cursor: not-allowed; }
+        .pj-icon-btn.is-active { background: #e8f1fb; color: #1976D2; }
+        .pj-table-wrap { background: #fff; }
+        .pj-table-scroll { overflow: auto; max-height: 70vh; min-height: 300px; }
+        .pj-table { width: 100%; min-width: 820px; border-collapse: collapse; }
+        .pj-th { padding: 11px 12px; text-align: left; font-weight: 600; font-size: 14px; color: #212529; border-bottom: 2px solid #dee2e6; white-space: nowrap; background: #f4f5f0; position: sticky; top: 0; z-index: 2; }
+        .pj-td { padding: 9px 12px; border-top: 1px solid #e9ecef; font-size: 14px; color: #3c4047; vertical-align: middle; }
+        .pj-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .pj-row { cursor: pointer; }
+        .pj-row:nth-child(odd) { background: #f7f8fb; }
+        .pj-row:hover { background: #eef4fb; }
+        .pj-cb { width: 16px; height: 16px; margin: 0; accent-color: #1976D2; cursor: pointer; vertical-align: middle; }
+        .pj-group-row td { padding: 8px 12px; font-weight: 600; font-size: 14px; cursor: pointer; background: #f4f5f0; border-top: 1px solid #dee2e6; }
+        .pj-pill { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: #e3f1e3; color: #1f5c26; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .pj-empty { text-align: center; padding: 60px 20px; color: #6b7280; font-size: 15px; }
+        @media (max-width: 767px) { .pj-header { padding: 20px 16px 12px; } }
+        /* Match the Members Master List: outline buttons, blue table header, 49px rows. */
+        .pj-page { background: #fff; }
+        .pj-header { min-height: 0; border-bottom: none; }
+        .pj-header > * { min-height: 0; }
+        .pj-primary-btn { gap: 7px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; color: #334155; font-size: 13px; font-weight: 400; }
+        .pj-primary-btn:hover { background: #fff; }
+        .pj-meta-right { gap: 6px; flex-wrap: nowrap; }
+        .pj-range { margin: 0 2px; white-space: nowrap; }
+        .pj-icon-btn { border-radius: 6px !important; margin-left: 0 !important; }
+        .pj-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; }
+        .pj-meta-right > div { gap: 6px; }
+        .pj-meta-right > div:has(.is-active) { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
+        .pj-meta-right > div:has(.is-active) .pj-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0 !important; color: #64748b; }
+        .pj-icon-btn.is-active { background: #e3f2fd; color: #1976d2; }
+        .pj-table-scroll { border-top: 1px solid #dde1e7; }
+        .pj-th { height: 45px; padding: 0 10px; font-size: 13px; color: #fff; background: #1976d2; border-bottom: none; }
+        .pj-td { height: 49px; padding: 0 10px; border-top: none; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; }
+        .pj-td:nth-child(2) { font-weight: 500; color: #111827; }
+        .pj-row { background: #fff; }
+        .pj-row:nth-child(odd) { background: #f8fafc; }
+        .pj-row:hover { background: inherit; }
+        .pj-cb { width: 13px; height: 13px; }
+        .pj-th .pj-cb { width: 14px; height: 14px; accent-color: #ffffff; }
+        .pj-group-row td { height: 40px; padding: 0 12px; font-size: 13px; color: #334155; background: #f1f5f9; border-top: none; border-bottom: 1px solid #dde1e7; }
+        .pj-pill { background: #e3f2fd; color: #1565c0; }
+      `}</style>
+
+      <div className="pj-header page-header-band">
+        {/* Row 1: title + count, Reset Filters */}
+        <div className="pj-row-flex pj-title-row">
+          <div className="pj-title">
+            <h1>Projects Applications</h1>
+            <span>{totalItems.toLocaleString()} Applications</span>
+          </div>
+          <button type="button" className="pj-outline-btn" onClick={clearFilters}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+            Reset Filters
+          </button>
+        </div>
+
+        {/* Row 2: search, Filters / Group By / Favorites */}
+        <div className="pj-row-flex" style={{ gap: 8 }}>
           <OdooSearchBar
+            variant="boxed"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -423,217 +595,150 @@ export default function ProjectsPage() {
             placeholder="Search by name, phone, city, project..."
             chips={filterChips}
           />
+          <div className="pj-toolbar-group">
+            <OdooViewToolbar
+              variant="boxed"
+              quickFilters={[]}
+              advancedContent={advancedFiltersPanel}
+              groupByOptions={PROJECTS_GROUP_BY_OPTIONS}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              showViewToggle={false}
+            />
+            <FavoritesMenu
+              favorites={favorites}
+              onApply={applyFavorite}
+              onDelete={deleteFavorite}
+              onSave={saveCurrentAsFavorite}
+            />
+          </div>
+        </div>
 
-          <OdooViewToolbar
-            quickFilters={[]}
-            advancedContent={advancedFiltersPanel}
-            groupByOptions={PROJECTS_GROUP_BY_OPTIONS}
-            groupBy={groupBy}
-            onGroupByChange={setGroupBy}
-            view={viewMode}
-            onViewChange={setViewMode}
-          />
-
-          {/* Total Applications Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",marginLeft: "auto"}}>
-            Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
-          </span>
-
-          {/* Export Button */}
-          <button
-            onClick={handleExportXLSX}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #1f2937",
-              color: "#1f2937",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            ⬇️ Export
-          </button>
+        {/* Row 3: primary action left; page size, range, pager, view toggle right */}
+        <div className="pj-row-flex pj-meta-row">
+          <SelectionActionMenu count={selectedIds.size} onExport={handleExportSelected} onClear={() => setSelectedIds(new Set())} />
+          <div className="pj-meta-left">
+            {groupBy && (
+              <span style={{ fontSize: 13, color: "#5f6670" }}>Grouped by {filterLabels[groupBy]}</span>
+            )}
+          </div>
+          <div className="pj-meta-right">
+            <select
+              className="pj-select"
+              aria-label="Records per page"
+              value={rowsPerPage === Infinity ? "all" : rowsPerPage}
+              onChange={(e) => {
+                const val = e.target.value === "all" ? Infinity : Number(e.target.value);
+                setRowsPerPage(val);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="all">All</option>
+              <option value={100}>100</option>
+              <option value={500}>500</option>
+              <option value={1000}>1000</option>
+              <option value={5000}>5000</option>
+            </select>
+            <span className="pj-range">{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} / {totalItems.toLocaleString()}</span>
+            <div className="pj-joined">
+              <button type="button" className="pj-icon-btn" aria-label="Previous page" disabled={prevDisabled} onClick={() => setCurrentPage((p) => p - 1)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+              </button>
+              <button type="button" className="pj-icon-btn" aria-label="Next page" disabled={nextDisabled} onClick={() => setCurrentPage((p) => p + 1)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+            <div className="pj-joined">
+              <button type="button" className={`pj-icon-btn${viewMode === "list" ? " is-active" : ""}`} aria-label="List view" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              </button>
+              <button type="button" className={`pj-icon-btn${viewMode === "kanban" ? " is-active" : ""}`} aria-label="Kanban view" aria-pressed={viewMode === "kanban"} onClick={() => setViewMode("kanban")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="4" width="4" height="10"/><rect x="16" y="4" width="4" height="13"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="content-with-sidebar">
-        <div className="table-container">
-          <>
-          {viewMode === "kanban" ? (
-            <div style={{ minHeight: "400px", maxHeight: "70vh", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff", padding: "12px" }}>
-              {currentRows.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
-                  {searchTerm || Object.values(filters).some((v) => v.length)
-                    ? "No applications found matching your criteria"
-                    : "No project applications registered yet"}
-                </div>
-              ) : groupedRows ? (
-                groupedRows.map(([label, rows]) => (
-                  <div key={label} style={{ marginBottom: "12px" }}>
-                    <div
-                      onClick={() => toggleGroupCollapsed(label)}
-                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                      {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
-                    </div>
-                    {!collapsedGroups.has(label) && (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
-                        {rows.map((app) => (
-                          <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
-                        ))}
-                      </div>
-                    )}
+      <div className="pj-table-wrap page-fill-mid">
+        {loading ? (
+          <TableLoadingSpinner label="Loading applications…" />
+        ) : viewMode === "kanban" ? (
+          <div className="page-fill-scroll" style={{ background: "#fff", padding: "12px 32px" }}>
+            {currentRows.length === 0 ? (
+              <div className="pj-empty">{emptyMessage}</div>
+            ) : groupedRows ? (
+              groupedRows.map(([label, rows]) => (
+                <div key={label} style={{ marginBottom: "12px" }}>
+                  <div
+                    onClick={() => toggleGroupCollapsed(label)}
+                    style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#f4f5f0", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                  >
+                    <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                    {label} <span className="pj-pill" style={{ marginLeft: 0 }}>{rows.length}</span>
                   </div>
-                ))
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
-                  {currentRows.map((app) => (
-                    <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
-                  ))}
+                  {!collapsedGroups.has(label) && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
+                      {rows.map((app) => (
+                        <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ) : (
-              <div style={{
-                height: "70vh",
-                minHeight: "400px",
-                overflowY: "auto",
-                border: "1px solid #eee",
-                borderRadius: "8px",
-                background: "#fff",
-              }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                  <colgroup>
-                    <col style={{ width: "30%" }} />
-                    <col style={{ width: "25%" }} />
-                    <col style={{ width: "20%" }} />
-                    <col style={{ width: "25%" }} />
-                  </colgroup>
-                  <thead style={{ position: "sticky", top: 0, background: "#f9f9f9", zIndex: 10 }}>
-                    <tr>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Full Name</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Phone</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>City</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Project</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentRows.length === 0 ? (
-                      <tr>
-                        <td colSpan="4" style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
-                          {searchTerm || Object.values(filters).some((v) => v.length)
-                            ? "No applications found matching your criteria"
-                            : "No project applications registered yet"}
+              ))
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                {currentRows.map((app) => (
+                  <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="pj-table-scroll page-fill-scroll">
+            <table className="pj-table">
+              <thead>
+                <tr>
+                  <th className="pj-th" style={{ width: 36 }}>
+                    <input
+                      type="checkbox"
+                      className="pj-cb"
+                      aria-label="Select all applications"
+                      checked={allRowsSelected}
+                      ref={(el) => { if (el) el.indeterminate = someRowsSelected; }}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th className="pj-th" {...sortHeaderProps("full_name", sort, toggleSort)}>Full Name<SortArrow active={sort.key === "full_name"} dir={sort.dir} /></th>
+                  <th className="pj-th pj-num" {...sortHeaderProps("phone_number", sort, toggleSort)}>Phone<SortArrow active={sort.key === "phone_number"} dir={sort.dir} /></th>
+                  <th className="pj-th" {...sortHeaderProps("city", sort, toggleSort)}>City<SortArrow active={sort.key === "city"} dir={sort.dir} /></th>
+                  <th className="pj-th" {...sortHeaderProps("projects", sort, toggleSort)}>Project<SortArrow active={sort.key === "projects"} dir={sort.dir} /></th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentRows.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="pj-empty">{emptyMessage}</td>
+                  </tr>
+                ) : groupedRows ? (
+                  groupedRows.map(([label, rows]) => (
+                    <Fragment key={label}>
+                      <tr className="pj-group-row">
+                        <td colSpan={5} onClick={() => toggleGroupCollapsed(label)}>
+                          <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {label}<span className="pj-pill">{rows.length}</span>
                         </td>
                       </tr>
-                    ) : groupedRows ? (
-                      groupedRows.map(([label, rows]) => (
-                        <Fragment key={label}>
-                          <tr style={{ background: "#eef2f7" }}>
-                            <td colSpan={4} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
-                              <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                              {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
-                            </td>
-                          </tr>
-                          {!collapsedGroups.has(label) &&
-                            rows.map((app) => (
-                              <tr
-                                key={app.id}
-                                onClick={() => openModal(app)}
-                                style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                              >
-                                <td style={{ padding: "12px" }}>{app.full_name || "-"}</td>
-                                <td style={{ padding: "12px" }}>{app.phone_number || "-"}</td>
-                                <td style={{ padding: "12px" }}>{app.city || "-"}</td>
-                                <td style={{ padding: "12px" }}>{app.projects || "-"}</td>
-                              </tr>
-                            ))}
-                        </Fragment>
-                      ))
-                    ) : (
-                      currentRows.map((app) => (
-                        <tr
-                          key={app.id}
-                          onClick={() => openModal(app)}
-                          style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                        >
-                          <td style={{ padding: "12px" }}>{app.full_name || "-"}</td>
-                          <td style={{ padding: "12px" }}>{app.phone_number || "-"}</td>
-                          <td style={{ padding: "12px" }}>{app.city || "-"}</td>
-                          <td style={{ padding: "12px" }}>{app.projects || "-"}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-          )}
-
-              {/* Pagination */}
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "20px 10px",
-                flexWrap: "wrap",
-                gap: "15px"
-              }}>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <span style={{ marginRight: "10px" }}>Rows per page:</span>
-                  <select
-                    value={rowsPerPage === Infinity ? "all" : rowsPerPage}
-                    onChange={(e) => {
-                      const val = e.target.value === "all" ? Infinity : Number(e.target.value);
-                      setRowsPerPage(val);
-                      setCurrentPage(1);
-                    }}
-                    style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #ccc" }}
-                  >
-                    <option value="all">All</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                    <option value={5000}>5000</option>
-                    
-                  </select>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => p - 1)}
-                    style={{
-                      padding: "8px 14px",
-                      background: "#1e40af",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "4px",
-                      opacity: currentPage === 1 ? 0.5 : 1,
-                    }}
-                  >
-                    ‹ Previous
-                  </button>
-                  <span>Page {currentPage} of {totalPages || 1}</span>
-                  <button
-                    disabled={currentPage === totalPages || rowsPerPage === Infinity}
-                    onClick={() => setCurrentPage(p => p + 1)}
-                    style={{
-                      padding: "8px 14px",
-                      background: "#1e40af",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "4px",
-                      opacity: (currentPage === totalPages || rowsPerPage === Infinity) ? 0.5 : 1,
-                    }}
-                  >
-                    Next ›
-                  </button>
-                </div>
-              </div>
-          </>
-        </div>
+                      {!collapsedGroups.has(label) && rows.map(renderRow)}
+                    </Fragment>
+                  ))
+                ) : (
+                  currentRows.map(renderRow)
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* MODAL - Fixed Size & Stable */}

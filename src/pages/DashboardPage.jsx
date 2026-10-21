@@ -1,5 +1,5 @@
 // src/pages/DashboardPage.jsx
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import {
   FaUsers,
   FaClock,
@@ -7,21 +7,24 @@ import {
   FaCalendarAlt,
   FaClipboardCheck,
 } from 'react-icons/fa';
-import { Pie, Bar } from 'react-chartjs-2';
+import { Pie, Bar, Doughnut } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import DualRangeSlider from '../components/DualRangeSlider';
-import SkeletonLoader from '../components/SkeletonLoader';
-import MultiSelectDropdown from '../components/MultiSelectDropdown';
+import TableLoadingSpinner from '../components/TableLoadingSpinner';
+import OdooSearchBar from '../components/OdooSearchBar';
+import OdooViewToolbar from '../components/OdooViewToolbar';
+import FavoritesMenu from '../components/FavoritesMenu';
+import useMemberFilters, { MEMBER_GROUP_BY_OPTIONS, getGroupLabels } from '../hooks/useMemberFilters';
+import RegistrationTrend from '../components/RegistrationTrend';
 import * as ReactWindow from 'react-window';
 import useDebouncedValue from '../hooks/useDebouncedValue';
 import { parseMemberDate } from '../utils/memberFields';
 import { formatDateDDMMMYYYY } from '../utils/dateFormat';
 import { collection, db, getDocs } from '../firestoreClient';
-import { EMPTY_REQUIREMENT_DATA, loadRequirementApplicants } from '../utils/requirementApplicants';
+
+// Finance analytics are only needed once the Finance tab is opened.
+const FinanceAnalytics = lazy(() => import('../components/FinanceAnalytics'));
 
 const REQUIREMENT_TYPE_FILTERS = [
   { key: 'All', label: 'All' },
@@ -64,18 +67,6 @@ function RawDataRow({ index, style, data }) {
 // collection keys documents by a plain 10-digit number) regardless of
 // +91/91/0 prefixing on the member's own stored value.
 const last10Digits = (value) => String(value || '').replace(/\D/g, '').slice(-10);
-
-const toggleFilterBtnStyle = (active) => ({
-  padding: '10px 16px',
-  borderRadius: '20px',
-  border: active ? '1px solid #1976d2' : '1px solid #cbd5e1',
-  background: active ? '#1976d2' : '#fff',
-  color: active ? '#fff' : '#334155',
-  fontWeight: 700,
-  fontSize: '13px',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-});
 
 const PIE_CHART_OPTIONS = {
   responsive: true,
@@ -129,41 +120,71 @@ const BAR_CHART_OPTIONS = {
   layout: { padding: { top: 30 } },
 };
 
+const SINGLE_BAR_COLORS = Array(15).fill('#1976d2');
+const makePct =(total) => (value) => (total ? ((value / total) * 100).toFixed(1) : '0.0');
+
+// Horizontal bars: service / rank names are long, and a ranked list reads
+// best top-to-bottom with the count and share at the end of each bar.
+const createDistributionBarOptions = (total) => {
+  const pct = makePct(total);
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y',
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: (context) => `${context.label}: ${context.raw} members (${pct(context.raw)}%)` },
+      },
+      datalabels: {
+        color: '#000',
+        anchor: 'end',
+        align: 'end',
+        font: { weight: 'bold', size: 11 },
+        formatter: (value) => (value > 0 ? `${value} (${pct(value)}%)` : ''),
+      },
+    },
+    scales: {
+      x: { beginAtZero: true, ticks: { precision: 0 }, grace: '18%' },
+      y: { ticks: { autoSkip: false }, grid: { display: false } },
+    },
+  };
+};
+
+// Doughnut for part-to-whole with a handful of slices (category).
+const createDistributionDoughnutOptions = (total) => {
+  const pct = makePct(total);
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '55%',
+    plugins: {
+      legend: { position: 'right', labels: { font: { size: 13 } } },
+      tooltip: {
+        callbacks: { label: (context) => `${context.label}: ${context.raw} members (${pct(context.raw)}%)` },
+      },
+      datalabels: {
+        color: '#fff',
+        font: { weight: 'bold', size: 12 },
+        formatter: (value) => (total && value / total >= 0.05 ? `${value}\n${pct(value)}%` : ''),
+        textAlign: 'center',
+      },
+    },
+  };
+};
+
 const CHART_DATALABELS_PLUGINS = [ChartDataLabels];
 
 export default function DashboardPage({ memberRecords = [], membersLoading = false, onMemberClick }) {
+  const [dashboardView, setDashboardView] = useState('members'); // 'members' | 'finance'
   const [members, setMembers] = useState(memberRecords);
   const [loading, setLoading] = useState(membersLoading);
 
-  const [categoryFilter, setCategoryFilter] = useState([]);
-  const [serviceFilter, setServiceFilter] = useState([]);
-  const [rankFilter, setRankFilter] = useState([]);
-  const [stateFilter, setStateFilter] = useState([]);
-  const [cityFilter, setCityFilter] = useState([]);
-  const [retirementFilter, setRetirementFilter] = useState('All');
-  const [ageRange, setAgeRange] = useState([0, 100]);
-  const [registrationDateFrom, setRegistrationDateFrom] = useState('');
-  const [registrationDateTo, setRegistrationDateTo] = useState('');
-  const [regionalPartnerFilter, setRegionalPartnerFilter] = useState([]); // subset of ['Active', 'Inactive']
   const [tcsCoordinatorOnly, setTcsCoordinatorOnly] = useState(false);
   const [tcsCoordinatorPhones, setTcsCoordinatorPhones] = useState(() => new Set());
-  // Applicants: who applied to which job / project / TCS (Temp Staff) requirement.
-  const [requirementData, setRequirementData] = useState(EMPTY_REQUIREMENT_DATA);
   const [requirementTypeFilter, setRequirementTypeFilter] = useState('All');
   const [rawDataView, setRawDataView] = useState(null); // { title, subtitle, rows }
   const [rawDataSearch, setRawDataSearch] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    loadRequirementApplicants()
-      .then((data) => {
-        if (!cancelled) setRequirementData(data);
-      })
-      .catch((error) => console.error('Error loading applicants:', error));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Escape closes the raw-data view.
   useEffect(() => {
@@ -197,20 +218,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     };
   }, []);
 
-  const toDatePickerValue = (value) => {
-    if (!value) return null;
-    const parsed = new Date(`${value}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  };
-
-  const toDateInputValue = (date) => {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
   // ────────────────────────────────────────────────
   useEffect(() => {
     if (Array.isArray(memberRecords)) {
@@ -222,64 +229,28 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     setLoading(membersLoading);
   }, [membersLoading]);
 
-  // Filter options logic (unchanged) ────────────────────────────────────────────────
-  const filterOptions = useMemo(() => {
-    const categories = [...new Set(members.map((m) => m.category).filter(Boolean))].sort();
-    const states = [...new Set(members.map((m) => m.state).filter(Boolean))].sort();
-
-    return { categories, states };
-  }, [members]);
-
-  const availableServices = useMemo(() => {
-    let filtered = members;
-    if (categoryFilter.length) {
-      filtered = filtered.filter((m) => categoryFilter.includes(m.category));
-    }
-    const serviceCounts = filtered.reduce((acc, m) => {
-      const s = m.service;
-      if (s) acc[s] = (acc[s] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.keys(serviceCounts)
-      .sort((a, b) => serviceCounts[b] - serviceCounts[a])
-      .slice(0, 30);
-  }, [members, categoryFilter]);
-
-  const availableRanks = useMemo(() => {
-    let filtered = members;
-    if (categoryFilter.length) filtered = filtered.filter((m) => categoryFilter.includes(m.category));
-    if (serviceFilter.length) filtered = filtered.filter((m) => serviceFilter.includes(m.service));
-
-    const rankCounts = filtered.reduce((acc, m) => {
-      const r = m.rank;
-      if (r) acc[r] = (acc[r] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.keys(rankCounts)
-      .sort((a, b) => rankCounts[b] - rankCounts[a])
-      .slice(0, 25);
-  }, [members, categoryFilter, serviceFilter]);
-
-  const availableCities = useMemo(() => {
-    let filtered = members;
-    if (stateFilter.length) {
-      filtered = filtered.filter((m) => stateFilter.includes(m.state));
-    }
-    return [...new Set(filtered.map((m) => m.city).filter(Boolean))].sort();
-  }, [members, stateFilter]);
-
-  const ageBounds = useMemo(() => {
-    const ages = members.map((member) => member.age_years).filter((age) => Number.isFinite(age));
-    if (ages.length === 0) return { min: 0, max: 100 };
-    const min = Math.max(0, Math.floor(Math.min(...ages)));
-    const max = Math.max(min, Math.ceil(Math.max(...ages)));
-    return { min, max };
-  }, [members]);
-
-  useEffect(() => { setServiceFilter([]); }, [categoryFilter]);
-  useEffect(() => { setRankFilter([]); }, [serviceFilter, categoryFilter]);
-  useEffect(() => { setCityFilter([]); }, [stateFilter]);
-  useEffect(() => { setAgeRange([ageBounds.min, ageBounds.max]); }, [ageBounds.min, ageBounds.max]);
+  // Search / Filters / Group By / Favorites come from the same hook the
+  // Members list uses, so the dashboard filters members identically.
+  const {
+    searchTerm,
+    setSearchTerm,
+    groupBy,
+    setGroupBy,
+    filterOptions,
+    filteredMembers: hookFilteredMembers,
+    filteredMembersNoDateRange: hookFilteredNoDateRange,
+    registrationDateFrom,
+    registrationDateTo,
+    quickFilters: hookQuickFilters,
+    filterChips: hookFilterChips,
+    advancedFiltersPanel,
+    favorites,
+    applyFavorite,
+    deleteFavorite,
+    saveCurrentAsFavorite,
+    clearFilters,
+    requirementData,
+  } = useMemberFilters(members);
 
   const parseDateBoundary = (value, endOfDay = false) => {
     if (!value) return null;
@@ -287,67 +258,38 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return Number.isNaN(boundary.getTime()) ? null : boundary;
   };
 
-  // Pass 1: filter by everything EXCEPT date range (used by registration analytics)
-  const filteredMembersNoDateRange = useMemo(() => {
-    return members.filter((member) => {
-      if (categoryFilter.length && !categoryFilter.includes(member.category)) return false;
-      if (serviceFilter.length && !serviceFilter.includes(member.service)) return false;
-      if (rankFilter.length && !rankFilter.includes(member.rank)) return false;
-      if (stateFilter.length && !stateFilter.includes(member.state)) return false;
-      if (cityFilter.length && !cityFilter.includes(member.city)) return false;
-      if (retirementFilter !== 'All' && member.retirement_status !== retirementFilter) return false;
-      const age = member.age_years;
-      const ageFilterActive = ageRange[0] > ageBounds.min || ageRange[1] < ageBounds.max;
-      if (ageFilterActive) {
-        if (!Number.isFinite(age)) return false;
-        if (age < ageRange[0] || age > ageRange[1]) return false;
-      }
-      if (regionalPartnerFilter.length) {
-        const isActivePartner = !!member.is_regional_partner && member.regional_partner_status !== 'Inactive';
-        const isInactivePartner = !!member.is_regional_partner && member.regional_partner_status === 'Inactive';
-        const matchesActive = regionalPartnerFilter.includes('Active') && isActivePartner;
-        const matchesInactive = regionalPartnerFilter.includes('Inactive') && isInactivePartner;
-        if (!matchesActive && !matchesInactive) return false;
-      }
-      if (tcsCoordinatorOnly && !tcsCoordinatorPhones.has(last10Digits(member.phone))) return false;
-      return true;
-    });
-  }, [
-    members, categoryFilter, serviceFilter, rankFilter,
-    stateFilter, cityFilter, retirementFilter, ageRange, ageBounds.min, ageBounds.max,
-    regionalPartnerFilter, tcsCoordinatorOnly, tcsCoordinatorPhones,
-  ]);
+  // TCS Coordinator is dashboard-only (a phone lookup against a separate roster),
+  // so it is applied on top of the shared filter result.
+  const filteredMembersNoDateRange = useMemo(
+    () => (tcsCoordinatorOnly ? hookFilteredNoDateRange.filter((member) => tcsCoordinatorPhones.has(last10Digits(member.phone))) : hookFilteredNoDateRange),
+    [hookFilteredNoDateRange, tcsCoordinatorOnly, tcsCoordinatorPhones]
+  );
+  const filteredMembers = useMemo(
+    () => (tcsCoordinatorOnly ? hookFilteredMembers.filter((member) => tcsCoordinatorPhones.has(last10Digits(member.phone))) : hookFilteredMembers),
+    [hookFilteredMembers, tcsCoordinatorOnly, tcsCoordinatorPhones]
+  );
 
-  // Pass 2: apply date range on top of already-filtered set — avoids rescanning all 15k on date change
-  const filteredMembers = useMemo(() => {
-    const fromBoundary = parseDateBoundary(registrationDateFrom, false);
-    const toBoundary = parseDateBoundary(registrationDateTo, true);
-    if (!fromBoundary && !toBoundary) return filteredMembersNoDateRange;
+  const quickFilters = useMemo(
+    () => [
+      ...hookQuickFilters,
+      {
+        key: 'tcs-coordinator',
+        label: 'TCS Coordinator',
+        active: tcsCoordinatorOnly,
+        startGroup: true,
+        onToggle: () => setTcsCoordinatorOnly((prev) => !prev),
+      },
+    ],
+    [hookQuickFilters, tcsCoordinatorOnly]
+  );
 
-    const excluded = [];
-    const result = filteredMembersNoDateRange.filter((member) => {
-      const registrationDate = member.__registrationDate || parseMemberDate(member.registration_date);
-      if (!registrationDate) {
-        excluded.push({ member_id: member.member_id, full_name: member.full_name, registration_date: member.registration_date, reason: 'missing/unparseable date' });
-        return false;
-      }
-      if (fromBoundary && registrationDate < fromBoundary) {
-        excluded.push({ member_id: member.member_id, full_name: member.full_name, registration_date: member.registration_date, reason: 'before From Date' });
-        return false;
-      }
-      if (toBoundary && registrationDate > toBoundary) {
-        excluded.push({ member_id: member.member_id, full_name: member.full_name, registration_date: member.registration_date, reason: 'after To Date' });
-        return false;
-      }
-      return true;
-    });
-
-    if (excluded.length) {
-      console.warn(`[Dashboard] Date filter excluded ${excluded.length} member(s) — open this list to see why:`, excluded);
-    }
-    return result;
-  }, [filteredMembersNoDateRange, registrationDateFrom, registrationDateTo]);
-
+  const filterChips = useMemo(
+    () =>
+      tcsCoordinatorOnly
+        ? [...hookFilterChips, { key: 'tcs-coordinator', label: 'TCS Coordinator', onRemove: () => setTcsCoordinatorOnly(false) }]
+        : hookFilterChips,
+    [hookFilterChips, tcsCoordinatorOnly]
+  );
 
   // Applicants — everything below respects the dashboard filters above, so a
   // block's count is "applicants among the members currently in view".
@@ -359,26 +301,61 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
   const filteredIdSet = useMemo(() => new Set(filteredMembers.map((member) => member.id)), [filteredMembers]);
 
-  const appliedMemberCount = useMemo(() => {
-    let count = 0;
-    requirementData.appliedIds.forEach((id) => {
-      if (filteredIdSet.has(id)) count += 1;
-    });
-    return count;
-  }, [requirementData, filteredIdSet]);
+  // The Date Range filters members by REGISTRATION date everywhere else, but for
+  // applicants the question is "who applied in this window" - someone who
+  // registered months ago and applied yesterday must still show up. So when a
+  // date range is set, applicants are matched on their application date
+  // (applied_at) among members passing the other dashboard filters, and the
+  // registration-date cut is not applied to them.
+  const applicationRange = useMemo(
+    () => ({
+      from: parseDateBoundary(registrationDateFrom, false)?.getTime() ?? null,
+      to: parseDateBoundary(registrationDateTo, true)?.getTime() ?? null,
+    }),
+    [registrationDateFrom, registrationDateTo]
+  );
+  const applicationRangeActive = applicationRange.from !== null || applicationRange.to !== null;
+
+  const applicantMemberSet = useMemo(
+    () => (applicationRangeActive ? new Set(filteredMembersNoDateRange.map((member) => member.id)) : filteredIdSet),
+    [applicationRangeActive, filteredMembersNoDateRange, filteredIdSet]
+  );
+
+  // Per requirement: applicant ids that are in view (and, with a date range
+  // set, applied inside it).
+  const requirementApplicantsInView = useMemo(
+    () =>
+      requirementData.requirements.map((requirement) => {
+        const ids = new Set();
+        requirement.memberIds.forEach((id) => {
+          if (!applicantMemberSet.has(id)) return;
+          if (applicationRangeActive) {
+            const appliedMs = requirement.appliedAt?.get(id);
+            if (appliedMs == null) return;
+            if (applicationRange.from !== null && appliedMs < applicationRange.from) return;
+            if (applicationRange.to !== null && appliedMs > applicationRange.to) return;
+          }
+          ids.add(id);
+        });
+        return { requirement, ids };
+      }),
+    [requirementData, applicantMemberSet, applicationRangeActive, applicationRange]
+  );
+
+  const appliedInViewIds = useMemo(() => {
+    const all = new Set();
+    requirementApplicantsInView.forEach(({ ids }) => ids.forEach((id) => all.add(id)));
+    return all;
+  }, [requirementApplicantsInView]);
+
+  const appliedMemberCount = appliedInViewIds.size;
 
   const requirementBlocks = useMemo(() => {
-    return requirementData.requirements
-      .map((requirement) => {
-        let count = 0;
-        requirement.memberIds.forEach((id) => {
-          if (filteredIdSet.has(id)) count += 1;
-        });
-        return { ...requirement, count };
-      })
+    return requirementApplicantsInView
+      .map(({ requirement, ids }) => ({ ...requirement, count: ids.size, activeMemberIds: ids }))
       .filter((block) => block.count > 0)
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [requirementData, filteredIdSet]);
+  }, [requirementApplicantsInView]);
 
   const visibleRequirementBlocks = useMemo(
     () =>
@@ -406,7 +383,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const openRawData = (title, subtitle, memberIds) => {
     const rows = [];
     memberIds.forEach((id) => {
-      if (!filteredIdSet.has(id)) return;
+      if (!applicantMemberSet.has(id)) return;
       const member = memberById.get(id);
       if (member) rows.push(member);
     });
@@ -496,8 +473,14 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     const rankCounts = {};
     const stateCounts = {};
     let expSum = 0;
+    let categoryTotal = 0;
+    let serviceTotal = 0;
+    let rankTotal = 0;
 
     for (const member of filteredMembers) {
+      if (member.category) categoryTotal += 1;
+      if (member.service) serviceTotal += 1;
+      if (member.rank) rankTotal += 1;
       const rawGender = member.gender?.trim()?.toLowerCase();
       if (rawGender === 'male' || rawGender === 'm') genderCounts.Male = (genderCounts.Male || 0) + 1;
       else if (rawGender === 'female' || rawGender === 'f') genderCounts.Female = (genderCounts.Female || 0) + 1;
@@ -519,9 +502,12 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     const avgExp = total > 0 ? (expSum / total).toFixed(1) + 'Y' : '0Y';
     return {
       total,
+      categoryTotal,
+      serviceTotal,
+      rankTotal,
       genderCounts,
       categoryCounts: sortCountsDesc(categoryCounts),
-      serviceCounts: sortCountsDesc(serviceCounts),
+      serviceCounts: sortCountsDesc(serviceCounts, 10),
       rankCounts: sortCountsDesc(rankCounts, 15),
       stateCounts: sortCountsDesc(stateCounts),
       avgExp,
@@ -571,16 +557,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   const hasData = Boolean(analytics);
 
   const clearAllFilters = () => {
-    setCategoryFilter([]);
-    setServiceFilter([]);
-    setRankFilter([]);
-    setStateFilter([]);
-    setCityFilter([]);
-    setRetirementFilter('All');
-    setAgeRange([ageBounds.min, ageBounds.max]);
-    setRegistrationDateFrom('');
-    setRegistrationDateTo('');
-    setRegionalPartnerFilter([]);
+    clearFilters();
     setTcsCoordinatorOnly(false);
     setRequirementTypeFilter('All');
   };
@@ -603,25 +580,64 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
   const genderChartData = useMemo(() => (analytics ? createChartData(analytics.genderCounts) : null), [analytics]);
   const categoryChartData = useMemo(() => (analytics ? createChartData(analytics.categoryCounts) : null), [analytics]);
-  const serviceChartData = useMemo(() => (analytics ? createChartData(analytics.serviceCounts) : null), [analytics]);
-  const rankChartData = useMemo(() => (analytics ? createChartData(analytics.rankCounts) : null), [analytics]);
-  const registrationChartData = useMemo(
-    () =>
-      createChartData({
-        Today: registrationAnalytics?.registeredToday ?? 0,
-        'Last 7 Days': registrationAnalytics?.registeredWeek ?? 0,
-        'This Month': registrationAnalytics?.registeredMonth ?? 0,
-        'Last 3 Months': registrationAnalytics?.registered3Months ?? 0,
-      }),
-    [registrationAnalytics]
-  );
+  // Ranked single-metric bars use one colour; varied colours only add noise.
+  const serviceChartData = useMemo(() => (analytics ? createChartData(analytics.serviceCounts, SINGLE_BAR_COLORS) : null), [analytics]);
+  const rankChartData = useMemo(() => (analytics ? createChartData(analytics.rankCounts, SINGLE_BAR_COLORS) : null), [analytics]);
+
+  // Distribution bars show "count (x%)" where x is the share of members that
+  // have that field filled in (rank is capped to the top 15 bars, so the % is
+  // still against the full total, not just the bars shown).
+  const categoryDoughnutOptions = useMemo(() => createDistributionDoughnutOptions(analytics?.categoryTotal), [analytics]);
+  const serviceBarOptions = useMemo(() => createDistributionBarOptions(analytics?.serviceTotal), [analytics]);
+  const rankBarOptions = useMemo(() => createDistributionBarOptions(analytics?.rankTotal), [analytics]);
+
+  // Group By (toolbar) → one extra chart: members per group, with count and % of
+  // the members in view. Multi-value fields (Tags, Project) can place a member in
+  // several groups, so those shares can add up past 100%.
+  const groupByChart = useMemo(() => {
+    if (!groupBy || !filteredMembers.length) return null;
+    const counts = {};
+    for (const member of filteredMembers) {
+      for (const label of getGroupLabels(member, groupBy, filterOptions.Experience)) {
+        counts[label] = (counts[label] || 0) + 1;
+      }
+    }
+    const entries = Object.entries(counts).sort(([, a], [, b]) => b - a);
+    const shown = Object.fromEntries(entries.slice(0, 20));
+    return {
+      title: MEMBER_GROUP_BY_OPTIONS.find((option) => option.key === groupBy)?.label || groupBy,
+      data: createChartData(shown, SINGLE_BAR_COLORS.concat(SINGLE_BAR_COLORS)),
+      options: createDistributionBarOptions(filteredMembers.length),
+      rows: Math.min(entries.length, 20),
+      hidden: Math.max(0, entries.length - 20),
+    };
+  }, [groupBy, filteredMembers, filterOptions]);
 
   const pieOptions = PIE_CHART_OPTIONS;
-  const barOptions = BAR_CHART_OPTIONS;
 
-  if (loading) {
-    return <SkeletonLoader rows={8} fullPage label="Loading Dashboard…" />;
-  }
+  useEffect(() => {
+    import('../components/FinanceAnalytics').catch(() => {});
+  }, []);
+
+  const viewToggle = (
+    <div className="dashboard-view-toggle" role="tablist" aria-label="Dashboard view">
+      {[
+        { key: 'members', label: 'Members' },
+        { key: 'finance', label: 'Finance' },
+      ].map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          role="tab"
+          aria-selected={dashboardView === tab.key}
+          className={dashboardView === tab.key ? 'active' : ''}
+          onClick={() => setDashboardView(tab.key)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -632,6 +648,71 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           padding: 20px;
           box-sizing: border-box;
         }
+
+        .dashboard-container.finance-mode {
+          padding: 0;
+        }
+
+        .dashboard-view-toggle {
+          display: inline-flex;
+          margin-bottom: 18px;
+          border: 1px solid #1976d2;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #fff;
+        }
+
+        .dashboard-view-toggle button {
+          padding: 9px 26px;
+          border: none;
+          background: #fff;
+          color: #1976d2;
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .dashboard-view-toggle button + button {
+          border-left: 1px solid #1976d2;
+        }
+
+        .dashboard-view-toggle button.active {
+          background: #1976d2;
+          color: #fff;
+        }
+
+        /* Members view header matches the Finance view's flat band (.fin-header). */
+        .dashboard-container.members-mode { padding: 0 !important; background: #f5f7fa; }
+        .dash-header {
+          margin: 0;
+          background: #fff;
+          padding: 32px 32px 16px;
+        }
+        .dash-header .dash-controls-row { margin-bottom: 16px; }
+        .dash-body { padding: 24px 32px; }
+        @media (max-width: 767px) {
+          .dash-header { padding: 20px 16px 12px; }
+          .dash-body { padding: 16px; }
+        }
+        .dash-title-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .dash-title-actions .dashboard-view-toggle { margin-bottom: 0; }
+        .dash-title-actions .dashboard-view-toggle button { height: 32px; padding: 0 18px; font-size: 13px; }
+        .dash-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+        .dash-title { display: flex; align-items: baseline; gap: 12px; }
+        .dash-title h1 { margin: 0; font-size: 28px; font-weight: 600; color: #111827; letter-spacing: -0.01em; }
+        .dash-title span { font-size: 14px; color: #64748b; }
+        .dash-outline-btn { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; background: #fff; border: 1px solid #dde1e7; border-radius: 6px; color: #334155; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .dash-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .member-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .member-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .member-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .member-date-range-wrapper { width: 100%; }
+        .member-date-range-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 12px; color: #111827; outline: none; font-family: inherit; }
+        .member-date-range-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+        #member-date-range-portal { position: relative; z-index: 10200; }
+        .member-date-range-popper { z-index: 10200; }
 
         .top-header {
           margin-bottom: 22px;
@@ -1307,148 +1388,64 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         
       `}</style>
 
-      <div className="dashboard-container">
-        <header className="top-header">
-          <div className="top-header-inner">
-            <div className="filter-heading">
-              <h1 style={{ margin: 0, fontSize: "30px", color: "#0f172a", fontWeight: 800 }}>Filters</h1>
+      <div className={`dashboard-container ${dashboardView === 'finance' ? 'finance-mode' : 'members-mode'}`}>
+        {dashboardView === 'finance' && (
+          <Suspense fallback={<TableLoadingSpinner label="Loading finance…" />}>
+            <FinanceAnalytics memberRecords={members} onMemberClick={onMemberClick} viewToggle={viewToggle} />
+          </Suspense>
+        )}
+
+        {dashboardView === 'members' && (
+        <>
+        <header className="dash-header">
+          <div className="dash-title-row">
+            <div className="dash-title">
+              <h1>Dashboard</h1>
+              <span>{filteredMembers.length.toLocaleString()} Members</span>
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-              <button
-                type="button"
-                style={toggleFilterBtnStyle(regionalPartnerFilter.includes('Active'))}
-                onClick={() =>
-                  setRegionalPartnerFilter((prev) =>
-                    prev.includes('Active') ? prev.filter((v) => v !== 'Active') : [...prev, 'Active']
-                  )
-                }
-              >
-                Regional Partner (Active)
-              </button>
-              <button
-                type="button"
-                style={toggleFilterBtnStyle(regionalPartnerFilter.includes('Inactive'))}
-                onClick={() =>
-                  setRegionalPartnerFilter((prev) =>
-                    prev.includes('Inactive') ? prev.filter((v) => v !== 'Inactive') : [...prev, 'Inactive']
-                  )
-                }
-              >
-                Regional Partner (Inactive)
-              </button>
-              <button
-                type="button"
-                style={toggleFilterBtnStyle(tcsCoordinatorOnly)}
-                onClick={() => setTcsCoordinatorOnly((prev) => !prev)}
-              >
-                TCS Coordinator
+            <div className="dash-title-actions">
+              {viewToggle}
+              <button type="button" className="dash-outline-btn" onClick={clearAllFilters}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                Reset Filters
               </button>
             </div>
-            <button className="clear-btn" onClick={clearAllFilters}>
-              Clear All
-            </button>
           </div>
-          <div className="filter-controls">
-            <MultiSelectDropdown
-              className="filter-span-2"
-              label="Category"
-              options={filterOptions.categories}
-              selected={categoryFilter}
-              onChange={setCategoryFilter}
-            />
 
-            <MultiSelectDropdown
-              className="filter-span-2"
-              label="Service"
-              options={availableServices}
-              selected={serviceFilter}
-              onChange={setServiceFilter}
+          <div className="dash-controls-row">
+            <OdooSearchBar
+              variant="boxed"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search name, mobile, email..."
+              chips={filterChips}
             />
-
-            <MultiSelectDropdown
-              className="filter-span-2"
-              label="Rank"
-              options={availableRanks}
-              selected={rankFilter}
-              onChange={setRankFilter}
-            />
-
-            <MultiSelectDropdown
-              className="filter-span-2"
-              label="State"
-              options={filterOptions.states}
-              selected={stateFilter}
-              onChange={setStateFilter}
-            />
-
-            <MultiSelectDropdown
-              className="filter-span-2"
-              label="City"
-              options={availableCities}
-              selected={cityFilter}
-              onChange={setCityFilter}
-            />
-
-            <div className="filter-group filter-span-2">
-              <label>Retirement Status</label>
-              <select value={retirementFilter} onChange={(e) => setRetirementFilter(e.target.value)}>
-                <option value="All">All</option>
-                <option value="Retired">Retired</option>
-                <option value="Not Retired">Not Retired</option>
-              </select>
+            <div className="member-toolbar-group">
+              <OdooViewToolbar
+                variant="boxed"
+                quickFilters={quickFilters}
+                advancedContent={advancedFiltersPanel}
+                groupByOptions={MEMBER_GROUP_BY_OPTIONS}
+                groupBy={groupBy}
+                onGroupByChange={setGroupBy}
+                showViewToggle={false}
+              />
+              <FavoritesMenu
+                favorites={favorites}
+                onApply={applyFavorite}
+                onDelete={deleteFavorite}
+                onSave={saveCurrentAsFavorite}
+              />
             </div>
-
-            <div className="date-range-group">
-              <div className="date-range-title">
-                <strong>Date Range</strong>
-              </div>
-              <div className="date-range-row">
-                <div className="filter-group">
-                  <label>From Date</label>
-                  <DatePicker
-                    selected={toDatePickerValue(registrationDateFrom)}
-                    onChange={(date) => setRegistrationDateFrom(toDateInputValue(date))}
-                    dateFormat="dd MMM yyyy"
-                    placeholderText="Select date"
-                    className="date-picker-input"
-                    wrapperClassName="date-picker-wrapper"
-                    calendarClassName="date-picker-calendar"
-                    showPopperArrow={false}
-                  />
-                </div>
-
-                <div className="filter-group">
-                  <label>To Date</label>
-                  <DatePicker
-                    selected={toDatePickerValue(registrationDateTo)}
-                    onChange={(date) => setRegistrationDateTo(toDateInputValue(date))}
-                    dateFormat="dd MMM yyyy"
-                    placeholderText="Select date"
-                    className="date-picker-input"
-                    wrapperClassName="date-picker-wrapper"
-                    calendarClassName="date-picker-calendar"
-                    showPopperArrow={false}
-                  />
-                </div>
-              </div>
-              <div className="date-range-note">
-              </div>
-            </div>
-
-            <DualRangeSlider
-              className="range-filter-card"
-              label="Age Range"
-              helperText="Drag both handles to narrow the visible age range."
-              min={ageBounds.min}
-              max={ageBounds.max}
-              value={ageRange}
-              onChange={setAgeRange}
-              suffix=" yrs"
-            />
           </div>
         </header>
 
-        {hasData ? (
+        <div className="dash-body">
+        {loading ? (
+          <div style={{ height: "220px", display: "flex" }}>
+            <TableLoadingSpinner label="Loading dashboard…" />
+          </div>
+        ) : hasData ? (
           <>
             <div className="stats-grid">
               <div
@@ -1510,11 +1507,11 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                 tabIndex={0}
                 title="Show the raw data"
                 onClick={() =>
-                  openRawData('Applied Members', 'Members who applied to any job or project', requirementData.appliedIds)
+                  openRawData('Applied Members', 'Members who applied to any job or project', appliedInViewIds)
                 }
                 onKeyDown={(event) =>
                   onBlockKeyDown(event, () =>
-                    openRawData('Applied Members', 'Members who applied to any job or project', requirementData.appliedIds)
+                    openRawData('Applied Members', 'Members who applied to any job or project', appliedInViewIds)
                   )
                 }
               >
@@ -1548,7 +1545,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                 <div className="requirement-grid">
                   {visibleRequirementBlocks.map((block) => {
                     const subtitle = `${REQUIREMENT_TYPE_LABELS[block.type]}${block.company ? ` • ${block.company}` : ''}`;
-                    const open = () => openRawData(block.title, subtitle, block.memberIds);
+                    const open = () => openRawData(block.title, subtitle, block.activeMemberIds);
                     return (
                       <div
                         key={block.id}
@@ -1575,6 +1572,18 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
             </div>
 
             <div className="charts-grid">
+              {groupByChart && (
+                <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
+                  <h3>
+                    Members by {groupByChart.title}
+                    {groupByChart.hidden > 0 ? ` (top 20, ${groupByChart.hidden} more not shown)` : ''}
+                  </h3>
+                  <div className="chart-container" style={{ height: Math.max(300, groupByChart.rows * 30 + 60) }}>
+                    <Bar data={groupByChart.data} options={groupByChart.options} plugins={CHART_DATALABELS_PLUGINS} />
+                  </div>
+                </div>
+              )}
+
               <div className="chart-card">
                 <h3>Gender Wise Distribution</h3>
                 <div className="chart-container">
@@ -1585,34 +1594,25 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
               <div className="chart-card">
                 <h3>Category Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={categoryChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
+                  <Doughnut data={categoryChartData} options={categoryDoughnutOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <div className="chart-card">
                 <h3>Service Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={serviceChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
+                  <Bar data={serviceChartData} options={serviceBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <div className="chart-card">
                 <h3>Ranks Wise Distribution</h3>
                 <div className="chart-container">
-                  <Bar data={rankChartData} options={barOptions} plugins={CHART_DATALABELS_PLUGINS} />
+                  <Bar data={rankChartData} options={rankBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
-              <div className="chart-card">
-                <h3>Registration Trends</h3>
-                <div className="chart-container">
-                  <Bar
-                    data={registrationChartData}
-                    options={barOptions}
-                    plugins={CHART_DATALABELS_PLUGINS}
-                  />
-                </div>
-              </div>
+              <RegistrationTrend members={filteredMembersNoDateRange} />
 
               <div className="chart-card">
                 <h3>State Wise Distribution (India)</h3>
@@ -1644,6 +1644,9 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
               </p>
             </div>
           </div>
+        )}
+        </div>
+        </>
         )}
       </div>
 

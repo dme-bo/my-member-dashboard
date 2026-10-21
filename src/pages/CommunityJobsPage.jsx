@@ -12,11 +12,15 @@ import {
   FaBriefcase,
 } from "react-icons/fa";
 import { collection, db, addDoc, doc, getDocs, updateDoc } from "../firestoreClient";
-import SkeletonLoader from "../components/SkeletonLoader";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import LocationAutocompleteInput from "../components/LocationAutocompleteInput";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
+import FavoritesMenu from "../components/FavoritesMenu";
 import { formatDateText } from "../utils/dateFormat";
+import SelectionActionMenu from "../components/SelectionActionMenu";
+import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
+import SortArrow from "../components/SortArrow";
 
 const COLLECTION_NAME = "communityjobs";
 const MAX_UPLOAD_PHOTOS = 6;
@@ -48,6 +52,30 @@ const getDisplayStatus = (job) => {
   if (job.job_isdraft) return "Draft";
   return job.job_status;
 };
+
+// Status label exactly as the table shows it (Archived wins over Draft/Published).
+const getStatusLabel = (job) => (!job.job_status ? "Archived" : job.job_isdraft ? "Draft" : "Published");
+
+// Posted On sorts chronologically; "dd-MMM-yyyy" strings become a time value,
+// Date/Firestore Timestamp values are handled by sortRows itself.
+const postedOnSortValue = (value) => {
+  if (typeof value === "string") {
+    const date = parsePostedOn(value) || new Date(value);
+    const time = date.getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  return value ?? null;
+};
+
+const JOB_SORT_ACCESSORS = {
+  role: (job) => job.job_designation,
+  organization: (job) => job.job_company,
+  location: (job) => job.job_location,
+  postedOn: (job) => postedOnSortValue(job.job_postedon),
+  status: getStatusLabel,
+};
+
+const FAVORITES_STORAGE_KEY = "communityJobsFavorites";
 
 const COMMUNITY_GROUP_BY_OPTIONS = [
   { key: "orgType", label: "Organization Type" },
@@ -99,6 +127,51 @@ export default function CommunityJobsPage() {
   const [filters, setFilters] = useState({ orgType: [], status: [] });
   const [groupBy, setGroupBy] = useState(null);
   const [kanbanView, setKanbanView] = useState("list");
+
+  const [pageSize, setPageSize] = useState(500);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Column sorting; with no column picked, jobs keep the newest-first order from fetchJobs.
+  const { sort, toggleSort: toggleSortKey } = useTableSort({ key: null, dir: "asc" });
+  const toggleSort = (key) => {
+    toggleSortKey(key);
+    setPageIndex(0);
+  };
+
+  // Saved search/filter presets (same Favorites menu as the Members pages).
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const persistFavorites = (next) => {
+    setFavorites(next);
+    try {
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
+    } catch (err) {
+      console.error("Error saving favorites:", err);
+    }
+  };
+  const saveCurrentAsFavorite = (name) => {
+    persistFavorites([...favorites, { id: Date.now().toString(36), name, searchTerm, filters, groupBy }]);
+  };
+  const applyFavorite = (fav) => {
+    setSearchTerm(fav.searchTerm || "");
+    setFilters({ orgType: fav.filters?.orgType || [], status: fav.filters?.status || [] });
+    setGroupBy(fav.groupBy || null);
+  };
+  const deleteFavorite = (id) => persistFavorites(favorites.filter((f) => f.id !== id));
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setFilters({ orgType: [], status: [] });
+    setGroupBy(null);
+    setPostedOnFilter("");
+  };
 
   const toggleFilter = (key, value) => {
     setFilters((prev) => {
@@ -177,11 +250,53 @@ export default function CommunityJobsPage() {
       list = list.filter((job) => filters.status.includes(getDisplayStatus(job)));
     }
 
-    return list;
-  }, [jobs, searchTerm, postedOnFilter, filters]);
+    return sortRows(list, sort, JOB_SORT_ACCESSORS);
+  }, [jobs, searchTerm, postedOnFilter, filters, sort]);
 
-  // Grouping is applied within the currently filtered list (this page has no
-  // pagination, so there's no separate "page-scoped" concern here).
+  const totalPages = Math.max(1, Math.ceil(filteredJobs.length / pageSize));
+  const safePageIndex = Math.min(pageIndex, totalPages - 1);
+  // Action → Export: ticked job posts as an .xlsx.
+  const exportSelectedJobs = async () => {
+    const rows = filteredJobs.filter((job) => selectedIds.has(job.id));
+    if (!rows.length) return;
+    const data = rows.map((job) => ({
+      Role: job.job_designation || "-",
+      Organization: job.job_company || "-",
+      Location: job.job_location || "-",
+      "Posted On": formatDateText(job.job_postedon, "-"),
+      Status: job.job_isdraft ? "Draft" : "Published",
+    }));
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Community Jobs");
+    XLSX.writeFile(wb, "community-jobs.xlsx");
+  };
+
+  const pagedJobs = useMemo(
+    () => filteredJobs.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize),
+    [filteredJobs, safePageIndex, pageSize]
+  );
+  const rangeStart = filteredJobs.length === 0 ? 0 : safePageIndex * pageSize + 1;
+  const rangeEnd = safePageIndex * pageSize + pagedJobs.length;
+  const allPageSelected = pagedJobs.length > 0 && pagedJobs.every((j) => selectedIds.has(j.id));
+
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleSelectAll = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (pagedJobs.every((j) => next.has(j.id))) pagedJobs.forEach((j) => next.delete(j.id));
+      else pagedJobs.forEach((j) => next.add(j.id));
+      return next;
+    });
+
+  // Grouping is applied within the current page of the filtered list.
   const groupedJobs = useMemo(() => {
     if (!groupBy) return null;
     const getLabel = (job) => {
@@ -191,13 +306,13 @@ export default function CommunityJobsPage() {
       return "Unspecified";
     };
     const groups = new Map();
-    for (const job of filteredJobs) {
+    for (const job of pagedJobs) {
       const label = getLabel(job);
       if (!groups.has(label)) groups.set(label, []);
       groups.get(label).push(job);
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [groupBy, filteredJobs]);
+  }, [groupBy, pagedJobs]);
 
   const openCreateForm = (prefill) => {
     setForm(prefill ? { ...emptyForm(), ...prefill } : emptyForm());
@@ -351,65 +466,57 @@ export default function CommunityJobsPage() {
     return (
       <tr
         key={job.id}
+        className="cj-row"
         data-testid={`community-job-card-${job.id}`}
-        style={{ backgroundColor: "white", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", opacity: isArchived ? 0.6 : 1 }}
+        style={{ opacity: isArchived ? 0.6 : 1 }}
       >
-        <td style={{ padding: "12px 16px", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px" }}>
+        <td className="cj-td" style={{ width: "36px" }}>
+          <input
+            className="cj-cb"
+            type="checkbox"
+            aria-label={`Select ${job.job_designation || "post"}`}
+            checked={selectedIds.has(job.id)}
+            onChange={() => toggleSelected(job.id)}
+          />
+        </td>
+        <td className="cj-td">
           <img
             src={job.job_logo || DEFAULT_LOGO}
             alt=""
-            style={{ width: "40px", height: "40px", borderRadius: "8px", objectFit: "contain", background: "#f1f5f9" }}
+            style={{ width: "28px", height: "28px", borderRadius: "6px", objectFit: "contain", background: "#f1f5f9", display: "block" }}
           />
         </td>
-        <td style={{ padding: "16px", fontWeight: "700", color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_designation}>
-          {job.job_designation || "Untitled Role"}
+        <td className="cj-td" style={{ fontWeight: 500, color: "#111827" }} title={job.job_designation}>
+          <span className="cj-trunc">{job.job_designation || "Untitled Role"}</span>
         </td>
-        <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_company}>
-          {job.job_company || "—"}
+        <td className="cj-td" title={job.job_company}>
+          <span className="cj-trunc">{job.job_company || "—"}</span>
         </td>
-        <td style={{ padding: "16px", color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.job_location}>
-          {job.job_location || "Location not specified"}
+        <td className="cj-td" title={job.job_location}>
+          <span className="cj-trunc">{job.job_location || "Location not specified"}</span>
         </td>
-        <td style={{ padding: "16px", color: "#6b7280", fontSize: "13px" }}>{formatDateText(job.job_postedon, "—")}</td>
-        <td style={{ padding: "16px", textAlign: "center" }}>
-          <span
-            style={{
-              display: "inline-block",
-              padding: "4px 12px",
-              borderRadius: "20px",
-              fontSize: "12px",
-              fontWeight: "700",
-              backgroundColor: job.job_isdraft ? "#fef3c7" : "#dcfce7",
-              color: job.job_isdraft ? "#92400e" : "#166534",
-            }}
-          >
+        <td className="cj-td">{formatDateText(job.job_postedon, "—")}</td>
+        <td className="cj-td">
+          <span className={`cj-status${job.job_isdraft ? " cj-status-draft" : ""}`}>
             {job.job_isdraft ? "Draft" : "Published"}
           </span>
-          {isArchived && (
-            <div style={{ fontSize: "11px", fontWeight: "700", color: "#991b1b", marginTop: "4px" }}>Archived</div>
-          )}
+          {isArchived && <span className="cj-status cj-status-archived" style={{ marginLeft: "6px" }}>Archived</span>}
         </td>
-        <td style={{ padding: "16px", borderTopRightRadius: "12px", borderBottomRightRadius: "12px" }}>
-          <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
-            <button
-              onClick={() => openViewForm(job)}
-              title="View"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "white", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#4b5563" }}
-            >
+        <td className="cj-td">
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button type="button" className="cj-act" onClick={() => openViewForm(job)} title="View">
               <FaEye /> View
             </button>
-            <button
-              onClick={() => openEditForm(job)}
-              title="Edit"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #1976d2", background: "#eff6ff", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#1976d2" }}
-            >
+            <button type="button" className="cj-act cj-act-edit" onClick={() => openEditForm(job)} title="Edit">
               <FaEdit /> Edit
             </button>
             <button
+              type="button"
+              className="cj-act-del"
               onClick={() => setArchiveTarget(job)}
               title="Archive"
+              aria-label="Archive post"
               disabled={isArchived}
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "1.5px solid #fecaca", background: isArchived ? "#f3f4f6" : "#fef2f2", cursor: isArchived ? "not-allowed" : "pointer", fontSize: "13px", fontWeight: "600", color: isArchived ? "#9ca3af" : "#dc2626" }}
             >
               <FaArchive />
             </button>
@@ -419,9 +526,6 @@ export default function CommunityJobsPage() {
     );
   };
 
-  if (loading) {
-    return <SkeletonLoader rows={6} fullPage label="Loading Community Jobs…" />;
-  }
 
   if (error) {
     return (
@@ -441,7 +545,7 @@ export default function CommunityJobsPage() {
   }
 
   return (
-    <div style={{ backgroundColor: "#f4f6f9", minHeight: "100vh", padding: "20px" }}>
+    <div className="page-fill" style={{ backgroundColor: "#fff", color: "#212529" }}>
       <style>{`
         .date-picker-wrapper { width: 100%; }
         .date-picker-input {
@@ -457,6 +561,59 @@ export default function CommunityJobsPage() {
         .date-picker-input:focus {
           outline: none;
           border-color: #1976d2;
+        }
+        /* Header band + table mirror the Members Master List (MemberListPage). */
+        .cj-header { background: #fff; padding: 32px 32px 16px; width: 100%; box-sizing: border-box; }
+        .cj-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+        .cj-title { display: flex; align-items: baseline; gap: 12px; }
+        .cj-title h1 { margin: 0; font-size: 28px; font-weight: 600; color: #111827; letter-spacing: -0.01em; }
+        .cj-title span { font-size: 14px; color: #64748b; font-weight: 400; }
+        .cj-outline-btn { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; background: #fff; border: 1px solid #dde1e7; border-radius: 6px; color: #334155; font-size: 13px; font-weight: 400; cursor: pointer; white-space: nowrap; }
+        .cj-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+        .member-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .member-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .member-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .cj-meta-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-height: 34px; }
+        .cj-meta-actions { margin-right: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .cj-primary { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #1976d2; background: #1976d2; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 500; color: #fff; cursor: pointer; white-space: nowrap; }
+        .cj-primary:hover { background: #1565c0; }
+        .cj-secondary { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 400; color: #334155; cursor: pointer; white-space: nowrap; }
+        .cj-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+        .cj-range { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; margin: 0 2px; }
+        .cj-icon-group { display: flex; gap: 6px; }
+        .cj-icon-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #dde1e7; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; padding: 0; }
+        .cj-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; cursor: not-allowed; }
+        .cj-icon-group:has(.cj-active), .cj-icon-group.cj-view-toggle { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
+        .cj-icon-group:has(.cj-active) .cj-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0; color: #64748b; }
+        .cj-icon-btn.cj-active { background: #e3f2fd; color: #1976d2; }
+        .cj-body { flex: 1; background: #fff; }
+        .cj-table-wrap { overflow-x: auto; border-top: 1px solid #dde1e7; }
+        .cj-table { width: 100%; min-width: 1040px; border-collapse: collapse; }
+        .cj-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; position: sticky; top: 0; z-index: 2; }
+        .cj-td { height: 49px; padding: 0 10px; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; white-space: nowrap; vertical-align: middle; }
+        .cj-row { background: #fff; }
+        .cj-row:nth-child(odd) { background: #f8fafc; }
+        .cj-group-row td { height: 40px; padding: 0 12px; font-weight: 600; font-size: 13px; color: #334155; background: #f1f5f9; border-bottom: 1px solid #dde1e7; }
+        .cj-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .cj-th .cj-cb { width: 14px; height: 14px; accent-color: #ffffff; }
+        .cj-trunc { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+        .cj-status { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 11px; background: #e3f1e3; color: #1f5c26; font-size: 12px; font-weight: 600; }
+        .cj-status-draft { background: #fef3c7; color: #92400e; }
+        .cj-status-archived { background: #fde8e8; color: #991b1b; }
+        .cj-act { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 4px; font: inherit; font-size: 13px; color: #3c4047; cursor: pointer; }
+        .cj-act:hover { background: #f2f3f5; }
+        .cj-act-edit { color: #1976d2; }
+        .cj-act-del { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid #efc9c9; background: #fff; border-radius: 4px; color: #b42318; cursor: pointer; padding: 0; }
+        .cj-act-del:hover:not(:disabled) { background: #fdf0f0; }
+        .cj-act-del:disabled { color: #9ca3af; border-color: #e5e7eb; background: #f3f4f6; cursor: not-allowed; }
+        .cj-notice { display: flex; align-items: center; gap: 10px; background: #eff6ff; color: #1e40af; padding: 10px 32px; font-size: 13px; font-weight: 600; }
+        .cj-empty { text-align: center; padding: 80px 20px; color: #666; background: #fff; }
+        .cj-kanban { padding: 20px 32px; }
+        @media (max-width: 720px) {
+          .cj-header { padding: 16px; }
+          .cj-kanban { padding: 16px; }
         }
       `}</style>
       {toast.show && (
@@ -480,9 +637,21 @@ export default function CommunityJobsPage() {
       )}
 
       {/* HEADER */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", minWidth: "320px", maxWidth: "640px" }}>
+      <div className="cj-header page-header-band">
+        <div className="cj-title-row">
+          <div className="cj-title">
+            <h1>Community Jobs</h1>
+            <span>{filteredJobs.length.toLocaleString()} Posts</span>
+          </div>
+          <button type="button" className="cj-outline-btn" onClick={clearFilters}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+            Reset Filters
+          </button>
+        </div>
+
+        <div className="cj-controls-row">
           <OdooSearchBar
+            variant="boxed"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by role, company, location..."
@@ -492,42 +661,78 @@ export default function CommunityJobsPage() {
               ...(groupBy ? [{ key: "groupBy", label: `Group: ${COMMUNITY_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
             ]}
           />
-          <OdooViewToolbar
-            quickFilters={[
-              { key: "orgType-Company", label: "Company", active: filters.orgType.includes("Company"), onToggle: () => toggleFilter("orgType", "Company") },
-              { key: "orgType-Government", label: "Government", active: filters.orgType.includes("Government"), onToggle: () => toggleFilter("orgType", "Government") },
-              { key: "status-Open", label: "Open", active: filters.status.includes("Open"), onToggle: () => toggleFilter("status", "Open"), startGroup: true },
-              { key: "status-Closed", label: "Closed", active: filters.status.includes("Closed"), onToggle: () => toggleFilter("status", "Closed") },
-              { key: "status-Draft", label: "Draft", active: filters.status.includes("Draft"), onToggle: () => toggleFilter("status", "Draft") },
-              { key: "status-Archived", label: "Archived", active: filters.status.includes("Archived"), onToggle: () => toggleFilter("status", "Archived") },
-            ]}
-            groupByOptions={COMMUNITY_GROUP_BY_OPTIONS}
-            groupBy={groupBy}
-            onGroupByChange={setGroupBy}
-            view={kanbanView}
-            onViewChange={setKanbanView}
-          />
+          <div className="member-toolbar-group">
+            <OdooViewToolbar
+              variant="boxed"
+              showViewToggle={false}
+              quickFilters={[
+                { key: "orgType-Company", label: "Company", active: filters.orgType.includes("Company"), onToggle: () => toggleFilter("orgType", "Company") },
+                { key: "orgType-Government", label: "Government", active: filters.orgType.includes("Government"), onToggle: () => toggleFilter("orgType", "Government") },
+                { key: "status-Open", label: "Open", active: filters.status.includes("Open"), onToggle: () => toggleFilter("status", "Open"), startGroup: true },
+                { key: "status-Closed", label: "Closed", active: filters.status.includes("Closed"), onToggle: () => toggleFilter("status", "Closed") },
+                { key: "status-Draft", label: "Draft", active: filters.status.includes("Draft"), onToggle: () => toggleFilter("status", "Draft") },
+                { key: "status-Archived", label: "Archived", active: filters.status.includes("Archived"), onToggle: () => toggleFilter("status", "Archived") },
+              ]}
+              groupByOptions={COMMUNITY_GROUP_BY_OPTIONS}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+            />
+            <FavoritesMenu
+              favorites={favorites}
+              onApply={applyFavorite}
+              onDelete={deleteFavorite}
+              onSave={saveCurrentAsFavorite}
+            />
+          </div>
         </div>
-        <div style={{ display: "flex", gap: "12px" }}>
-          <button
-            onClick={openUploadModal}
-            style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 20px", backgroundColor: "#ffffff", color: "#1976d2", border: "2px solid #1976d2", borderRadius: "30px", cursor: "pointer", fontWeight: "700" }}
+
+        <div className="cj-meta-row">
+          <SelectionActionMenu count={selectedIds.size} onExport={exportSelectedJobs} onClear={() => setSelectedIds(new Set())} />
+          <div className="cj-meta-actions">
+            <button type="button" className="cj-primary" onClick={() => openCreateForm()}>
+              <FaPlus /> Create New Post
+            </button>
+            <button type="button" className="cj-secondary" onClick={openUploadModal}>
+              <FaCamera /> Upload Photos
+            </button>
+          </div>
+          <select
+            className="cj-select"
+            aria-label="Records per page"
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPageIndex(0); }}
           >
-            <FaCamera /> Upload Photos
-          </button>
-          <button
-            onClick={() => openCreateForm()}
-            style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 20px", backgroundColor: "#1976d2", color: "white", border: "none", borderRadius: "30px", cursor: "pointer", fontWeight: "700" }}
-          >
-            <FaPlus /> Create New Post
-          </button>
+            <option value={500}>500</option>
+            <option value={200}>200</option>
+            <option value={80}>80</option>
+          </select>
+          <span className="cj-range">
+            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} / {filteredJobs.length.toLocaleString()}
+          </span>
+          <div className="cj-icon-group">
+            <button type="button" className="cj-icon-btn" aria-label="Previous page" disabled={safePageIndex === 0} onClick={() => setPageIndex(safePageIndex - 1)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+            </button>
+            <button type="button" className="cj-icon-btn" aria-label="Next page" disabled={safePageIndex >= totalPages - 1} onClick={() => setPageIndex(safePageIndex + 1)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
+          </div>
+          <div className="cj-icon-group">
+            <button type="button" className={`cj-icon-btn${kanbanView === "list" ? " cj-active" : ""}`} aria-label="List view" aria-pressed={kanbanView === "list"} onClick={() => setKanbanView("list")}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+            <button type="button" className={`cj-icon-btn${kanbanView === "kanban" ? " cj-active" : ""}`} aria-label="Kanban view" aria-pressed={kanbanView === "kanban"} onClick={() => setKanbanView("kanban")}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="10" /><rect x="16" y="4" width="4" height="13" /></svg>
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
       {postedOnFilter && (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#eff6ff", color: "#1e40af", padding: "10px 18px", borderRadius: "10px", marginBottom: "16px", fontSize: "13px", fontWeight: "600" }}>
+        <div className="cj-notice">
           Showing jobs posted on {formatDateText(postedOnFilter)}
           <button
+            type="button"
             onClick={() => setPostedOnFilter("")}
             style={{ background: "none", border: "none", color: "#1e40af", textDecoration: "underline", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}
           >
@@ -537,76 +742,79 @@ export default function CommunityJobsPage() {
       )}
 
       {/* JOB LIST */}
-      {filteredJobs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "80px 20px", color: "#666", background: "white", borderRadius: "16px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-          <FaBriefcase size={40} style={{ color: "#cbd5e1", marginBottom: "16px" }} />
-          <p style={{ fontSize: "16px" }}>No community jobs found.</p>
-        </div>
-      ) : kanbanView === "kanban" ? (
-        <div>
-          {groupedJobs
-            ? groupedJobs.map(([label, items]) => (
-                <div key={label} style={{ marginBottom: "20px" }}>
-                  <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
-                    {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+      <div className="cj-body page-fill-mid">
+        {loading ? (
+          <TableLoadingSpinner label="Loading community jobs…" />
+        ) : filteredJobs.length === 0 ? (
+          <div className="cj-empty">
+            <FaBriefcase size={40} style={{ color: "#cbd5e1", marginBottom: "16px" }} />
+            <p style={{ fontSize: "16px" }}>No community jobs found.</p>
+          </div>
+        ) : kanbanView === "kanban" ? (
+          <div className="cj-kanban page-fill-scroll">
+            {groupedJobs
+              ? groupedJobs.map(([label, items]) => (
+                  <div key={label} style={{ marginBottom: "20px" }}>
+                    <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
+                      {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                      {items.map((job) => (
+                        <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
-                    {items.map((job) => (
-                      <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
-                    ))}
-                  </div>
+                ))
+              : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                  {pagedJobs.map((job) => (
+                    <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
+                  ))}
                 </div>
-              ))
-            : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
-                {filteredJobs.map((job) => (
-                  <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
-                ))}
-              </div>
-            )}
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto", minWidth: "100%" }}>
-          <table
-            style={{
-              width: "100%",
-              minWidth: "900px",
-              tableLayout: "fixed",
-              borderCollapse: "separate",
-              borderSpacing: "0 10px",
-              fontSize: "14px",
-            }}
-          >
-            <thead>
-              <tr style={{ backgroundColor: "#1976d2", color: "white" }}>
-                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", borderTopLeftRadius: "12px", borderBottomLeftRadius: "12px", width: "56px" }}></th>
-                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Role</th>
-                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Organization</th>
-                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700" }}>Location</th>
-                <th style={{ padding: "16px", textAlign: "left", fontWeight: "700", width: "130px" }}>Posted On</th>
-                <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", width: "130px" }}>Status</th>
-                <th style={{ padding: "16px", textAlign: "center", fontWeight: "700", borderTopRightRadius: "12px", borderBottomRightRadius: "12px", width: "220px" }}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupedJobs
-                ? groupedJobs.map(([label, items]) => (
-                    <Fragment key={label}>
-                      <tr>
-                        <td colSpan={7} style={{ padding: "10px 16px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
-                          {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
-                        </td>
-                      </tr>
-                      {items.map(renderJobRow)}
-                    </Fragment>
-                  ))
-                : filteredJobs.map(renderJobRow)}
-            </tbody>
-          </table>
-        </div>
-      )}
+              )}
+          </div>
+        ) : (
+          <div className="cj-table-wrap page-fill-scroll">
+            <table className="cj-table">
+              <thead>
+                <tr>
+                  <th className="cj-th" style={{ width: "36px" }}>
+                    <input className="cj-cb" type="checkbox" aria-label="Select all posts" checked={allPageSelected} onChange={toggleSelectAll} />
+                  </th>
+                  <th className="cj-th" style={{ width: "52px" }}></th>
+                  {[
+                    ["role", "Role"],
+                    ["organization", "Organization"],
+                    ["location", "Location"],
+                    ["postedOn", "Posted On"],
+                    ["status", "Status"],
+                  ].map(([key, label]) => (
+                    <th key={key} className="cj-th" {...sortHeaderProps(key, sort, toggleSort)}>
+                      {label}
+                      <SortArrow active={sort.key === key} dir={sort.dir} />
+                    </th>
+                  ))}
+                  <th className="cj-th">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedJobs
+                  ? groupedJobs.map(([label, items]) => (
+                      <Fragment key={label}>
+                        <tr className="cj-group-row">
+                          <td colSpan={8}>
+                            {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                          </td>
+                        </tr>
+                        {items.map(renderJobRow)}
+                      </Fragment>
+                    ))
+                  : pagedJobs.map(renderJobRow)}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* CREATE / EDIT / VIEW FORM MODAL */}
       {showFormModal && (

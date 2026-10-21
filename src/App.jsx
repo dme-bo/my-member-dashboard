@@ -112,6 +112,7 @@ const MEMBER_LIST_FIELDS = [
 function Layout() {
   const location = useLocation();
   const [selectedMember, setSelectedMember]   = useState(null);
+  const [memberActions, setMemberActions]     = useState(null); // Tag / Regional Partner handlers from MemberListPage
   const [expandedMenu,   setExpandedMenu]     = useState(null);
   const [memberRecords,  setMemberRecords]    = useState([]);
   const [membersLoading, setMembersLoading]   = useState(true);
@@ -224,7 +225,10 @@ function Layout() {
               element={
                 <ErrorBoundary>
                   <MemberListPage
-                    onMemberClick={setSelectedMember}
+                    onMemberClick={(member, actions) => {
+                      setSelectedMember(member);
+                      setMemberActions(actions || null);
+                    }}
                     memberRecords={memberRecords}
                     membersLoading={membersLoading}
                     filterData={memberFilterData}
@@ -359,7 +363,9 @@ function Layout() {
           <Suspense fallback={null}>
           <MemberDetailModal
             member={selectedMember}
-            onClose={() => setSelectedMember(null)}
+            onClose={() => { setSelectedMember(null); setMemberActions(null); }}
+            onOpenTag={memberActions ? () => memberActions.openTagModal(selectedMember) : undefined}
+            onOpenPartner={memberActions ? () => memberActions.openPartnerModal(selectedMember) : undefined}
           />
         </Suspense>
         </ErrorBoundary>

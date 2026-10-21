@@ -1,52 +1,19 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { FaMapMarkedAlt, FaDirections, FaTimes, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, Tooltip, ZoomControl, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { FaDirections, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
 import { getMemberName, getMemberPhone, getMemberEmail, parseMemberLatLong, pickMemberText } from "../utils/memberFields";
-import SkeletonLoader from "../components/SkeletonLoader";
+import OdooSearchBar from "../components/OdooSearchBar";
+import OdooViewToolbar from "../components/OdooViewToolbar";
+import FavoritesMenu from "../components/FavoritesMenu";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
+import useMemberFilters, { MEMBER_GROUP_BY_OPTIONS, getGroupLabels } from "../hooks/useMemberFilters";
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const DEFAULT_CENTER = { lat: 22.9734, lng: 78.6569 };
 const CLUSTER_GRID_BASE_PX = 84;
 const STATE_CLUSTER_ZOOM = 7;
 const MEMBER_CLUSTER_ZOOM = 10;
-
-const createSvgDataUrl = (svg) =>
-  "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg.trim());
-
-// Load Google Maps once and reuse the same script instance across renders.
-const loadGoogleMaps = (apiKey) =>
-  new Promise((resolve, reject) => {
-    if (window.google?.maps) {
-      resolve(window.google.maps);
-      return;
-    }
-
-    const previousAuthFailure = window.gm_authFailure;
-    window.gm_authFailure = () => {
-      if (typeof previousAuthFailure === "function") {
-        previousAuthFailure();
-      }
-      reject(new Error("Google Maps authorization failed"));
-    };
-
-    const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
-    if (existingScript) {
-      const onLoad = () => resolve(window.google.maps);
-      const onError = () => reject(new Error("Failed to load Google Maps"));
-      existingScript.addEventListener("load", onLoad, { once: true });
-      existingScript.addEventListener("error", onError, { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = GOOGLE_MAPS_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve(window.google.maps);
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
-    document.head.appendChild(script);
-  });
 
 const getWorldPoint = ({ lat, lng }) => {
   const siny = Math.sin((lat * Math.PI) / 180);
@@ -122,69 +89,19 @@ const getClusterGridSize = (zoom) => {
   return CLUSTER_GRID_BASE_PX;
 };
 
-const getClusterIcon = (count) => {
-  const width = 54;
-  const height = 72;
-  const centerX = width / 2;
-  return {
-    url: createSvgDataUrl(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-        <defs>
-          <linearGradient id="clusterGlow" x1="0%" x2="0%" y1="0%" y2="100%">
-            <stop offset="0%" stop-color="#38bdf8" stop-opacity="1" />
-            <stop offset="100%" stop-color="#2563eb" stop-opacity="1" />
-          </linearGradient>
-          <filter id="clusterShadow" x="-20%" y="-20%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#1e3a8a" flood-opacity="0.22" />
-          </filter>
-        </defs>
-        <path
-          d="M ${centerX} 3
-             C 39 3, 51 15, 51 29
-             C 51 45, 37 56, ${centerX} 69
-             C 17 56, 3 45, 3 29
-             C 3 15, 15 3, ${centerX} 3 Z"
-          fill="url(#clusterGlow)"
-          stroke="#1d4ed8"
-          stroke-width="1.5"
-          filter="url(#clusterShadow)"
-        />
-        <circle cx="${centerX}" cy="27" r="14" fill="rgba(255,255,255,0.15)" />
-        <text
-          x="${centerX}"
-          y="32"
-          text-anchor="middle"
-          font-family="Arial, sans-serif"
-          font-size="${Math.max(12, Math.min(20, 13 + Math.log10(count + 1) * 2))}"
-          font-weight="700"
-          fill="#ffffff"
-        >${count}</text>
-      </svg>
-    `),
-    scaledSize: new window.google.maps.Size(width, height),
-    anchor: new window.google.maps.Point(centerX, height - 2),
-  };
-};
+const getClusterIcon = (count) =>
+  L.divIcon({
+    className: "loc-cluster-icon",
+    html: `<span style="font-size:${Math.max(12, Math.min(18, 12 + Math.log10(count + 1) * 2))}px">${count.toLocaleString()}</span>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
 
-const getMemberIcon = () => ({
-  url: createSvgDataUrl(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="50" viewBox="0 0 36 50">
-      <defs>
-        <linearGradient id="pinFill" x1="0%" x2="0%" y1="0%" y2="100%">
-          <stop offset="0%" stop-color="#38bdf8" />
-          <stop offset="100%" stop-color="#2563eb" />
-        </linearGradient>
-        <filter id="pinShadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.18" />
-        </filter>
-      </defs>
-      <path d="M18 2C10.27 2 4 8.27 4 16c0 10.25 14 32 14 32s14-21.75 14-32C32 8.27 25.73 2 18 2z" fill="url(#pinFill)" stroke="#1d4ed8" stroke-width="1.6" filter="url(#pinShadow)"/>
-      <circle cx="18" cy="16" r="6.5" fill="#ffffff" opacity="0.95"/>
-      <circle cx="18" cy="16" r="3" fill="#1d4ed8"/>
-    </svg>
-  `),
-  scaledSize: new window.google.maps.Size(36, 50),
-  anchor: new window.google.maps.Point(18, 50),
+const memberIcon = L.divIcon({
+  className: "loc-member-icon",
+  html: "<span></span>",
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
 });
 
 // Group nearby pins into grid-based clusters so the map stays readable at lower zoom.
@@ -299,388 +216,184 @@ const normalizeCityLabel = (value) =>
 const isUsableLocationPoint = (point) =>
   Boolean(point) && !(Number(point.lat) === 0 && Number(point.lng) === 0);
 
-// Use the most specific available address component when reverse-geocoding a city.
-const extractGeocodedCity = (result) => {
-  const components = result?.address_components || [];
-  const preferredTypes = ["locality", "sublocality", "administrative_area_level_2", "administrative_area_level_1"];
+const MapClusters = ({ members, focusBounds, recenterKey, onSelectCluster, onSelectMember, onClear }) => {
+  const map = useMap();
+  const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
+  const fittedRef = useRef(false);
 
-  for (const type of preferredTypes) {
-    const match = components.find((component) => component.types?.includes(type) && component.long_name);
-    if (match?.long_name) return match.long_name;
-  }
+  useMapEvents({
+    moveend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }),
+    click: onClear,
+  });
 
-  return "";
+  useEffect(() => {
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(map.getContainer());
+    return () => ro.disconnect();
+  }, [map]);
+
+  const fitAll = () => {
+    if (!members.length) return;
+    map.fitBounds(L.latLngBounds(members.map((m) => [m.location_point.lat, m.location_point.lng])), { padding: [48, 48] });
+  };
+
+  useEffect(() => {
+    fittedRef.current = false;
+  }, [members]);
+  useEffect(() => {
+    if (fittedRef.current || !members.length) return;
+    fittedRef.current = true;
+    fitAll();
+  }, [members]);
+  useEffect(() => {
+    if (recenterKey) fitAll();
+  }, [recenterKey]);
+  useEffect(() => {
+    if (focusBounds?.points?.length) map.fitBounds(L.latLngBounds(focusBounds.points), { padding: [48, 48] });
+  }, [focusBounds]);
+
+  const clusters = useMemo(() => {
+    const zoom = Math.max(view.zoom, 3);
+    // Zoomed in, only a small region is visible: skip off-screen members.
+    const inView = zoom >= STATE_CLUSTER_ZOOM
+      ? members.filter((m) => view.bounds.contains([m.location_point.lat, m.location_point.lng]))
+      : members;
+    const raw = zoom < STATE_CLUSTER_ZOOM
+      ? buildStateClusters(members)
+      : zoom < MEMBER_CLUSTER_ZOOM
+        ? buildClusters(inView, zoom)
+        : buildMemberMarkers(inView);
+    return zoom < MEMBER_CLUSTER_ZOOM ? mergeCloseClusters(raw, zoom) : raw;
+  }, [members, view]);
+
+  return clusters.map((cluster) => {
+    const isSingle = cluster.count === 1 && cluster.mode === "member";
+    const member = cluster.members[0];
+    return (
+      <Marker
+        key={`${cluster.position.lat.toFixed(5)}:${cluster.position.lng.toFixed(5)}:${cluster.count}`}
+        position={[cluster.position.lat, cluster.position.lng]}
+        icon={isSingle ? memberIcon : getClusterIcon(cluster.count)}
+        zIndexOffset={isSingle ? 0 : cluster.count}
+        eventHandlers={{
+          click: (e) => {
+            L.DomEvent.stopPropagation(e);
+            if (!isSingle) {
+              onSelectCluster(cluster);
+              const zoom = map.getZoom();
+              map.flyTo([cluster.position.lat, cluster.position.lng], cluster.mode === "state" ? Math.min(zoom + 2, MEMBER_CLUSTER_ZOOM) : Math.min(zoom + 1, 16));
+            } else {
+              onSelectMember(member);
+            }
+          },
+        }}
+      >
+        <Tooltip direction="top" offset={[0, -36]}>
+          {cluster.mode === "state" ? `${cluster.label}: ${cluster.count} members` : isSingle ? member.name : `${cluster.count} members`}
+        </Tooltip>
+      </Marker>
+    );
+  });
 };
 
-export default function MemberLocationPage({ memberRecords = [] }) {
-  const [mapLoading, setMapLoading] = useState(true);
-  const [mapError, setMapError] = useState("");
-  const [mapReady, setMapReady] = useState(false);
-  const [locationSearchTerm, setLocationSearchTerm] = useState("");
-  const [cityFilter, setCityFilter] = useState("All Cities");
-  const [searchStatus, setSearchStatus] = useState("");
+export default function MemberLocationPage({ memberRecords = [], membersLoading = false }) {
   const [selectedMember, setSelectedMember] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState(null);
-  const mapRef = useRef(null);
-  const mapNodeRef = useRef(null);
-  const geocoderRef = useRef(null);
-  const markersRef = useRef([]);
-  const fitOnceRef = useRef(false);
-  const renderFrameRef = useRef(null);
-  const resizeObserverRef = useRef(null);
+  const [focusBounds, setFocusBounds] = useState(null);
+  const [recenterKey, setRecenterKey] = useState(0);
+  const bodyRef = useRef(null);
 
-  // Members already come fully normalized (including location_point) from the
-  // shared fetch in App.jsx's Layout — reuse it instead of re-fetching the same
-  // ~15k-doc "users" collection a second time just for this page.
-  const members = useMemo(() => {
-    if (!Array.isArray(memberRecords)) return [];
-    return memberRecords
-      .map((raw) => {
-        const location_point = raw.location_point || parseMemberLatLong(raw);
-        if (!location_point) return null;
+  // Same search / Filters / Group By / Favorites state as the Members list page
+  // (shared hook), applied to the same already-normalized records from App.jsx's
+  // Layout — no second fetch of the ~15k-doc "users" collection.
+  const {
+    searchTerm,
+    setSearchTerm,
+    groupBy,
+    setGroupBy,
+    filterOptions,
+    filteredMembers,
+    quickFilters,
+    filterChips,
+    advancedFiltersPanel,
+    favorites,
+    applyFavorite,
+    deleteFavorite,
+    saveCurrentAsFavorite,
+    clearFilters,
+  } = useMemberFilters(Array.isArray(memberRecords) ? memberRecords : []);
 
-        return {
-          id: raw.id,
-          name: getMemberName(raw),
-          phone: getMemberPhone(raw),
-          email: getMemberEmail(raw),
-          city: pickMemberText(raw, ["city", "City"]),
-          state: pickMemberText(raw, ["state", "State"]),
-          category: pickMemberText(raw, ["category", "Category", "organization", "Organization"]),
-          location_point,
-        };
-      })
-      .filter(Boolean);
-  }, [memberRecords]);
-
-  const totalUsersCount = memberRecords.length;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const initMap = async () => {
-      if (!GOOGLE_MAPS_API_KEY) {
-        setMapError("Missing Google Maps API key. Set VITE_GOOGLE_MAPS_API_KEY in your deployment environment and redeploy.");
-        setMapLoading(false);
-        return;
-      }
-
-      try {
-        await loadGoogleMaps(GOOGLE_MAPS_API_KEY);
-        if (cancelled || !mapNodeRef.current) return;
-
-        mapRef.current = new window.google.maps.Map(mapNodeRef.current, {
-          center: DEFAULT_CENTER,
-          zoom: 5,
-          minZoom: 3,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: true,
-          clickableIcons: false,
-          gestureHandling: "greedy",
-          styles: [
-            { elementType: "geometry", stylers: [{ color: "#f8fafc" }] },
-            { elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
-            { elementType: "labels.text.stroke", stylers: [{ color: "#f8fafc" }] },
-            { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-            { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-            { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
-            { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#d6e2ef" }] },
-            { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d8e1eb" }] },
-            { featureType: "water", elementType: "geometry.fill", stylers: [{ color: "#dceeff" }] },
-          ],
-        });
-        geocoderRef.current = new window.google.maps.Geocoder();
-        setMapLoading(false);
-        setMapReady(true);
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setMapError(error?.message === "Google Maps authorization failed"
-            ? "Google Maps API authorization failed. Check the key restrictions and billing settings."
-            : "Google Maps failed to load.");
-          setMapLoading(false);
-        }
-      }
-    };
-
-    initMap();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!mapRef.current || !window.google || !mapNodeRef.current) return;
-
-    const map = mapRef.current;
-    const triggerResize = () => {
-      window.google.maps.event.trigger(map, "resize");
-      map.setCenter(map.getCenter() || DEFAULT_CENTER);
-    };
-
-    triggerResize();
-
-    if (resizeObserverRef.current) {
-      resizeObserverRef.current.disconnect();
-    }
-
-    resizeObserverRef.current = new ResizeObserver(() => {
-      window.requestAnimationFrame(triggerResize);
-    });
-    resizeObserverRef.current.observe(mapNodeRef.current);
-
-    return () => {
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-    };
-  }, [mapReady]);
-
-  const membersWithLocation = useMemo(
-    () => members.filter((member) => member.location_point),
-    [members]
-  );
-
-  const membersWithUsableLocation = useMemo(
-    () => membersWithLocation.filter((member) => isUsableLocationPoint(member.location_point)),
-    [membersWithLocation]
-  );
-
-  const cityOptions = useMemo(() => {
-    const values = new Map();
-
-    membersWithUsableLocation.forEach((member) => {
-      const label = String(member.city || "").trim().replace(/\s+/g, " ");
-      if (!label) return;
-      const key = normalizeCityLabel(label);
-      if (!values.has(key)) {
-        values.set(key, label);
-      }
-    });
-
-    return ["All Cities", ...Array.from(values.values()).sort((a, b) => a.localeCompare(b))];
-  }, [membersWithUsableLocation]);
-
-  const filteredMembersForMap = useMemo(() => {
-    if (cityFilter === "All Cities") {
-      return membersWithUsableLocation;
-    }
-
-    const selectedKey = normalizeCityLabel(cityFilter);
-    return membersWithUsableLocation.filter((member) => normalizeCityLabel(member.city) === selectedKey);
-  }, [cityFilter, membersWithUsableLocation]);
-
-  const totalCityCount = Math.max(cityOptions.length - 1, 0);
-  const visibleMemberCount = cityFilter === "All Cities" ? totalUsersCount : filteredMembersForMap.length;
-
-  const handleCityChange = (nextCity) => {
-    setCityFilter(nextCity);
-    setSelectedCluster(null);
-    setSelectedMember(null);
-    setSearchStatus("");
-
-    if (!mapRef.current) return;
-
-    if (nextCity === "All Cities") {
-      mapRef.current.setCenter(DEFAULT_CENTER);
-      mapRef.current.setZoom(5);
-      return;
-    }
-
-    if (!window.google?.maps || !geocoderRef.current) return;
-
-    geocoderRef.current.geocode({ address: nextCity }, (results, status) => {
-      if (status === "OK" && results?.[0]?.geometry?.location && mapRef.current) {
-        const result = results[0];
-        const map = mapRef.current;
-        if (result.geometry.viewport) {
-          map.fitBounds(result.geometry.viewport);
-        } else {
-          map.setCenter(result.geometry.location);
-          map.setZoom(9);
-        }
-      }
-    });
-  };
-
-  useEffect(() => {
-    if (!mapRef.current || !window.google || !filteredMembersForMap.length) return;
-
-    const map = mapRef.current;
-    const google = window.google;
-    fitOnceRef.current = false;
-
-    const clearMarkers = () => {
-      markersRef.current.forEach((marker) => marker.setMap(null));
-      markersRef.current = [];
-    };
-
-    const clickListener = map.addListener("click", () => {
-      setSelectedMember(null);
-      setSelectedCluster(null);
-    });
-
-    const renderClusters = () => {
-      if (!mapRef.current) return;
-
-      clearMarkers();
-
-      const zoom = Math.max(map.getZoom() || 5, 3);
-
-      // Below STATE_CLUSTER_ZOOM the whole country is roughly in view, so bounds
-      // filtering wouldn't drop anything — skip it there. At higher zoom levels
-      // only a small region is on screen; without this, buildClusters/buildMemberMarkers
-      // would iterate and create markers for the entire nationwide dataset even though
-      // almost all of them are off-screen and invisible.
-      const viewBounds = zoom >= STATE_CLUSTER_ZOOM ? map.getBounds() : null;
-      const membersInView = viewBounds
-        ? filteredMembersForMap.filter((member) =>
-            viewBounds.contains(new google.maps.LatLng(member.location_point.lat, member.location_point.lng))
-          )
-        : filteredMembersForMap;
-
-      const rawClusters =
-        zoom < STATE_CLUSTER_ZOOM
-          ? buildStateClusters(filteredMembersForMap)
-          : zoom < MEMBER_CLUSTER_ZOOM
-            ? buildClusters(membersInView, zoom)
-            : buildMemberMarkers(membersInView);
-      const clusters = zoom < MEMBER_CLUSTER_ZOOM ? mergeCloseClusters(rawClusters, zoom) : rawClusters;
-      const bounds = new google.maps.LatLngBounds();
-
-      clusters.forEach((cluster) => {
-        const isSingle = cluster.count === 1 && cluster.mode === "member";
-        const isGroupedSameSpot = cluster.mode === "member" && cluster.count > 1;
-        const member = cluster.members[0];
-        const title = cluster.mode === "state"
-          ? `${cluster.label}: ${cluster.count} member${cluster.count === 1 ? "" : "s"}`
-          : isSingle
-            ? member.name
-            : isGroupedSameSpot
-              ? `${cluster.count} members at the same location`
-              : `${cluster.count} members`;
-
-        const marker = new google.maps.Marker({
-          position: cluster.position,
-          map,
-          title,
-          zIndex: isSingle ? 10 : 20 + cluster.count,
-          icon: isSingle ? getMemberIcon() : getClusterIcon(cluster.count),
-          label: undefined,
-        });
-
-        marker.addListener("click", () => {
-          if (cluster.mode !== "member" || cluster.count > 1) {
-            setSelectedCluster(cluster);
-            setSelectedMember(null);
-            map.panTo(cluster.position);
-            const nextZoom = cluster.mode === "state" ? Math.min((map.getZoom() || 5) + 2, MEMBER_CLUSTER_ZOOM) : Math.min((map.getZoom() || 5) + 1, 16);
-            map.setZoom(nextZoom);
-            return;
-          }
-
-          setSelectedCluster(null);
-          setSelectedMember(member);
-        });
-
-        markersRef.current.push(marker);
-        bounds.extend(cluster.position);
+  // Filtered members that actually have a usable map position.
+  const mapMembers = useMemo(() => {
+    const result = [];
+    for (const raw of filteredMembers) {
+      const location_point = raw.location_point || parseMemberLatLong(raw);
+      if (!isUsableLocationPoint(location_point)) continue;
+      result.push({
+        id: raw.id,
+        name: raw.__name || getMemberName(raw),
+        phone: raw.phone_number || getMemberPhone(raw),
+        email: raw.email || getMemberEmail(raw),
+        city: raw.city || pickMemberText(raw, ["city", "City"]),
+        state: raw.state || pickMemberText(raw, ["state", "State"]),
+        category: raw.category || pickMemberText(raw, ["category", "Category", "organization", "Organization"]),
+        location_point,
+        source: raw,
       });
+    }
+    return result;
+  }, [filteredMembers]);
 
-      if (!fitOnceRef.current && clusters.length) {
-        map.fitBounds(bounds, 48);
-        fitOnceRef.current = true;
+
+
+  const totalCityCount = useMemo(() => {
+    const keys = new Set();
+    mapMembers.forEach((member) => {
+      const key = normalizeCityLabel(member.city);
+      if (key) keys.add(key);
+    });
+    return keys.size;
+  }, [mapMembers]);
+  const visibleMemberCount = mapMembers.length;
+
+  // Group By: one row per group with its member count; clicking a row zooms the
+  // map to that group's members and lists them in the details card.
+  const groupedMapMembers = useMemo(() => {
+    if (!groupBy) return null;
+    const experienceBuckets = filterOptions.Experience || [];
+    const groups = new Map();
+    for (const member of mapMembers) {
+      for (const label of getGroupLabels(member.source, groupBy, experienceBuckets)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(member);
       }
-    };
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupBy, mapMembers, filterOptions]);
 
-    const scheduleRender = () => {
-      if (renderFrameRef.current) {
-        window.cancelAnimationFrame(renderFrameRef.current);
-      }
-      renderFrameRef.current = window.requestAnimationFrame(renderClusters);
-    };
+  const focusGroup = (label, groupMembers) => {
+    setSelectedMember(null);
+    setSelectedCluster({ mode: "group", label, count: groupMembers.length, members: groupMembers });
+    setFocusBounds({ points: groupMembers.map((m) => [m.location_point.lat, m.location_point.lng]) });
+  };
 
-    const idleListener = map.addListener("idle", scheduleRender);
-    scheduleRender();
+  const toggleFullscreen = () => {
+    const node = bodyRef.current;
+    if (!node) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else node.requestFullscreen?.();
+  };
 
-    return () => {
-      google.maps.event.removeListener(idleListener);
-      google.maps.event.removeListener(clickListener);
-      if (renderFrameRef.current) {
-        window.cancelAnimationFrame(renderFrameRef.current);
-        renderFrameRef.current = null;
-      }
-      clearMarkers();
-    };
-  }, [filteredMembersForMap, mapReady]);
 
   useEffect(() => {
     setSelectedCluster(null);
     setSelectedMember(null);
-  }, [locationSearchTerm]);
-
-  const handleSearchLocation = () => {
-    const query = locationSearchTerm.trim();
-    if (!query) {
-      setSearchStatus("");
-      setCityFilter("All Cities");
-      if (mapRef.current) {
-        mapRef.current.setCenter(DEFAULT_CENTER);
-        mapRef.current.setZoom(5);
-      }
-      return;
-    }
-
-    if (!window.google?.maps || !geocoderRef.current) {
-      setSearchStatus("Maps are still loading.");
-      return;
-    }
-
-    setSearchStatus("Searching map...");
-    geocoderRef.current.geocode({ address: query }, (results, status) => {
-      if (status === "OK" && results?.[0]?.geometry?.location && mapRef.current) {
-        const result = results[0];
-        const map = mapRef.current;
-        const geocodedCity = extractGeocodedCity(result);
-        const matchedCity = cityOptions.find(
-          (option) => option !== "All Cities" && normalizeCityLabel(option) === normalizeCityLabel(geocodedCity)
-        );
-        if (matchedCity) {
-          setCityFilter(matchedCity);
-        }
-        if (result.geometry.viewport) {
-          map.fitBounds(result.geometry.viewport);
-        } else {
-          map.setCenter(result.geometry.location);
-          map.setZoom(11);
-        }
-        setSearchStatus(`Showing ${result.formatted_address || query}`);
-        setSelectedCluster(null);
-        setSelectedMember(null);
-        return;
-      }
-
-      setSearchStatus("Place not found on map.");
-    });
-  };
-
-  const clearSearch = () => {
-    setLocationSearchTerm("");
-    setSearchStatus("");
-    setCityFilter("All Cities");
-    if (mapRef.current) {
-      mapRef.current.setCenter(DEFAULT_CENTER);
-      mapRef.current.setZoom(5);
-    }
-  };
+  }, [filteredMembers, groupBy]);
 
   return (
     <div
       style={{
-        padding: "20px",
+        padding: 0,
         width: "100%",
         maxWidth: "none",
         margin: 0,
@@ -698,87 +411,207 @@ export default function MemberLocationPage({ memberRecords = [] }) {
         .location-page {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          flex: 1;
           height: 100%;
           min-height: 0;
           width: 100%;
         }
         .location-header {
-          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-          border: 1px solid rgba(148, 163, 184, 0.18);
-          border-radius: 18px;
-          padding: 18px 20px;
-          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+          background: #fff;
+          padding: 32px 32px 16px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .location-title-row {
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          flex-wrap: wrap;
-          width: 100%;
+          margin-bottom: 16px;
         }
-        .location-header-main {
+        .location-title {
           display: flex;
-          flex-direction: column;
-          gap: 10px;
-          min-width: 0;
-          flex: 1 1 320px;
+          align-items: baseline;
+          gap: 12px;
         }
-        .location-city-row {
+        .location-title h1 {
+          margin: 0;
+          font-size: 28px;
+          font-weight: 600;
+          color: #111827;
+          letter-spacing: -0.01em;
+        }
+        .location-title span {
+          font-size: 14px;
+          color: #64748b;
+        }
+        .location-outline-btn {
           display: flex;
           align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-          width: 100%;
-        }
-        .location-city-label {
-          font-size: 12px;
-          font-weight: 700;
-          color: #334155;
-        }
-        .location-city-select {
-          min-width: 180px;
-          min-height: 42px;
-          border-radius: 12px;
-          border: 1px solid #cbd5e1;
+          gap: 7px;
+          height: 34px;
+          padding: 0 11px;
           background: #fff;
-          color: #0f172a;
-          padding: 0 12px;
-          font-size: 14px;
+          border: 1px solid #dde1e7;
+          border-radius: 6px;
+          color: #334155;
+          font-size: 13px;
+          font-weight: 400;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .location-controls-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+        .member-toolbar-group {
+          border: 1px solid #dde1e7;
+          border-left: none;
+          border-radius: 6px;
+          background: #fff;
+          display: flex;
+          align-items: stretch;
+          margin-left: auto;
+        }
+        .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .member-toolbar-group button {
+          border: none !important;
+          border-left: 1px solid #dde1e7 !important;
+          border-radius: 0 !important;
+          height: 32px !important;
+        }
+        .member-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .member-date-range-wrapper { width: 100%; }
+        .member-date-range-input {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 8px 10px;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          background: #fff;
+          font-size: 12px;
+          color: #111827;
           outline: none;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+          font-family: inherit;
         }
-        .location-city-select:focus {
+        .member-date-range-input:focus {
           border-color: #2563eb;
-          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
         }
-        .location-header h1 {
-          margin: 0;
-          font-size: 26px;
-          color: #0f172a;
-          letter-spacing: -0.02em;
+        #member-date-range-portal { position: relative; z-index: 10200; }
+        .member-date-range-popper { z-index: 10200; }
+        .group-panel {
+          position: absolute;
+          left: 16px;
+          top: 16px;
+          z-index: 5;
+          width: 260px;
+          max-height: calc(100% - 32px);
+          display: flex;
+          flex-direction: column;
+          background: rgba(255, 255, 255, 0.96);
+          border: 1px solid #dde1e7;
+          border-radius: 6px;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+          overflow: hidden;
         }
-        .location-header p {
-          margin: 4px 0 0;
-          color: #64748b;
-          font-size: 14px;
+        .group-panel-title {
+          padding: 10px 14px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #111827;
+          border-bottom: 1px solid #dde1e7;
+          background: #f6f5f1;
         }
+        .group-panel-list { overflow-y: auto; }
+        .group-panel-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+          padding: 9px 14px;
+          border: none;
+          border-bottom: 1px solid #eef1f4;
+          background: #fff;
+          font: inherit;
+          font-size: 13px;
+          color: #334155;
+          text-align: left;
+          cursor: pointer;
+        }
+        .group-panel-item:hover { background: #e3f2fd; color: #1565c0; }
+        .group-panel-item span:last-child { font-size: 12px; color: #64748b; flex-shrink: 0; }
+        .location-meta-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          min-height: 34px;
+        }
+        .location-status { font-size: 12px; color: #64748b; }
+        .location-count { font-size: 13px; font-weight: 600; color: #111827; }
         .location-body {
           flex: 1;
-          min-height: 0;
+          min-height: 520px;
           background: #fff;
-          border-radius: 22px;
-          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-          border: 1px solid rgba(148, 163, 184, 0.16);
+          border-top: 1px solid #dde1e7;
           overflow: hidden;
           position: relative;
           width: 100%;
           align-self: stretch;
         }
+        .map-ctl {
+          position: absolute;
+          z-index: 1000;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 40px;
+          height: 40px;
+          border: 0;
+          border-radius: 4px;
+          background: #fff;
+          color: #3c4047;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+          cursor: pointer;
+          padding: 0;
+        }
+        .map-ctl:hover { background: #f6f8fa; }
+        .loc-cluster-icon span {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: #1976d2;
+          color: #fff;
+          font-weight: 700;
+          border: 3px solid rgba(255, 255, 255, 0.9);
+          box-shadow: 0 2px 8px rgba(25, 118, 210, 0.45);
+        }
+        .loc-member-icon span {
+          display: block;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #1976d2;
+          border: 3px solid #fff;
+          box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+        }
+        .location-body .leaflet-container { font-family: inherit; }
         .map-canvas {
           width: 100%;
           height: 100%;
-          min-height: 0;
-          background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+          min-height: 520px;
+          background: #f1f5f9;
         }
         .loading-card,
         .error-card {
@@ -799,113 +632,6 @@ export default function MemberLocationPage({ memberRecords = [] }) {
           flex-direction: column;
           align-items: center;
           gap: 12px;
-        }
-        .map-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 9px 14px;
-          border-radius: 999px;
-          background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-          color: #1d4ed8;
-          font-size: 12px;
-          font-weight: 700;
-          white-space: nowrap;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-        }
-        .location-stat-group {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-        .location-stat-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 9px 14px;
-          border-radius: 999px;
-          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-          color: #0f172a;
-          font-size: 12px;
-          font-weight: 700;
-          white-space: nowrap;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-        }
-        .location-search {
-          width: min(100%, 520px);
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .location-search-wrap {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          width: 100%;
-        }
-        .location-search-input-wrap {
-          flex: 1 1 auto;
-          min-width: 0;
-          position: relative;
-        }
-        .location-search-inline-clear {
-          flex: 0 0 auto;
-          border: 1px solid rgba(37, 99, 235, 0.18);
-          background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
-          color: #1d4ed8;
-          border-radius: 999px;
-          padding: 0 14px;
-          min-height: 46px;
-          font-size: 13px;
-          font-weight: 700;
-          cursor: pointer;
-          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
-          white-space: nowrap;
-        }
-        .location-search-inline-clear:disabled {
-          cursor: not-allowed;
-          opacity: 0.45;
-          box-shadow: none;
-          filter: grayscale(0.2);
-        }
-        .location-search-inline-search {
-          position: absolute;
-          right: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          min-height: 36px;
-          border-radius: 12px;
-          border: 1px solid rgba(37, 99, 235, 0.18);
-          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-          color: #fff;
-          padding: 0 12px;
-          gap: 6px;
-          font-size: 12px;
-          font-weight: 700;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
-          z-index: 2;
-        }
-        .location-search input {
-          width: 100%;
-          min-height: 46px;
-          padding: 12px 120px 12px 14px;
-          border-radius: 16px;
-          border: 1px solid #cbd5e1;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-          color: #0f172a;
-          font-size: 14px;
-          outline: none;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-        }
-        .location-search input:focus {
-          border-color: #2563eb;
-          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
         }
         .map-legend {
           position: absolute;
@@ -1194,84 +920,107 @@ export default function MemberLocationPage({ memberRecords = [] }) {
       `}</style>
 
       <div className="location-page">
-        <div className="location-header">
-          <div className="location-header-main">
-            <div>
-              <h1>Member Location</h1>
-              <p>Search a place to focus the map. Click a cluster to see the members inside it.</p>
+        <div className="location-header page-header-band">
+          {/* Row 1: title + count, Reset Filters */}
+          <div className="location-title-row">
+            <div className="location-title">
+              <h1>Members Location</h1>
+              {/* Every member matching the filters, including those with no map location. */}
+              <span>{filteredMembers.length.toLocaleString()} Members</span>
             </div>
-            <div className="location-city-row">
-              <label className="location-city-label" htmlFor="location-city-filter">
-                City
-              </label>
-              <select
-                id="location-city-filter"
-                className="location-city-select"
-                value={cityFilter}
-                onChange={(e) => handleCityChange(e.target.value)}
-              >
-                {cityOptions.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="location-search">
-              <div className="location-search-wrap">
-                <div className="location-search-input-wrap">
-                  <input
-                    type="text"
-                    value={locationSearchTerm}
-                    onChange={(e) => setLocationSearchTerm(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleSearchLocation();
-                      }
-                    }}
-                  placeholder="Search a place on the map..."
-                  aria-label="Search a place on the map"
-                />
-                  <button
-                    type="button"
-                    className="location-search-inline-search"
-                    onClick={handleSearchLocation}
-                    aria-label="Search map"
-                  >
-                    <FaMapMarkedAlt size={12} />
-                    <span>Search</span>
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="location-search-inline-clear"
-                  onClick={clearSearch}
-                  disabled={!locationSearchTerm}
-                  aria-label="Clear search"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            {searchStatus ? <p style={{ margin: 0, color: "#2563eb", fontSize: "12px" }}>{searchStatus}</p> : null}
+            <button type="button" className="location-outline-btn" onClick={clearFilters}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Reset Filters
+            </button>
           </div>
-          <div className="location-stat-group">
-            <div className="location-stat-badge">
-              <FaMapMarkedAlt />
-              <span>{totalCityCount.toLocaleString()} cities</span>
+
+          {/* Row 2: search, Filters / Group By / Favorites (same as the Members list) */}
+          <div className="location-controls-row">
+            <OdooSearchBar
+              variant="boxed"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search name, mobile, email..."
+              chips={filterChips}
+            />
+
+            <div className="member-toolbar-group">
+              <OdooViewToolbar
+                variant="boxed"
+                quickFilters={quickFilters}
+                advancedContent={advancedFiltersPanel}
+                groupByOptions={MEMBER_GROUP_BY_OPTIONS}
+                groupBy={groupBy}
+                onGroupByChange={setGroupBy}
+                showViewToggle={false}
+              />
+              <FavoritesMenu
+                favorites={favorites}
+                onApply={applyFavorite}
+                onDelete={deleteFavorite}
+                onSave={saveCurrentAsFavorite}
+              />
             </div>
-            <div className="map-badge">
-              <FaMapMarkedAlt />
-              <span>
-                {visibleMemberCount.toLocaleString()} members
-              </span>
-            </div>
+          </div>
+
+          {/* Row 3: grouping state, counts */}
+          <div className="location-meta-row">
+            <span className="location-status">
+              {groupBy
+                ? `Grouped by ${MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`
+                : ""}
+            </span>
+            <span className="location-count">
+              {totalCityCount.toLocaleString()} cities · {visibleMemberCount.toLocaleString()} on map
+            </span>
           </div>
         </div>
 
-        <div className="location-body">
-          <div ref={mapNodeRef} className="map-canvas" />
+        <div className="location-body" ref={bodyRef}>
+          <MapContainer
+            center={[DEFAULT_CENTER.lat, DEFAULT_CENTER.lng]}
+            zoom={5}
+            minZoom={3}
+            zoomControl={false}
+            className="map-canvas"
+            style={{ height: "100%", width: "100%" }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <ZoomControl position="topright" />
+            <MapClusters
+              members={mapMembers}
+              focusBounds={focusBounds}
+              recenterKey={recenterKey}
+              onSelectCluster={(c) => { setSelectedCluster(c); setSelectedMember(null); }}
+              onSelectMember={(m) => { setSelectedCluster(null); setSelectedMember(m); }}
+              onClear={() => { setSelectedCluster(null); setSelectedMember(null); }}
+            />
+          </MapContainer>
+          <button type="button" className="map-ctl" aria-label="Full screen" onClick={toggleFullscreen} style={{ top: 12, right: 56 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
+          <button type="button" className="map-ctl" aria-label="Recenter map" onClick={() => setRecenterKey((k) => k + 1)} style={{ bottom: 16, right: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l3 3h-6zM12 21l-3-3h6zM3 12l3-3v6zM21 12l-3 3V9z" /></svg>
+          </button>
+
+          {groupedMapMembers && (
+            <div className="group-panel">
+              <div className="group-panel-title">
+                {MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy} · {groupedMapMembers.length.toLocaleString()} groups
+              </div>
+              <div className="group-panel-list">
+                {groupedMapMembers.map(([label, groupMembers]) => (
+                  <button key={label} type="button" className="group-panel-item" onClick={() => focusGroup(label, groupMembers)}>
+                    <span>{label}</span>
+                    <span>{groupMembers.length.toLocaleString()}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* <div className="map-legend">
             <div className="legend-card">
@@ -1346,7 +1095,7 @@ export default function MemberLocationPage({ memberRecords = [] }) {
               <div className="cluster-details-header">
                 <div>
                   <h3>
-                    {selectedCluster.mode === "state" && selectedCluster.label
+                    {(selectedCluster.mode === "state" || selectedCluster.mode === "group") && selectedCluster.label
                       ? `${selectedCluster.label} - `
                       : ""}
                     {selectedCluster.count.toLocaleString()} members
@@ -1388,26 +1137,23 @@ export default function MemberLocationPage({ memberRecords = [] }) {
             </div>
           )}
 
-          {locationSearchTerm && membersWithUsableLocation.length === 0 && !mapLoading && !mapError && (
+          {membersLoading && memberRecords.length === 0 && (
+            <div style={{ position: "absolute", inset: 0, zIndex: 1000, display: "flex" }}>
+              <TableLoadingSpinner label="Loading members…" />
+            </div>
+          )}
+
+          {!(membersLoading && memberRecords.length === 0) && mapMembers.length === 0 && (
             <div className="empty-results-card">
               <div>
                 <h3>No locations found</h3>
                 <p>
-                  Try a different city, state, name, or category. The map only shows members that match your search.
+                  No members match the current search and filters, or none of them have a map location. Adjust the filters to see pins.
                 </p>
               </div>
             </div>
           )}
 
-        {mapLoading && !mapError && (
-            <div className="loading-card">
-              <div className="loading-inner" style={{ width: "min(420px, 100%)" }}>
-                <SkeletonLoader rows={5} label="Loading map…" />
-              </div>
-            </div>
-          )}
-
-          {mapError && <div className="error-card">{mapError}</div>}
         </div>
       </div>
     </div>

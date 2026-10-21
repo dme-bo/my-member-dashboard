@@ -10,12 +10,35 @@ import {
   serverTimestamp,
   Timestamp,
 } from "../firestoreClient";
-import SkeletonLoader from "../components/SkeletonLoader";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
+import FavoritesMenu from "../components/FavoritesMenu";
 import FilterAccordionList from "../components/FilterAccordionList";
 import { fetchJobApplicationRows } from "../utils/applicationSources";
 import { formatDateDDMMMYYYY } from "../utils/dateFormat";
+import SelectionActionMenu from "../components/SelectionActionMenu";
+import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
+import SortArrow from "../components/SortArrow";
+
+// Sort values mirror what each table cell displays.
+const RECRUITMENT_SORT_ACCESSORS = {
+  full_name: (c) => (c.full_name || "").trim(),
+  contact_number: (c) => c.contact_number,
+  profile: (c) => c.profile,
+  city: (c) => c.city,
+  source: (c) => c.source,
+  stage_status: (c) => [c.application_stage, c.final_status].filter(Boolean).join(" "),
+};
+
+const RECRUITMENT_SORT_COLUMNS = [
+  { key: "full_name", label: "Full Name" },
+  { key: "contact_number", label: "Phone", num: true },
+  { key: "profile", label: "Profile" },
+  { key: "city", label: "City" },
+  { key: "source", label: "Source" },
+  { key: "stage_status", label: "Stage / Status" },
+];
 
 const RECRUITMENT_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -78,11 +101,11 @@ const getFinalStatusColors = (status) => {
 // carry their own final_status from that collection.
 function StageStatusCell({ candidate }) {
   if (!candidate.application_stage && !candidate.final_status) {
-    return <td style={{ padding: "12px" }}>-</td>;
+    return <td className="rec-td">-</td>;
   }
   return (
-    <td style={{ padding: "12px" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
+    <td className="rec-td">
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         {candidate.application_stage && (
           <span style={{ fontSize: "11px", color: "#64748b" }}>{candidate.application_stage}</span>
         )}
@@ -173,7 +196,22 @@ export default function RecruitmentPage() {
   const [viewMode, setViewMode] = useState("list");
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  // Default (key: null) keeps the existing A–Z by name, blank names last.
+  const { sort, toggleSort } = useTableSort({ key: null, dir: "asc" });
+  const handleSort = (key) => {
+    toggleSort(key);
+    setCurrentPage(1);
+  };
   const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("recruitment_favorites") || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Modal states
   const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -317,13 +355,15 @@ export default function RecruitmentPage() {
   const filterLabels = { city: "City", client: "Client", profile: "Profile", source: "Source", status: "Status" };
 
   // Export to Excel function
-  const handleExportXLSX = async () => {
-    if (filteredCandidates.length === 0) {
+  // Action → Export: only the ticked rows.
+  const handleExportSelected = async () => {
+    const rows = filteredCandidates.filter((c) => selectedIds.has(c.id));
+    if (rows.length === 0) {
       showToast("No data to export", "error");
       return;
     }
 
-    const dataToExport = filteredCandidates.map((candidate) => ({
+    const dataToExport = rows.map((candidate) => ({
       "Full Name": candidate.full_name || "-",
       "Phone": candidate.phone || "-",
       "Email": candidate.email || "-",
@@ -405,8 +445,9 @@ export default function RecruitmentPage() {
     return nameA.toLowerCase().localeCompare(nameB.toLowerCase());
   });
 
-  return filteredCandidates;
-  }, [candidates, filters, searchTerm]);
+  // Column sort (header click) overrides the default name order above.
+  return sortRows(filteredCandidates, sort, RECRUITMENT_SORT_ACCESSORS);
+  }, [candidates, filters, searchTerm, sort]);
 
   // Pagination
   const totalItems = filteredCandidates.length;
@@ -575,16 +616,170 @@ export default function RecruitmentPage() {
     }
   };
 
-  if (loading) {
-    return <SkeletonLoader rows={8} fullPage label="Loading candidates…" />;
-  }
+
+  const emptyMessage =
+    searchTerm || Object.values(filters).some((v) => v.length)
+      ? "No candidates found matching your criteria"
+      : "No recruitment candidates registered yet";
+  const rangeStart = totalItems === 0 ? 0 : rowsPerPage === Infinity ? 1 : (currentPage - 1) * rowsPerPage + 1;
+  const rangeEnd = rowsPerPage === Infinity ? totalItems : Math.min(currentPage * rowsPerPage, totalItems);
+  const prevDisabled = currentPage === 1;
+  const nextDisabled = currentPage === totalPages || rowsPerPage === Infinity;
+  const allRowsSelected = currentRows.length > 0 && currentRows.every((c) => selectedIds.has(c.id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allRowsSelected) currentRows.forEach((c) => next.delete(c.id));
+      else currentRows.forEach((c) => next.add(c.id));
+      return next;
+    });
+  };
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const resetFilters = () => {
+    setFilters({ city: [], client: [], profile: [], source: [], status: [] });
+    setSearchTerm("");
+    setGroupBy(null);
+    setCurrentPage(1);
+  };
+  const persistFavorites = (next) => {
+    try {
+      localStorage.setItem("recruitment_favorites", JSON.stringify(next));
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const saveFavorite = (name) => {
+    const next = [...favorites, { id: `${Date.now()}`, name, filters, searchTerm, groupBy }];
+    setFavorites(next);
+    persistFavorites(next);
+  };
+  const applyFavorite = (fav) => {
+    setFilters({ city: [], client: [], profile: [], source: [], status: [], ...(fav.filters || {}) });
+    setSearchTerm(fav.searchTerm || "");
+    setGroupBy(fav.groupBy || null);
+    setCurrentPage(1);
+  };
+  const deleteFavorite = (id) => {
+    const next = favorites.filter((f) => f.id !== id);
+    setFavorites(next);
+    persistFavorites(next);
+  };
+
+  const renderRow = (c) => (
+    <tr key={c.id} className="rec-row" onClick={() => openModal(c)}>
+      <td className="rec-td" onClick={(e) => e.stopPropagation()}>
+        <input
+          className="rec-cb"
+          type="checkbox"
+          aria-label={`Select ${c.full_name || "candidate"}`}
+          checked={selectedIds.has(c.id)}
+          onChange={() => toggleSelectOne(c.id)}
+        />
+      </td>
+      <td className="rec-td">{c.full_name ? c.full_name : <em style={{ color: "#999" }}>No Name</em>}</td>
+      <td className="rec-td rec-num">{c.contact_number || "-"}</td>
+      <td className="rec-td">{c.profile || "-"}</td>
+      <td className="rec-td">{c.city || "-"}</td>
+      <td className="rec-td">{c.source || "-"}</td>
+      <StageStatusCell candidate={c} />
+    </tr>
+  );
 
   return (
-    <div className="member-list-page">
-      {/* Header Card with Search, Filters/Group By/View, Total Badge, Export */}
-      <div style={{ backgroundColor: "#fff", borderRadius: "12px", padding: "20px", marginBottom: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" }}>
+    <div className="member-list-page rec-page page-fill">
+      <style>{`
+        .rec-page { padding: 0 !important; width: 100%; max-width: none; margin: 0; flex: 1; min-width: 0; min-height: calc(100vh - 64px); display: flex; flex-direction: column; box-sizing: border-box; background: #f4f6f9; color: #212529; }
+        .rec-header { background: #fff; padding: 32px 32px 16px; border-bottom: 1px solid #dde1e7; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; width: 100%; }
+        .rec-header > * { min-height: 34px; }
+        .rec-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+        .rec-title { display: flex; align-items: baseline; gap: 12px; }
+        .rec-title h1 { margin: 0; font-size: 28px; font-weight: 600; color: #111827; letter-spacing: -0.01em; }
+        .rec-title span { font-size: 14px; color: #64748b; font-weight: 400; }
+        .rec-outline-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; white-space: nowrap; }
+        .rec-outline-btn:hover { background: #f6f8fa; }
+        .rec-primary-btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 1px solid #2f4a22; background: #2f4a22; color: #fff; border-radius: 6px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .rec-primary-btn:hover { background: #3d5e2c; }
+        .rec-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .member-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .member-toolbar-group > div:first-child { gap: 0 !important; }
+        .member-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .member-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .rec-meta-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; }
+        .rec-meta-left, .rec-meta-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+        .rec-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+        .rec-range { font-size: 13px; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .rec-btn-group { display: flex; }
+        .rec-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #dde1e7; background: #fff; color: #475569; cursor: pointer; padding: 0; }
+        .rec-icon-btn:disabled { color: #b8bec7; cursor: default; }
+        .rec-icon-btn:not(:disabled):hover { background: #f6f8fa; }
+        .rec-icon-btn.is-first { border-radius: 6px 0 0 6px; }
+        .rec-icon-btn.is-last { border-radius: 0 6px 6px 0; margin-left: -1px; }
+        .rec-icon-btn.is-active { background: #e8f1fb; color: #1976D2; }
+        .rec-body { flex: 1; background: #fff; }
+        .rec-table-scroll { overflow: auto; max-height: 70vh; min-height: 400px; }
+        .rec-table { width: 100%; min-width: 980px; border-collapse: collapse; }
+        .rec-th { padding: 11px 12px; text-align: left; font-weight: 600; font-size: 14px; color: #212529; border-bottom: 2px solid #dee2e6; white-space: nowrap; background: #f4f5f0; position: sticky; top: 0; z-index: 2; }
+        .rec-td { padding: 9px 12px; border-top: 1px solid #e9ecef; font-size: 14px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
+        .rec-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .rec-row { cursor: pointer; }
+        .rec-row:nth-child(odd) { background: #f7f8fb; }
+        .rec-row:hover { background: #eef4fb; }
+        .rec-cb { width: 16px; height: 16px; margin: 0; accent-color: #1976D2; cursor: pointer; vertical-align: middle; }
+        .rec-group-row { background: #eef2f7; }
+        .rec-group-row td { padding: 8px 12px; font-weight: 600; cursor: pointer; font-size: 14px; }
+        /* Match the Members Master List: outline buttons, blue table header, 49px rows. */
+        .rec-page { background: #fff; }
+        .rec-header { min-height: 0; border-bottom: none; }
+        .rec-header > * { min-height: 0; }
+        .rec-primary-btn { gap: 7px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; color: #334155; font-size: 13px; font-weight: 400; }
+        .rec-primary-btn:hover { background: #fff; }
+        .rec-meta-right { gap: 6px; flex-wrap: nowrap; }
+        .rec-range { margin: 0 2px; white-space: nowrap; }
+        .rec-icon-btn { border-radius: 6px !important; margin-left: 0 !important; }
+        .rec-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; }
+        .rec-meta-right > div { gap: 6px; }
+        .rec-meta-right > div:has(.is-active) { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
+        .rec-meta-right > div:has(.is-active) .rec-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0 !important; color: #64748b; }
+        .rec-icon-btn.is-active { background: #e3f2fd; color: #1976d2; }
+        .rec-table-scroll { border-top: 1px solid #dde1e7; }
+        .rec-th { height: 45px; padding: 0 10px; font-size: 13px; color: #fff; background: #1976d2; border-bottom: none; }
+        .rec-td { height: 49px; padding: 0 10px; border-top: none; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; }
+        .rec-td:nth-child(2) { font-weight: 500; color: #111827; }
+        .rec-row { background: #fff; }
+        .rec-row:nth-child(odd) { background: #f8fafc; }
+        .rec-row:hover { background: inherit; }
+        .rec-cb { width: 13px; height: 13px; }
+        .rec-th .rec-cb { width: 14px; height: 14px; accent-color: #ffffff; }
+        .rec-group-row td { height: 40px; padding: 0 12px; font-size: 13px; color: #334155; background: #f1f5f9; border-top: none; border-bottom: 1px solid #dde1e7; }
+        .rec-pill { background: #e3f2fd; color: #1565c0; }
+        .rec-count-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 11px; background: #e3f1e3; color: #1f5c26; font-size: 12px; font-weight: 600; margin-left: 6px; }
+        .rec-empty { text-align: center; padding: 80px; color: #666; font-size: 16px; }
+        .rec-kanban { min-height: 400px; max-height: 70vh; overflow-y: auto; background: #fff; padding: 12px 32px; }
+      `}</style>
+
+      <div className="rec-header page-header-band">
+        <div className="rec-title-row">
+          <div className="rec-title">
+            <h1>Recruitment Applications</h1>
+            <span>{totalItems.toLocaleString()} Applications</span>
+          </div>
+          <button type="button" className="rec-outline-btn" onClick={resetFilters}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+            Reset Filters
+          </button>
+        </div>
+
+        <div className="rec-controls-row">
           <OdooSearchBar
+            variant="boxed"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -593,237 +788,143 @@ export default function RecruitmentPage() {
             placeholder="Search by name, phone, email..."
             chips={filterChips}
           />
+          <div className="member-toolbar-group">
+            <OdooViewToolbar
+              variant="boxed"
+              quickFilters={[]}
+              advancedContent={advancedFiltersPanel}
+              groupByOptions={RECRUITMENT_GROUP_BY_OPTIONS}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              showViewToggle={false}
+            />
+            <FavoritesMenu
+              favorites={favorites}
+              onApply={applyFavorite}
+              onDelete={deleteFavorite}
+              onSave={saveFavorite}
+            />
+          </div>
+        </div>
 
-          <OdooViewToolbar
-            quickFilters={[]}
-            advancedContent={advancedFiltersPanel}
-            groupByOptions={RECRUITMENT_GROUP_BY_OPTIONS}
-            groupBy={groupBy}
-            onGroupByChange={setGroupBy}
-            view={viewMode}
-            onViewChange={setViewMode}
-          />
-
-          {/* Total Applications Badge */}
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", marginLeft: "auto" }}>
-            Total Applications:- <strong>{loading ? "—" : totalItems}</strong>
-          </span>
-
-          {/* Export Button */}
-          <button
-            onClick={handleExportXLSX}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "white",
-              border: "1px solid #1f2937",
-              color: "#1f2937",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            ⬇️ Export
-          </button>
+        <div className="rec-meta-row">
+          <SelectionActionMenu count={selectedIds.size} onExport={handleExportSelected} onClear={() => setSelectedIds(new Set())} />
+          <div className="rec-meta-left">
+          </div>
+          <div className="rec-meta-right">
+            <select
+              className="rec-select"
+              aria-label="Records per page"
+              value={rowsPerPage === Infinity ? "all" : rowsPerPage}
+              onChange={(e) => {
+                const val = e.target.value === "all" ? Infinity : Number(e.target.value);
+                setRowsPerPage(val);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="all">All</option>
+              <option value={100}>100</option>
+              <option value={500}>500</option>
+              <option value={1000}>1000</option>
+              <option value={5000}>5000</option>
+            </select>
+            <span className="rec-range">
+              {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} / {totalItems.toLocaleString()}
+            </span>
+            <div className="rec-btn-group">
+              <button type="button" className="rec-icon-btn is-first" aria-label="Previous page" disabled={prevDisabled} onClick={() => setCurrentPage((p) => p - 1)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+              <button type="button" className="rec-icon-btn is-last" aria-label="Next page" disabled={nextDisabled} onClick={() => setCurrentPage((p) => p + 1)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+            </div>
+            <div className="rec-btn-group">
+              <button type="button" className={`rec-icon-btn is-first${viewMode === "list" ? " is-active" : ""}`} aria-label="List view" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </button>
+              <button type="button" className={`rec-icon-btn is-last${viewMode === "kanban" ? " is-active" : ""}`} aria-label="Kanban view" aria-pressed={viewMode === "kanban"} onClick={() => setViewMode("kanban")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="10" /><rect x="16" y="4" width="4" height="13" /></svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="content-with-sidebar">
-        <div className="table-container">
-          <>
-          {viewMode === "kanban" ? (
-            <div style={{ minHeight: "400px", maxHeight: "70vh", overflowY: "auto", border: "1px solid #eee", borderRadius: "8px", background: "#fff", padding: "12px" }}>
-              {currentRows.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}>
-                  {searchTerm || Object.values(filters).some((v) => v.length)
-                    ? "No candidates found matching your criteria"
-                    : "No recruitment candidates registered yet"}
-                </div>
-              ) : groupedRows ? (
-                groupedRows.map(([label, rows]) => (
-                  <div key={label} style={{ marginBottom: "12px" }}>
-                    <div
-                      onClick={() => toggleGroupCollapsed(label)}
-                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                      {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
-                    </div>
-                    {!collapsedGroups.has(label) && (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
-                        {rows.map((c) => (
-                          <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
-                        ))}
-                      </div>
-                    )}
+      <div className="rec-body page-fill-mid">
+        {loading ? (
+          <TableLoadingSpinner label="Loading candidates…" />
+        ) : viewMode === "kanban" ? (
+          <div className="rec-kanban page-fill-scroll">
+            {currentRows.length === 0 ? (
+              <div className="rec-empty">{emptyMessage}</div>
+            ) : groupedRows ? (
+              groupedRows.map(([label, rows]) => (
+                <div key={label} style={{ marginBottom: "12px" }}>
+                  <div
+                    onClick={() => toggleGroupCollapsed(label)}
+                    style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}
+                  >
+                    <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                    {label} <span className="rec-count-pill">{rows.length}</span>
                   </div>
-                ))
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
-                  {currentRows.map((c) => (
-                    <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
-                  ))}
+                  {!collapsedGroups.has(label) && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
+                      {rows.map((c) => (
+                        <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ) : (
-              <div
-                style={{
-                  height: "70vh",
-                  minHeight: "400px",
-                  overflowY: "auto",
-                  border: "1px solid #eee",
-                  borderRadius: "8px",
-                  background: "#fff",
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                  <colgroup>
-                    <col style={{ width: "22%" }} />
-                    <col style={{ width: "18%" }} />
-                    <col style={{ width: "14%" }} />
-                    <col style={{ width: "12%" }} />
-                    <col style={{ width: "12%" }} />
-                    <col style={{ width: "22%" }} />
-                  </colgroup>
-                  <thead style={{ position: "sticky", top: 0, background: "#f9f9f9", zIndex: 10 }}>
-                    <tr>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Full Name</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Phone</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Profile</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>City</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Source</th>
-                      <th style={{ padding: "14px 12px", textAlign: "left" }}>Stage / Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentRows.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan="6"
-                          style={{ textAlign: "center", padding: "80px", color: "#666", fontSize: "18px" }}
-                        >
-                          {searchTerm || Object.values(filters).some((v) => v.length)
-                            ? "No candidates found matching your criteria"
-                            : "No recruitment candidates registered yet"}
+              ))
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                {currentRows.map((c) => (
+                  <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rec-table-scroll page-fill-scroll">
+            <table className="rec-table">
+              <thead>
+                <tr>
+                  <th className="rec-th" style={{ width: "36px" }}>
+                    <input className="rec-cb" type="checkbox" aria-label="Select all applications" checked={allRowsSelected} onChange={toggleSelectAll} />
+                  </th>
+                  {RECRUITMENT_SORT_COLUMNS.map(({ key, label, num }) => (
+                    <th key={key} className={`rec-th${num ? " rec-num" : ""}`} {...sortHeaderProps(key, sort, handleSort)}>
+                      {label}
+                      <SortArrow active={sort.key === key} dir={sort.dir} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {currentRows.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="rec-empty">{emptyMessage}</td>
+                  </tr>
+                ) : groupedRows ? (
+                  groupedRows.map(([label, rows]) => (
+                    <Fragment key={label}>
+                      <tr className="rec-group-row">
+                        <td colSpan={7} onClick={() => toggleGroupCollapsed(label)}>
+                          <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {label} <span className="rec-count-pill">{rows.length}</span>
                         </td>
                       </tr>
-                    ) : groupedRows ? (
-                      groupedRows.map(([label, rows]) => (
-                        <Fragment key={label}>
-                          <tr style={{ background: "#eef2f7" }}>
-                            <td colSpan={6} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}>
-                              <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                              {label} <span style={{ color: "#64748b", fontWeight: 500 }}>({rows.length})</span>
-                            </td>
-                          </tr>
-                          {!collapsedGroups.has(label) &&
-                            rows.map((c) => (
-                              <tr
-                                key={c.id}
-                                onClick={() => openModal(c)}
-                                style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                              >
-                                <td style={{ padding: "12px" }}>
-                                  {c.full_name ? c.full_name : <em style={{ color: "#999" }}>No Name</em>}
-                                </td>
-                                <td style={{ padding: "12px" }}>{c.contact_number || "-"}</td>
-                                <td style={{ padding: "12px" }}>{c.profile || "-"}</td>
-                                <td style={{ padding: "12px" }}>{c.city || "-"}</td>
-                                <td style={{ padding: "12px" }}>{c.source || "-"}</td>
-                                <StageStatusCell candidate={c} />
-                              </tr>
-                            ))}
-                        </Fragment>
-                      ))
-                    ) : (
-                      currentRows.map((c) => (
-                        <tr
-                          key={c.id}
-                          onClick={() => openModal(c)}
-                          style={{ cursor: "pointer", borderBottom: "1px solid #eee" }}
-                        >
-                          <td style={{ padding: "12px" }}>
-                            {c.full_name ? c.full_name : <em style={{ color: "#999" }}>No Name</em>}
-                          </td>
-                          <td style={{ padding: "12px" }}>{c.contact_number || "-"}</td>
-                          <td style={{ padding: "12px" }}>{c.profile || "-"}</td>
-                          <td style={{ padding: "12px" }}>{c.city || "-"}</td>
-                          <td style={{ padding: "12px" }}>{c.source || "-"}</td>
-                          <StageStatusCell candidate={c} />
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-          )}
-
-              {/* Pagination */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "20px 10px",
-                  flexWrap: "wrap",
-                  gap: "15px",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <span style={{ marginRight: "10px" }}>Rows per page:</span>
-                  <select
-                    value={rowsPerPage === Infinity ? "all" : rowsPerPage}
-                    onChange={(e) => {
-                      const val = e.target.value === "all" ? Infinity : Number(e.target.value);
-                      setRowsPerPage(val);
-                      setCurrentPage(1);
-                    }}
-                    style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #ccc" }}
-                  >
-                    <option value="all">All</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                    <option value={5000}>5000</option>
-                  </select>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => p - 1)}
-                    style={{
-                      padding: "8px 14px",
-                      background: "#1976d2",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "4px",
-                      opacity: currentPage === 1 ? 0.5 : 1,
-                    }}
-                  >
-                    ‹ Previous
-                  </button>
-                  <span>
-                    Page {currentPage} of {totalPages || 1}
-                  </span>
-                  <button
-                    disabled={currentPage === totalPages || rowsPerPage === Infinity}
-                    onClick={() => setCurrentPage((p) => p + 1)}
-                    style={{
-                      padding: "8px 14px",
-                      background: "#1976d2",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "4px",
-                      opacity: currentPage === totalPages || rowsPerPage === Infinity ? 0.5 : 1,
-                    }}
-                  >
-                    Next ›
-                  </button>
-                </div>
-              </div>
-          </>
-        </div>
+                      {!collapsedGroups.has(label) && rows.map(renderRow)}
+                    </Fragment>
+                  ))
+                ) : (
+                  currentRows.map(renderRow)
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* MODAL - Fixed Size */}

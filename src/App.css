@@ -51,59 +51,63 @@ body {
    ============================================================ */
 .sidebar {
   width: 240px;
-  background: var(--white);
+  background: #ffffff;
   position: fixed;
   height: 100vh;
-  overflow-y: auto;
   z-index: 100;
-  border-right: 1px solid var(--border);
-  box-shadow: 2px 0 12px rgba(0,0,0,0.06);
+  border-right: 1px solid #dde1e7;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  height: 56px;
+  flex-shrink: 0;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: none;
+  background: var(--primary);
+  color: var(--white);
+}
+
+.logo-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-header h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--white);
+  letter-spacing: -0.01em;
+}
+
+.sidebar-menu {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 12px 12px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
-.sidebar-header {
-  background: var(--primary);
-  padding: 22px 20px 20px;
-  text-align: center;
-  color: var(--white);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo-circle {
-  width: 44px;
-  height: 44px;
-  background: rgba(255,255,255,0.18);
-  border: 2px solid rgba(255,255,255,0.35);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 18px;
-  color: var(--white);
-  letter-spacing: 0.5px;
-}
-
-.sidebar-header h3, .sidebar-header h2 {
-  font-size: 15px;
-  font-weight: 700;
-  margin: 0;
-  color: var(--white);
-}
-
-.sidebar-header p {
-  font-size: 11.5px;
-  margin: 0;
-  opacity: 0.8;
-  color: var(--white);
-}
-
-.sidebar-menu {
-  padding: 10px 8px 20px;
+.sidebar-section-label {
+  padding: 0 12px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 /* NavLink renders as <a>, so style both .menu-item and .sidebar-menu a */
@@ -111,14 +115,15 @@ body {
 .sidebar-menu a {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 11px;
+  height: 40px;
+  padding: 0 12px;
   color: var(--text-secondary);
   text-decoration: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   margin: 2px 0;
   font-size: 13.5px;
-  font-weight: 500;
+  font-weight: 400;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -135,7 +140,38 @@ body {
   font-weight: 600;
 }
 
-.menu-icon { font-size: 17px; flex-shrink: 0; }
+.menu-item.active::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  margin-left: auto;
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid #dde1e7;
+}
+
+.sidebar-help {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 56px;
+  padding: 0 24px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.sidebar-footer-note {
+  padding: 12px 24px;
+  border-top: 1px solid #dde1e7;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.menu-icon { font-size: 18px; flex-shrink: 0; }
 
 /* Submenu */
 .submenu {
@@ -1107,3 +1143,80 @@ th.sticky-name {
   .stats-grid { grid-template-columns: 1fr; }
   .chart-container { height: 260px; }
 }
+
+/* ============================================================
+   PAGE HEADER BAND — the white block under the navbar on every list page.
+   Content box is 120px tall (34 title row + 10 + 34 search row + 10 + 32
+   pager row) inside 12px/32px/10px padding, matching the design artboard.
+   !important because each page also styles its own header class.
+   ============================================================ */
+.page-header-band {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  padding: 12px 32px 10px !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  border-bottom: none !important;
+  box-sizing: border-box !important;
+  width: 100%;
+  background: #fff;
+}
+.page-header-band > * { margin: 0 !important; min-height: 0 !important; align-self: stretch !important; width: auto !important; box-sizing: border-box; }
+.page-header-band > :nth-child(1) { height: 34px; flex-wrap: nowrap !important; }
+.page-header-band > :nth-child(2) { min-height: 34px !important; }
+.page-header-band > :nth-child(3) { height: 32px; flex-wrap: nowrap !important; }
+.page-header-band h1 { font-size: 22px !important; font-weight: 600 !important; letter-spacing: 0 !important; line-height: 1.2 !important; color: #1d2127 !important; white-space: nowrap; }
+.page-header-band > :nth-child(3) :is(button, select) { height: 30px !important; max-height: 30px; }
+@media (max-width: 767px) {
+  .page-header-band { padding: 12px 16px 10px !important; }
+  .page-header-band > :nth-child(1),
+  .page-header-band > :nth-child(3) { height: auto; flex-wrap: wrap !important; }
+}
+
+/* "N selected · Action" — centred in the header band's pager row. */
+.page-header-band > :nth-child(3) { position: relative; }
+.selection-action-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 5;
+}
+@media (max-width: 767px) {
+  .selection-action-center { position: static; transform: none; }
+}
+
+/* ============================================================
+   FULL-HEIGHT LIST PAGES — navbar + header band stay put, only the table
+   (or kanban board) scrolls, and it runs to the bottom of the window.
+   page-fill        page root: exactly one window tall below the 56px navbar
+   page-fill-mid    wrappers between the root and the scroller
+   page-fill-scroll the element that scrolls (table wrapper / kanban board)
+   ============================================================ */
+.page-fill {
+  height: calc(100vh - 56px) !important;
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+.page-fill-mid {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+.page-fill-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: auto !important;
+}
+.page-fill .page-header-band { flex-shrink: 0; }
