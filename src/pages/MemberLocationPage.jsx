@@ -346,15 +346,16 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
 
 
 
+  // Totals over every member matching the filters, including the few with no
+  // map coordinates (they are counted but cannot be drawn as pins).
   const totalCityCount = useMemo(() => {
     const keys = new Set();
-    mapMembers.forEach((member) => {
-      const key = normalizeCityLabel(member.city);
+    filteredMembers.forEach((member) => {
+      const key = normalizeCityLabel(member.city || pickMemberText(member, ["city", "City"]));
       if (key) keys.add(key);
     });
     return keys.size;
-  }, [mapMembers]);
-  const visibleMemberCount = mapMembers.length;
+  }, [filteredMembers]);
 
   // Group By: one row per group with its member count; clicking a row zooms the
   // map to that group's members and lists them in the details card.
@@ -971,7 +972,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
                 : ""}
             </span>
             <span className="location-count">
-              {totalCityCount.toLocaleString()} cities · {visibleMemberCount.toLocaleString()} on map
+              {totalCityCount.toLocaleString()} cities · {filteredMembers.length.toLocaleString()} members
             </span>
           </div>
         </div>
