@@ -12,7 +12,6 @@ import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
 import TableLoadingSpinner from '../components/TableLoadingSpinner';
-import VoiceAgentWidget from '../components/VoiceAgentWidget';
 import OdooSearchBar from '../components/OdooSearchBar';
 import OdooViewToolbar from '../components/OdooViewToolbar';
 import FavoritesMenu from '../components/FavoritesMenu';
@@ -1761,9 +1760,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           </div>
         </div>
       )}
-
-      {/* ElevenLabs voice agent: floating button, bottom-right, on both views. */}
-      <VoiceAgentWidget />
     </>
   );
 }
