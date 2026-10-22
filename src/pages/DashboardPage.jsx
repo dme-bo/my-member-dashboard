@@ -7,7 +7,7 @@ import {
   FaCalendarAlt,
   FaClipboardCheck,
 } from 'react-icons/fa';
-import { Pie, Bar, Doughnut } from 'react-chartjs-2';
+import { Pie, Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
@@ -151,28 +151,6 @@ const createDistributionBarOptions = (total) => {
       y: { ticks: { autoSkip: false }, grid: { display: false } },
     },
     layout: { padding: { right: 12 } },
-  };
-};
-
-// Doughnut for part-to-whole with a handful of slices (category).
-const createDistributionDoughnutOptions = (total) => {
-  const pct = makePct(total);
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: '55%',
-    plugins: {
-      legend: { position: 'right', labels: { font: { size: 13 } } },
-      tooltip: {
-        callbacks: { label: (context) => `${context.label}: ${context.raw} members (${pct(context.raw)}%)` },
-      },
-      datalabels: {
-        color: '#fff',
-        font: { weight: 'bold', size: 12 },
-        formatter: (value) => (total && value / total >= 0.05 ? `${value}\n${pct(value)}%` : ''),
-        textAlign: 'center',
-      },
-    },
   };
 };
 
@@ -520,10 +498,20 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   // react-google-charts treats any new `data` array reference as new data and
   // does a full SVG re-render of the India map, so this needs to be memoized
   // rather than built inline in JSX on every render.
+  const stateRows = useMemo(() => (analytics ? Object.entries(analytics.stateCounts) : []), [analytics]);
+  const stateTotal = useMemo(() => stateRows.reduce((sum, [, count]) => sum + count, 0), [stateRows]);
+
   const geoChartData = useMemo(() => {
-    if (!analytics) return [['State', 'Members']];
-    return [['State', 'Members'], ...Object.entries(analytics.stateCounts)];
-  }, [analytics]);
+    if (!stateRows.length) return [['State', 'Members']];
+    return [
+      ['State', 'Members', { type: 'string', role: 'tooltip' }],
+      ...stateRows.map(([state, count]) => [
+        state,
+        count,
+        `${state}\n${count.toLocaleString()} members (${((count / stateTotal) * 100).toFixed(1)}%)`,
+      ]),
+    ];
+  }, [stateRows, stateTotal]);
 
   const registrationAnalytics = useMemo(() => {
     if (loading || !filteredMembersNoDateRange.length) return null;
@@ -582,6 +570,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   });
 
   const genderChartData = useMemo(() => (analytics ? createChartData(analytics.genderCounts) : null), [analytics]);
+  // One colour per category so the bars double as a legend.
   const categoryChartData = useMemo(() => (analytics ? createChartData(analytics.categoryCounts) : null), [analytics]);
   // Ranked single-metric bars use one colour; varied colours only add noise.
   const serviceChartData = useMemo(() => (analytics ? createChartData(analytics.serviceCounts, SINGLE_BAR_COLORS) : null), [analytics]);
@@ -590,7 +579,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   // Distribution bars show "count (x%)" where x is the share of members that
   // have that field filled in (rank is capped to the top 15 bars, so the % is
   // still against the full total, not just the bars shown).
-  const categoryDoughnutOptions = useMemo(() => createDistributionDoughnutOptions(analytics?.categoryTotal), [analytics]);
+  const categoryBarOptions = useMemo(() => createDistributionBarOptions(analytics?.categoryTotal), [analytics]);
   const serviceBarOptions = useMemo(() => createDistributionBarOptions(analytics?.serviceTotal), [analytics]);
   const rankBarOptions = useMemo(() => createDistributionBarOptions(analytics?.rankTotal), [analytics]);
 
@@ -1232,6 +1221,18 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           align-items: stretch;
         }
 
+        .state-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: 20px; align-items: start; }
+        .state-table-wrap { max-height: 480px; overflow-y: auto; border: 1px solid #e5eaf1; border-radius: 8px; }
+        .state-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .state-table th { position: sticky; top: 0; z-index: 3; background: #1976d2; color: #fff; text-align: left; font-weight: 600; padding: 9px 12px; }
+        .state-table th:nth-child(n+2), .state-table td.num { text-align: right; }
+        .state-table td { padding: 7px 12px; border-bottom: 1px solid #eef1f5; color: #334155; }
+        .state-table td.num { font-variant-numeric: tabular-nums; font-weight: 600; color: #0f172a; }
+        .state-table td.pct { position: relative; z-index: 0; min-width: 110px; }
+        .state-table .pct-bar { position: absolute; left: 12px; top: 50%; height: 16px; transform: translateY(-50%); background: #dbeafe; border-radius: 3px; max-width: calc(100% - 24px); }
+        .state-table .pct-text { position: relative; display: block; text-align: right; font-variant-numeric: tabular-nums; }
+        .state-table tfoot td { position: sticky; bottom: 0; z-index: 3; background: #f1f5f9; font-weight: 700; border-top: 1px solid #cbd5e1; }
+        @media (max-width: 900px) { .state-split { grid-template-columns: 1fr; } }
         .charts-grid > .chart-card { min-width: 0; display: flex; flex-direction: column; }
         .charts-grid > .chart-card .chart-container { flex: 1 1 auto; }
 
@@ -1601,7 +1602,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
               <div className="chart-card">
                 <h3>Category Wise Distribution</h3>
                 <div className="chart-container">
-                  <Doughnut data={categoryChartData} options={categoryDoughnutOptions} plugins={CHART_DATALABELS_PLUGINS} />
+                  <Bar data={categoryChartData} options={categoryBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
@@ -1623,6 +1624,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
               <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
                 <h3>State Wise Distribution (India)</h3>
+                <div className="state-split">
                 <div className="chart-container geo">
                   <Chart
                     chartType="GeoChart"
@@ -1638,6 +1640,29 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                     width="100%"
                     height="100%"
                   />
+                </div>
+                <div className="state-table-wrap">
+                  <table className="state-table">
+                    <thead>
+                      <tr><th>State</th><th>Members</th><th>% of total</th></tr>
+                    </thead>
+                    <tbody>
+                      {stateRows.map(([state, count]) => (
+                        <tr key={state}>
+                          <td>{state}</td>
+                          <td className="num">{count.toLocaleString()}</td>
+                          <td className="pct">
+                            <span className="pct-bar" style={{ width: `${(count / stateRows[0][1]) * 100}%` }} />
+                            <span className="pct-text">{((count / stateTotal) * 100).toFixed(1)}%</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr><td>Total</td><td className="num">{stateTotal.toLocaleString()}</td><td className="pct"><span className="pct-text">100%</span></td></tr>
+                    </tfoot>
+                  </table>
+                </div>
                 </div>
               </div>
             </div>

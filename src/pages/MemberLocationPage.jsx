@@ -356,7 +356,8 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
   // Centres from the four training-establishment collections, and which map
   // layers are switched on ("members" plus each CENTRE_LAYERS key).
   const [centres, setCentres] = useState([]);
-  const [hiddenLayers, setHiddenLayers] = useState(() => new Set());
+  // Only Members is shown by default; the centre layers are opt-in.
+  const [hiddenLayers, setHiddenLayers] = useState(() => new Set(CENTRE_LAYERS.map((layer) => layer.key)));
   useEffect(() => {
     let cancelled = false;
     Promise.all(
@@ -393,11 +394,6 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
-  const centreCounts = useMemo(() => {
-    const counts = {};
-    centres.forEach((c) => { counts[c.layer] = (counts[c.layer] || 0) + 1; });
-    return counts;
-  }, [centres]);
   const centreGroups = useMemo(() => {
     const groups = new Map();
     centres.forEach((c) => {
@@ -524,6 +520,11 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           width: 100%;
         }
         .location-header {
+          /* Own stacking context above the map: Leaflet panes/controls use
+             z-index up to 1000, which otherwise covers the Filters / Group By
+             / Favorites dropdowns (z-index 50) opening over the map. */
+          position: relative;
+          z-index: 1100;
           background: #fff;
           padding: 32px 32px 16px;
           width: 100%;
@@ -1155,13 +1156,13 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
             <label>
               <input type="checkbox" checked={!hiddenLayers.has("members")} onChange={() => toggleLayer("members")} />
               <span className="layer-swatch members" aria-hidden="true" />
-              Members <span className="layer-count">{mapMembers.length.toLocaleString()}</span>
+              Members
             </label>
             {CENTRE_LAYERS.map((layer) => (
               <label key={layer.key}>
                 <input type="checkbox" checked={!hiddenLayers.has(layer.key)} onChange={() => toggleLayer(layer.key)} />
                 <span className="layer-swatch centre" style={{ background: layer.color }} aria-hidden="true" />
-                {layer.label} <span className="layer-count">{(centreCounts[layer.key] || 0).toLocaleString()}</span>
+                {layer.label}
               </label>
             ))}
           </fieldset>
