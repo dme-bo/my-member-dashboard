@@ -1,16 +1,44 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "crons": [
-    { "path": "/api/send-followup-reminders", "schedule": "0 3 * * *" },
-    { "path": "/api/send-daily-report", "schedule": "30 12 * * *" },
-    { "path": "/api/send-weekly-report", "schedule": "30 12 * * 6" },
-    { "path": "/api/send-allocation-summary", "schedule": "30 10 * * *" }
+    {
+      "path": "/api/send-followup-reminders",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/send-daily-report",
+      "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/send-weekly-report",
+      "schedule": "30 12 * * 6"
+    },
+    {
+      "path": "/api/send-allocation-summary",
+      "schedule": "30 10 * * *"
+    },
+    {
+      "path": "/api/deactivate-inactive-partners",
+      "schedule": "0 2 * * *"
+    }
   ],
   "functions": {
-    "api/send-daily-report.js": { "maxDuration": 30 },
-    "api/send-weekly-report.js": { "maxDuration": 30 },
-    "api/send-allocation-summary.js": { "maxDuration": 30 }
+    "api/send-daily-report.js": {
+      "maxDuration": 30
+    },
+    "api/send-weekly-report.js": {
+      "maxDuration": 30
+    },
+    "api/send-allocation-summary.js": {
+      "maxDuration": 30
+    },
+    "api/deactivate-inactive-partners.js": {
+      "maxDuration": 60
+    }
   }
 }

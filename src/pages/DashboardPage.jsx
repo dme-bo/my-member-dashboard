@@ -12,6 +12,7 @@ import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
 import TableLoadingSpinner from '../components/TableLoadingSpinner';
+import VoiceAgentWidget from '../components/VoiceAgentWidget';
 import OdooSearchBar from '../components/OdooSearchBar';
 import OdooViewToolbar from '../components/OdooViewToolbar';
 import FavoritesMenu from '../components/FavoritesMenu';
@@ -140,14 +141,16 @@ const createDistributionBarOptions = (total) => {
         color: '#000',
         anchor: 'end',
         align: 'end',
+        clip: false,
         font: { weight: 'bold', size: 11 },
         formatter: (value) => (value > 0 ? `${value} (${pct(value)}%)` : ''),
       },
     },
     scales: {
-      x: { beginAtZero: true, ticks: { precision: 0 }, grace: '18%' },
+      x: { beginAtZero: true, ticks: { precision: 0 }, grace: '40%' },
       y: { ticks: { autoSkip: false }, grid: { display: false } },
     },
+    layout: { padding: { right: 12 } },
   };
 };
 
@@ -571,8 +574,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       label: 'Members',
       data: Object.values(counts),
       backgroundColor: colors.slice(0, Object.keys(counts).length),
-      borderWidth: 1,
-      borderColor: '#333',
+      borderWidth: 2,
+      borderColor: '#fff',
       borderRadius: 4,
       maxBarThickness: 60,
     }],
@@ -1224,9 +1227,13 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
         .charts-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-          gap: 28px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 24px;
+          align-items: stretch;
         }
+
+        .charts-grid > .chart-card { min-width: 0; display: flex; flex-direction: column; }
+        .charts-grid > .chart-card .chart-container { flex: 1 1 auto; }
 
         .chart-card {
           background: #ffffff;
@@ -1301,7 +1308,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         ──────────────────────────────────────────────── */
         @media (max-width: 1024px) {
           .charts-grid {
-            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            grid-template-columns: 1fr;
           }
 
           .filter-controls {
@@ -1600,21 +1607,21 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
               <div className="chart-card">
                 <h3>Service Wise Distribution</h3>
-                <div className="chart-container">
+                <div className="chart-container" style={{ minHeight: Math.max(360, Object.keys(analytics.serviceCounts).length * 32 + 60) }}>
                   <Bar data={serviceChartData} options={serviceBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <div className="chart-card">
                 <h3>Ranks Wise Distribution</h3>
-                <div className="chart-container">
+                <div className="chart-container" style={{ minHeight: Math.max(360, Object.keys(analytics.rankCounts).length * 28 + 60) }}>
                   <Bar data={rankChartData} options={rankBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
                 </div>
               </div>
 
               <RegistrationTrend members={filteredMembersNoDateRange} />
 
-              <div className="chart-card">
+              <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
                 <h3>State Wise Distribution (India)</h3>
                 <div className="chart-container geo">
                   <Chart
@@ -1729,6 +1736,9 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           </div>
         </div>
       )}
+
+      {/* ElevenLabs voice agent: floating button, bottom-right, on both views. */}
+      <VoiceAgentWidget />
     </>
   );
 }

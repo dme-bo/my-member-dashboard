@@ -1220,3 +1220,8 @@ th.sticky-name {
   overflow: auto !important;
 }
 .page-fill .page-header-band { flex-shrink: 0; }
+
+/* Google Places suggestion list (LocationAutocompleteInput) is appended to
+   <body> with z-index 1000, which put it behind our modals (z-index 2000–3000)
+   — the list loaded but was invisible. Keep it above every overlay. */
+.pac-container { z-index: 10000 !important; }

@@ -83,11 +83,21 @@ export default function RegistrationTrend({ members }) {
   const chartData = useMemo(() => ({
     labels: rows.map((r) => r.label),
     datasets: [
+      // Two stacked series (one value each) so the legend explains the colours.
       {
         type: 'bar',
-        label: 'Actual',
-        data: rows.map((r) => r.actual),
-        backgroundColor: rows.map((r) => (r.actual >= target ? '#1976d2' : '#90caf9')),
+        label: 'Met target',
+        data: rows.map((r) => (r.actual >= target ? r.actual : null)),
+        backgroundColor: '#1976d2',
+        borderRadius: 4,
+        maxBarThickness: 44,
+        order: 2,
+      },
+      {
+        type: 'bar',
+        label: 'Below target',
+        data: rows.map((r) => (r.actual < target ? r.actual : null)),
+        backgroundColor: '#90caf9',
         borderRadius: 4,
         maxBarThickness: 44,
         order: 2,
@@ -96,6 +106,7 @@ export default function RegistrationTrend({ members }) {
         type: 'line',
         label: 'Target',
         data: rows.map(() => target),
+        backgroundColor: '#e53935',
         borderColor: '#e53935',
         borderDash: [6, 4],
         borderWidth: 2,
@@ -111,7 +122,7 @@ export default function RegistrationTrend({ members }) {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: true, position: 'top' },
+      legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
       datalabels: {
         color: '#000',
         anchor: 'end',
@@ -121,8 +132,8 @@ export default function RegistrationTrend({ members }) {
       },
     },
     scales: {
-      y: { beginAtZero: true, ticks: { precision: 0 } },
-      x: { ticks: { autoSkip: false } },
+      y: { beginAtZero: true, stacked: true, ticks: { precision: 0 }, grace: '8%' },
+      x: { stacked: true, grid: { display: false }, ticks: { autoSkip: false } },
     },
     layout: { padding: { top: 24 } },
   }), []);

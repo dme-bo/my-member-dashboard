@@ -1431,6 +1431,24 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                 </div>
               )}
 
+              {/* Set by the daily api/deactivate-inactive-partners job. Saving as
+                  Active again restarts the partner's 90-day window. */}
+              {partnerModalMember.is_regional_partner &&
+                partnerModalMember.regional_partner_status === "Inactive" &&
+                partnerModalMember.regional_partner_auto_inactivated_at && (
+                  <div style={{ marginTop: "-6px", marginBottom: "14px", fontSize: "12px", color: "#64748b" }}>
+                    Set inactive automatically on{" "}
+                    {(() => {
+                      const v = partnerModalMember.regional_partner_auto_inactivated_at;
+                      const d = typeof v?.toDate === "function" ? v.toDate() : new Date(v?.seconds ? v.seconds * 1000 : v);
+                      return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                    })()}
+                    {" — "}
+                    {partnerModalMember.regional_partner_inactive_reason || "no activity for 90 days"}.
+                    {" "}Mark as Active to restart their 90 days.
+                  </div>
+                )}
+
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
                 <button
                   type="button"

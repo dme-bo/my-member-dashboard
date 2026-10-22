@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Tooltip, ZoomControl, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, Popup, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { FaDirections, FaPhoneAlt, FaEnvelope, FaMapPin } from "react-icons/fa";
@@ -8,6 +8,7 @@ import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FavoritesMenu from "../components/FavoritesMenu";
 import TableLoadingSpinner from "../components/TableLoadingSpinner";
+import { collection, db, getDocs } from "../firestoreClient";
 import useMemberFilters, { MEMBER_GROUP_BY_OPTIONS, getGroupLabels } from "../hooks/useMemberFilters";
 
 const DEFAULT_CENTER = { lat: 22.9734, lng: 78.6569 };
@@ -216,6 +217,55 @@ const normalizeCityLabel = (value) =>
 const isUsableLocationPoint = (point) =>
   Boolean(point) && !(Number(point.lat) === 0 && Number(point.lng) === 0);
 
+// Training-establishment collections drawn on the map alongside members.
+// Each has its own marker colour; records carry city / state / lat / lng.
+const CENTRE_LAYERS = [
+  { key: "regimental", label: "Regimental Centres", collection: "regimentalcentermaster", nameField: "center", color: "#2f4a22" },
+  { key: "corps", label: "Corps Centres / Institutions", collection: "corpscentermaster", nameField: "name", color: "#c2410c" },
+  { key: "school", label: "Schools of Instruction", collection: "schoolinstructionmaster", nameField: "name", color: "#7c3aed" },
+  { key: "academy", label: "Academies", collection: "academymaster", nameField: "name", color: "#0d9488" },
+];
+const CENTRE_LAYER_BY_KEY = Object.fromEntries(CENTRE_LAYERS.map((l) => [l.key, l]));
+const MIXED_CENTRE_COLOR = "#334155";
+
+const centreIcon = (color, count) =>
+  L.divIcon({
+    className: "loc-centre-icon",
+    html: `<span style="background:${color}"><b>${count > 1 ? count : ""}</b></span>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+
+// One marker per location; centres sharing a city stack into one marker
+// whose popup lists them all.
+const CentreMarkers = ({ groups }) =>
+  groups.map((group) => {
+    const layers = new Set(group.items.map((c) => c.layer));
+    const color = layers.size === 1 ? CENTRE_LAYER_BY_KEY[group.items[0].layer].color : MIXED_CENTRE_COLOR;
+    const first = group.items[0];
+    return (
+      <Marker key={group.key} position={[group.lat, group.lng]} icon={centreIcon(color, group.items.length)} zIndexOffset={1000}>
+        <Tooltip direction="top" offset={[0, -12]}>
+          {group.items.length === 1 ? first.name : `${group.items.length} centres · ${first.city}`}
+        </Tooltip>
+        <Popup maxWidth={320}>
+          <div className="loc-centre-popup">
+            <div className="loc-centre-popup-place">{[first.city, first.state].filter(Boolean).join(", ")}</div>
+            {group.items.map((c) => (
+              <div key={c.id} className="loc-centre-popup-item">
+                <span className="loc-centre-swatch" style={{ background: CENTRE_LAYER_BY_KEY[c.layer].color }} aria-hidden="true" />
+                <div>
+                  <strong>{c.name}</strong>
+                  <span>{CENTRE_LAYER_BY_KEY[c.layer].label}{c.tagged ? ` · ${c.tagged} tagged member${c.tagged === 1 ? "" : "s"}` : ""}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Popup>
+      </Marker>
+    );
+  });
+
 const MapClusters = ({ members, focusBounds, recenterKey, onSelectCluster, onSelectMember, onClear }) => {
   const map = useMap();
   const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
@@ -302,6 +352,62 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
   const [focusBounds, setFocusBounds] = useState(null);
   const [recenterKey, setRecenterKey] = useState(0);
   const bodyRef = useRef(null);
+
+  // Centres from the four training-establishment collections, and which map
+  // layers are switched on ("members" plus each CENTRE_LAYERS key).
+  const [centres, setCentres] = useState([]);
+  const [hiddenLayers, setHiddenLayers] = useState(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      CENTRE_LAYERS.map((layer) =>
+        getDocs(collection(db, layer.collection))
+          .then((snap) =>
+            snap.docs.map((d) => {
+              const row = d.data() || {};
+              return {
+                id: `${layer.key}/${d.id}`,
+                layer: layer.key,
+                name: String(row[layer.nameField] || "Unnamed"),
+                city: row.city || row.location || "",
+                state: row.state || "",
+                lat: Number(row.lat),
+                lng: Number(row.lng),
+                tagged: (row.taggedMemberIds || []).length,
+              };
+            })
+          )
+          .catch((err) => {
+            console.error(`Error loading ${layer.collection}:`, err);
+            return [];
+          })
+      )
+    ).then((lists) => {
+      if (!cancelled) setCentres(lists.flat().filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)));
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const toggleLayer = (key) =>
+    setHiddenLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  const centreCounts = useMemo(() => {
+    const counts = {};
+    centres.forEach((c) => { counts[c.layer] = (counts[c.layer] || 0) + 1; });
+    return counts;
+  }, [centres]);
+  const centreGroups = useMemo(() => {
+    const groups = new Map();
+    centres.forEach((c) => {
+      if (hiddenLayers.has(c.layer)) return;
+      const key = `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`;
+      if (!groups.has(key)) groups.set(key, { key, lat: c.lat, lng: c.lng, items: [] });
+      groups.get(key).items.push(c);
+    });
+    return [...groups.values()];
+  }, [centres, hiddenLayers]);
 
   // Same search / Filters / Group By / Favorites state as the Members list page
   // (shared hook), applied to the same already-normalized records from App.jsx's
@@ -568,6 +674,49 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           width: 100%;
           align-self: stretch;
         }
+        .layer-panel {
+          position: absolute;
+          left: 16px;
+          bottom: 24px;
+          z-index: 1000;
+          margin: 0;
+          padding: 10px 14px 12px;
+          min-width: 0;
+          border: 1px solid #dde1e7;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.96);
+          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+          font-size: 12px;
+          color: #334155;
+        }
+        .layer-panel legend { padding: 0; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #111827; float: left; width: 100%; }
+        .layer-panel label { clear: both; display: flex; align-items: center; gap: 7px; height: 24px; cursor: pointer; white-space: nowrap; }
+        .layer-panel input { margin: 0; accent-color: #1976d2; cursor: pointer; }
+        .layer-count { margin-left: auto; padding-left: 10px; color: #64748b; font-variant-numeric: tabular-nums; }
+        .layer-swatch { width: 10px; height: 10px; flex-shrink: 0; }
+        .layer-swatch.members { border-radius: 50%; background: #1976d2; }
+        .layer-swatch.centre { transform: rotate(45deg); border-radius: 2px; }
+        .loc-centre-icon span {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          margin: 3px;
+          transform: rotate(45deg);
+          border: 2px solid #fff;
+          border-radius: 3px;
+          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+          box-sizing: border-box;
+        }
+        .loc-centre-icon b { transform: rotate(-45deg); color: #fff; font-size: 10px; font-weight: 700; line-height: 1; }
+        .loc-centre-popup { font-family: inherit; min-width: 200px; }
+        .loc-centre-popup-place { margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #64748b; }
+        .loc-centre-popup-item { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
+        .loc-centre-popup-item + .loc-centre-popup-item { border-top: 1px solid #eef1f4; }
+        .loc-centre-popup-item strong { display: block; font-size: 13px; color: #111827; }
+        .loc-centre-popup-item span { font-size: 12px; color: #64748b; }
+        .loc-centre-swatch { width: 9px; height: 9px; margin-top: 4px; flex-shrink: 0; transform: rotate(45deg); border-radius: 2px; }
         .map-ctl {
           position: absolute;
           z-index: 1000;
@@ -991,8 +1140,9 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
               url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             <ZoomControl position="topright" />
+            <CentreMarkers groups={centreGroups} />
             <MapClusters
-              members={mapMembers}
+              members={hiddenLayers.has("members") ? [] : mapMembers}
               focusBounds={focusBounds}
               recenterKey={recenterKey}
               onSelectCluster={(c) => { setSelectedCluster(c); setSelectedMember(null); }}
@@ -1000,6 +1150,21 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
               onClear={() => { setSelectedCluster(null); setSelectedMember(null); }}
             />
           </MapContainer>
+          <fieldset className="layer-panel">
+            <legend>Show on map</legend>
+            <label>
+              <input type="checkbox" checked={!hiddenLayers.has("members")} onChange={() => toggleLayer("members")} />
+              <span className="layer-swatch members" aria-hidden="true" />
+              Members <span className="layer-count">{mapMembers.length.toLocaleString()}</span>
+            </label>
+            {CENTRE_LAYERS.map((layer) => (
+              <label key={layer.key}>
+                <input type="checkbox" checked={!hiddenLayers.has(layer.key)} onChange={() => toggleLayer(layer.key)} />
+                <span className="layer-swatch centre" style={{ background: layer.color }} aria-hidden="true" />
+                {layer.label} <span className="layer-count">{(centreCounts[layer.key] || 0).toLocaleString()}</span>
+              </label>
+            ))}
+          </fieldset>
           <button type="button" className="map-ctl" aria-label="Full screen" onClick={toggleFullscreen} style={{ top: 12, right: 56 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>

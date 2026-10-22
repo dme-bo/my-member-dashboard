@@ -1,6 +1,6 @@
 // src/pages/RegimentalCenterPage.jsx
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { FaPlus, FaTimes, FaDatabase, FaTag } from "react-icons/fa";
+import { FaPlus, FaTimes, FaDatabase, FaTag, FaEdit } from "react-icons/fa";
 import { collection, db, addDoc, doc, getDocs, updateDoc, writeBatch, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, parseMemberSkills } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
@@ -11,6 +11,7 @@ import FavoritesMenu from "../components/FavoritesMenu";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
+import LocationAutocompleteInput from "../components/LocationAutocompleteInput";
 
 const REGIMENTAL_CENTRES_SEED = [
   { center: "Grenadiers Regimental Centre", city: "Jabalpur, Madhya Pradesh", regiment: "The Grenadiers" },
@@ -91,6 +92,18 @@ const ACADEMY_SEED = [
 
 const FAVORITES_KEY = "regimentalCentersFavorites";
 
+// Point-of-contact officer, stored on every centre record in all four collections.
+const OFFICER_COLUMNS = [
+  { key: "officer_name", label: "Officer Name" },
+  { key: "officer_phone", label: "Officer Phone" },
+  { key: "officer_email", label: "Officer Email" },
+];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Digits with optional leading +, spaces or dashes; 7–15 digits in total.
+const isValidPhone = (v) => /^\+?[\d\s-]+$/.test(v) && (v.match(/\d/g) || []).length >= 7 && (v.match(/\d/g) || []).length <= 15;
+// "-" is the stored placeholder for an empty field.
+const fieldValue = (v) => (v === "-" ? "" : String(v ?? ""));
+
 const CATEGORIES = [
   {
     key: "regimental",
@@ -99,8 +112,11 @@ const CATEGORIES = [
     nameField: "center",
     columns: [
       { key: "center", label: "Centre" },
-      { key: "city", label: "Location" },
+      { key: "city", label: "City" },
+      { key: "state", label: "State" },
+      ...OFFICER_COLUMNS,
       // { key: "regiment", label: "Regiment" },
+      // Records also store lat / lng (for maps); intentionally not shown.
     ],
     seed: REGIMENTAL_CENTRES_SEED,
   },
@@ -111,8 +127,9 @@ const CATEGORIES = [
     nameField: "name",
     columns: [
       { key: "name", label: "Corps Centre / Institution" },
-      { key: "location", label: "Location" },
+      { key: "city", label: "City" },
       { key: "state", label: "State" },
+      ...OFFICER_COLUMNS,
     ],
     seed: CORPS_CENTRE_SEED,
   },
@@ -123,7 +140,9 @@ const CATEGORIES = [
     nameField: "name",
     columns: [
       { key: "name", label: "School of Instruction" },
-      { key: "location", label: "Location" },
+      { key: "city", label: "City" },
+      { key: "state", label: "State" },
+      ...OFFICER_COLUMNS,
     ],
     seed: SCHOOL_INSTRUCTION_SEED,
   },
@@ -136,13 +155,18 @@ const CATEGORIES = [
       { key: "name", label: "Academy" },
       { key: "city", label: "City" },
       { key: "state", label: "State" },
+      ...OFFICER_COLUMNS,
     ],
     seed: ACADEMY_SEED,
   },
 ];
 
-const createEmptyForm = (category) =>
-  category.columns.reduce((acc, col) => ({ ...acc, [col.key]: "" }), {});
+const createEmptyForm = (category) => ({
+  ...category.columns.reduce((acc, col) => ({ ...acc, [col.key]: "" }), {}),
+  locationText: "",
+  lat: null,
+  lng: null,
+});
 
 export default function RegimentalCenterPage({ memberRecords = [], membersLoading: membersLoadingProp = false }) {
   const [activeCategoryKey, setActiveCategoryKey] = useState(CATEGORIES[0].key);
@@ -179,6 +203,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
   }, [favorites]);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null); // record being edited, or null when adding
   const [form, setForm] = useState(createEmptyForm(CATEGORIES[0]));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -261,9 +286,9 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
   }, [sortedItems, searchTerm, activeCategory, tagFilter, sort]);
 
   // Group By options depend on which columns the active category has.
-  const locationKey = activeCategory.columns.find((c) => c.label === "Location")?.key;
+  const locationKey = activeCategory.columns.find((c) => c.key === "city")?.key;
   const groupByOptions = [
-    ...(locationKey ? [{ key: locationKey, label: "Location" }] : []),
+    ...(locationKey ? [{ key: locationKey, label: "City" }] : []),
     ...(activeCategory.columns.some((c) => c.key === "state") ? [{ key: "state", label: "State" }] : []),
     { key: "__tagged", label: "Tagged Status" },
   ];
@@ -343,22 +368,57 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const openAddModal = () => {
+    setEditingItem(null);
     setForm(createEmptyForm(activeCategory));
+    setFormError("");
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (row) => {
+    const next = createEmptyForm(activeCategory);
+    activeCategory.columns.forEach((col) => { next[col.key] = fieldValue(row[col.key]); });
+    next.locationText = [fieldValue(row.city), fieldValue(row.state)].filter(Boolean).join(", ");
+    next.lat = typeof row.lat === "number" ? row.lat : null;
+    next.lng = typeof row.lng === "number" ? row.lng : null;
+    setEditingItem(row);
+    setForm(next);
     setFormError("");
     setShowAddModal(true);
   };
 
   const closeAddModal = () => {
     setShowAddModal(false);
+    setEditingItem(null);
     setForm(createEmptyForm(activeCategory));
     setFormError("");
   };
+
+  // Picking a suggestion fills City, State and the (hidden) map coordinates.
+  const handlePlaceSelected = (place) =>
+    setForm((prev) => ({
+      ...prev,
+      locationText: place.address,
+      city: place.city || prev.city,
+      state: place.state || prev.state,
+      lat: place.lat,
+      lng: place.lng,
+    }));
 
   const handleAddItem = async (e) => {
     e.preventDefault();
 
     if (!String(form[activeCategory.nameField] || "").trim()) {
       setFormError(`Please enter the ${activeCategory.columns[0].label.toLowerCase()}.`);
+      return;
+    }
+    const email = String(form.officer_email || "").trim();
+    if (email && !EMAIL_RE.test(email)) {
+      setFormError("Please enter a valid officer email.");
+      return;
+    }
+    const phone = String(form.officer_phone || "").trim();
+    if (phone && !isValidPhone(phone)) {
+      setFormError("Please enter a valid officer phone number (7–15 digits).");
       return;
     }
 
@@ -369,17 +429,29 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
       activeCategory.columns.forEach((col) => {
         payload[col.key] = String(form[col.key] || "").trim() || "-";
       });
+      if (typeof form.lat === "number" && typeof form.lng === "number") {
+        payload.lat = form.lat;
+        payload.lng = form.lng;
+      }
 
-      const docRef = await addDoc(collection(db, activeCategory.collectionName), {
-        ...payload,
-        createdAt: serverTimestamp(),
-      });
-
-      setItemsByCategory((prev) => ({
-        ...prev,
-        [activeCategoryKey]: [...(prev[activeCategoryKey] || []), { id: docRef.id, ...payload }],
-      }));
-      showToast(`${activeCategory.label} entry added successfully!`);
+      if (editingItem) {
+        await updateDoc(doc(db, activeCategory.collectionName, editingItem.id), payload);
+        setItemsByCategory((prev) => ({
+          ...prev,
+          [activeCategoryKey]: (prev[activeCategoryKey] || []).map((row) => (row.id === editingItem.id ? { ...row, ...payload } : row)),
+        }));
+        showToast(`${activeCategory.label} entry updated.`);
+      } else {
+        const docRef = await addDoc(collection(db, activeCategory.collectionName), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        setItemsByCategory((prev) => ({
+          ...prev,
+          [activeCategoryKey]: [...(prev[activeCategoryKey] || []), { id: docRef.id, ...payload }],
+        }));
+        showToast(`${activeCategory.label} entry added successfully!`);
+      }
       closeAddModal();
     } catch (error) {
       console.error(`Error adding ${activeCategory.label}:`, error);
@@ -562,7 +634,14 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
         .regimental-card-name { font-size: 14px; font-weight: 600; color: #111827; line-height: 1.3; }
         .regimental-card-line { font-size: 13px; color: #64748b; }
         .regimental-card-line span { color: #94a3b8; margin-right: 6px; }
-        .regimental-card-foot { margin-top: 4px; }
+        .regimental-card-foot { margin-top: 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .regimental-actions-col { width: 84px; text-align: center; cursor: default; }
+        .regimental-edit-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid #dde1e7; border-radius: 4px; background: #fff; color: #1976d2; font: inherit; font-size: 12px; cursor: pointer; }
+        .regimental-edit-btn:hover { background: #f5faff; border-color: #90caf9; }
+        .regimental-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .regimental-field-hint { margin-top: 4px; font-size: 12px; color: #64748b; }
+        .regimental-field input[type="text"], .regimental-field input[type="tel"], .regimental-field input[type="email"], .regimental-field input:not([type]) { width: 100%; box-sizing: border-box; }
+        @media (max-width: 560px) { .regimental-field-row { grid-template-columns: 1fr; } }
         .regimental-group-count { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; }
         .regimental-meta-row {
           display: flex;
@@ -613,7 +692,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
         .regimental-table {
           width: 100%;
           border-collapse: collapse;
-          min-width: 760px;
+          min-width: 1100px;
         }
         .regimental-table th {
           background: #1976d2;
@@ -925,6 +1004,15 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                             ))}
                             <div className="regimental-card-foot">
                               <span className="regimental-tag-badge"><FaTag size={10} /> {(row.taggedMemberIds || []).length} tagged</span>
+                              <button
+                                type="button"
+                                className="regimental-edit-btn"
+                                onClick={(e) => { e.stopPropagation(); openEditModal(row); }}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                aria-label={`Edit ${row[activeCategory.nameField] || "entry"}`}
+                              >
+                                <FaEdit size={12} /> Edit
+                              </button>
                             </div>
                           </div>
                         );
@@ -956,6 +1044,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                       Tagged Members
                       <SortArrow active={sort.key === "__tagged"} dir={sort.dir} />
                     </th>
+                    <th className="regimental-actions-col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -963,7 +1052,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                     <Fragment key={label ?? "all"}>
                   {label !== null && (
                     <tr className="regimental-group-row">
-                      <td colSpan={activeCategory.columns.length + 2}>
+                      <td colSpan={activeCategory.columns.length + 3}>
                         {label} <span className="regimental-group-count">{rows.length}</span>
                       </td>
                     </tr>
@@ -988,6 +1077,11 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                           {(row.taggedMemberIds || []).length}
                         </span>
                       </td>
+                      <td className="regimental-actions-col" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="regimental-edit-btn" onClick={() => openEditModal(row)} aria-label={`Edit ${row[activeCategory.nameField] || "entry"}`}>
+                          <FaEdit size={12} /> Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                     </Fragment>
@@ -1002,25 +1096,66 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
         <div className="modal-overlay" onClick={closeAddModal}>
           <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
             <div className="modal-panel-header">
-              <h3>Add {activeCategory.label} Entry</h3>
+              <h3>{editingItem ? "Edit" : "Add"} {activeCategory.label} Entry</h3>
               <button type="button" className="modal-close-btn" onClick={closeAddModal} title="Close">
                 <FaTimes />
               </button>
             </div>
             <form onSubmit={handleAddItem}>
               <div className="modal-panel-body">
-                {activeCategory.columns.map((col) => (
-                  <div className="regimental-field" key={col.key}>
-                    <label htmlFor={col.key}>{col.label}</label>
-                    <input
-                      id={col.key}
-                      type="text"
-                      value={form[col.key] || ""}
-                      onChange={(e) => updateForm(col.key, e.target.value)}
-                      placeholder={`e.g. ${col.label}`}
-                    />
+                <div className="regimental-field">
+                  <label htmlFor="rc-name">{activeCategory.columns[0].label}</label>
+                  <input
+                    id="rc-name"
+                    type="text"
+                    value={form[activeCategory.nameField] || ""}
+                    onChange={(e) => updateForm(activeCategory.nameField, e.target.value)}
+                    placeholder={`e.g. ${activeCategory.columns[0].label}`}
+                  />
+                </div>
+
+                <div className="regimental-field">
+                  <label htmlFor="rc-location">Location</label>
+                  <LocationAutocompleteInput
+                    id="rc-location"
+                    value={form.locationText || ""}
+                    onChange={(text) => updateForm("locationText", text)}
+                    onPlaceSelected={handlePlaceSelected}
+                    country="in"
+                    placeholder="Search a city or place…"
+                  />
+                  <div className="regimental-field-hint">
+                    {typeof form.lat === "number"
+                      ? "Map position saved from the selected place."
+                      : "Pick a suggestion to fill City, State and the map position."}
                   </div>
-                ))}
+                </div>
+
+                <div className="regimental-field-row">
+                  <div className="regimental-field">
+                    <label htmlFor="rc-city">City</label>
+                    <input id="rc-city" type="text" value={form.city || ""} onChange={(e) => updateForm("city", e.target.value)} placeholder="City" />
+                  </div>
+                  <div className="regimental-field">
+                    <label htmlFor="rc-state">State</label>
+                    <input id="rc-state" type="text" value={form.state || ""} onChange={(e) => updateForm("state", e.target.value)} placeholder="State" />
+                  </div>
+                </div>
+
+                <div className="regimental-field">
+                  <label htmlFor="rc-officer-name">Officer Name</label>
+                  <input id="rc-officer-name" type="text" value={form.officer_name || ""} onChange={(e) => updateForm("officer_name", e.target.value)} placeholder="e.g. Col. A. Sharma" autoComplete="off" />
+                </div>
+                <div className="regimental-field-row">
+                  <div className="regimental-field">
+                    <label htmlFor="rc-officer-phone">Officer Phone</label>
+                    <input id="rc-officer-phone" type="tel" inputMode="tel" value={form.officer_phone || ""} onChange={(e) => updateForm("officer_phone", e.target.value)} placeholder="+91 98765 43210" autoComplete="off" />
+                  </div>
+                  <div className="regimental-field">
+                    <label htmlFor="rc-officer-email">Officer Email</label>
+                    <input id="rc-officer-email" type="email" value={form.officer_email || ""} onChange={(e) => updateForm("officer_email", e.target.value)} placeholder="name@example.com" autoComplete="off" />
+                  </div>
+                </div>
 
                 {formError && <div className="regimental-error">{formError}</div>}
 
@@ -1029,7 +1164,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                     Cancel
                   </button>
                   <button type="submit" className="regimental-btn regimental-btn-primary" disabled={saving}>
-                    {saving ? "Saving..." : "Save Entry"}
+                    {saving ? "Saving..." : editingItem ? "Save Changes" : "Save Entry"}
                   </button>
                 </div>
               </div>

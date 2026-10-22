@@ -64,6 +64,7 @@ const NewsLetterPage      = lazyWithReloadOnStaleChunk(() => import("./pages/New
 const PartnerAgentList    = lazyWithReloadOnStaleChunk(() => import("./pages/PartnerAgentList"));
 const ScoringPage         = lazyWithReloadOnStaleChunk(() => import("./pages/ScoringPage"));
 const TagUploadPage       = lazyWithReloadOnStaleChunk(() => import("./pages/TagUploadPage"));
+const VoiceAgentPage      = lazyWithReloadOnStaleChunk(() => import("./pages/VoiceAgentPage"));
 
 // Best-effort prefetch — if it fails (e.g. a stale chunk hash after a new
 // deploy), the actual route render below will catch it and reload, so this
@@ -103,7 +104,8 @@ const MEMBER_LIST_FIELDS = [
   "BOCategory", "lng", "lat", "created_time", "category", "skills", "Skills", "organization",
   "tcs_coordinator", "Tags", "graduation_course", "location", "retirement_date", "skillsUpdatedAt",
   "regional_partner_criteria", "is_regional_partner", "regional_partner_status",
-  "regional_partner_marked_at", "phoneNumber", "phone", "createdAt", "taggedAt",
+  "regional_partner_marked_at", "regional_partner_auto_inactivated_at", "regional_partner_inactive_reason",
+  "phoneNumber", "phone", "createdAt", "taggedAt",
 ];
 
 // ------------------------------------------------------------------
@@ -317,6 +319,14 @@ function Layout() {
               element={
                 <ErrorBoundary>
                   <RegimentalCenterPage memberRecords={memberRecords} membersLoading={membersLoading} />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/voice-agent"
+              element={
+                <ErrorBoundary>
+                  <VoiceAgentPage />
                 </ErrorBoundary>
               }
             />
