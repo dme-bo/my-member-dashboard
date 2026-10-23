@@ -827,6 +827,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         Email: form.personalInfo?.email || profile?.email || "—",
         Mobile: form.personalInfo?.phone || profile?.phone || "—",
         Location: location,
+        "Applied City": app.applied_city || "—",
         Category: profile?.category || "—",
         Service: profile?.service || "—",
         Rank: profile?.rank || "—",
@@ -2824,6 +2825,11 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                           <span style={{ fontSize: "11px", color: "#9ca3af", marginLeft: "auto" }}>Applied {appliedAt}</span>
                         </div>
                         {role && <div style={{ fontSize: "11.5px", color: "#1976d2", marginTop: "4px", fontWeight: 600 }}>{role}</div>}
+                        {app.applied_city && (
+                          <div style={{ fontSize: "11.5px", color: "#334155", marginTop: "4px" }}>
+                            Applied for city: <strong>{app.applied_city}</strong>
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -2874,7 +2880,12 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                       </div>
                     </div>
 
-                    <div style={{ fontSize: "11.5px", color: "#64748b", marginBottom: "16px" }}>Applied on: <strong>{appliedAt}</strong></div>
+                    <div style={{ fontSize: "11.5px", color: "#64748b", marginBottom: "16px" }}>
+                      Applied on: <strong>{appliedAt}</strong>
+                      {selectedApplicant.applied_city && (
+                        <> · Applied for city: <strong>{selectedApplicant.applied_city}</strong></>
+                      )}
+                    </div>
 
                     {form.summary && (
                       <Section title="Summary">

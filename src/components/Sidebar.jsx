@@ -148,7 +148,7 @@ function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
 
         <NavLink to="/training" className={`menu-item ${isTrainingActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>
           <LuPresentation className="menu-icon" />
-          <span>Training</span>
+          <span>Workshop</span>
         </NavLink>
 
         <NavLink to="/newsletter" className={`menu-item ${isNewsletterActive ? "active" : ""}`} onClick={() => onMenuClick?.(null)}>

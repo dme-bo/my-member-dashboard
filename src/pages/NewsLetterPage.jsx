@@ -76,17 +76,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     borderBottom: '1 solid #ddd',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
   },
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: '#f0f0f0',
     borderBottom: '1.5 solid #ccc',
-    paddingVertical: 8,
   },
   tableCell: { flex: 1, paddingHorizontal: 4, fontSize: 10, borderRight: '1 solid #ddd' },
+  cellBox: { paddingHorizontal: 6, paddingVertical: 7, borderRight: '1 solid #ddd', justifyContent: 'flex-start' },
+  cellBoxLast: { borderRight: 'none' },
+  cellText: { fontSize: 10 },
+  tableTop: { borderTop: '1 solid #ddd', borderLeft: '1 solid #ddd', borderRight: '1 solid #ddd' },
+  tableSides: { borderLeft: '1 solid #ddd', borderRight: '1 solid #ddd' },
   image: { marginVertical: 8, width: '100%', height: 'auto' },
   footer: {
     marginTop: 40,
@@ -316,9 +318,63 @@ const NEWSLETTER_FAVORITES_KEY = 'newsletterFavorites';
 // Preview zoom steps (percent); null = fit the whole page.
 const ZOOM_STEPS = [50, 75, 100, 125, 150, 200];
 
+// Headings keep this much room after them (heading + intro + table header + a row)
+// so a heading is never stranded at the bottom of a page with its table on the next.
+const HEADING_KEEP = 150;
+
+// One table for every section: the header row always travels with the first data
+// row, rows never split across pages, and each column gets its own width (a
+// "Ser" column does not need the space a Description does).
+// Helvetica has no rupee glyph (₹ prints as a superscript "1"), so spell it out.
+const pdfSafe = (value) => (typeof value === 'string' ? value.replace(/₹\s*/g, 'Rs. ') : value);
+const pdfSafeDeep = (value) => {
+  if (typeof value === 'string') return pdfSafe(value);
+  if (Array.isArray(value)) return value.map(pdfSafeDeep);
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, pdfSafeDeep(v)]));
+  }
+  return value;
+};
+
+// Each cell is a View (not a bordered Text) so its dividers run the full row
+// height instead of stopping at the end of the text. The header row never
+// splits across pages.
+const DataTable = ({ lead, columns, rows }) => {
+  const cellBox = (column, c) => [
+    styles.cellBox,
+    { flex: column.flex || 1 },
+    c === columns.length - 1 ? styles.cellBoxLast : null,
+  ];
+  return (
+    <>
+      {lead}
+      <View style={[styles.tableHeader, styles.tableTop]} wrap={false} minPresenceAhead={70}>
+        {columns.map((column, c) => (
+          <View key={column.label} style={cellBox(column, c)}>
+            <Text style={[styles.cellText, { fontWeight: "bold" }]}>{column.label}</Text>
+          </View>
+        ))}
+      </View>
+      {rows.map((cells, i) => (
+        <View key={i} style={[styles.tableRow, styles.tableSides]} wrap={false}>
+          {cells.map((cell, c) => (
+            <View key={c} style={cellBox(columns[c], c)}>
+              <Text style={styles.cellText}>{pdfSafe(cell)}</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+      <View style={{ height: 12 }} />
+    </>
+  );
+};
+
+const applyLink = <Link src={MEMBER_APP_LINK}>{'Apply'}</Link>;
+
 // ── PDF Document Component (full structure) ────────────────────────────────
 // The document component assembles jobs, projects, partner stats, and config content.
-const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaffingProjects, regionalPartners, content }) => {
+const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaffingProjects, regionalPartners, content: rawContent }) => {
+  const content = pdfSafeDeep(rawContent);
   const {
     companyName = 'Brisk Olive Business Solutions Pvt Ltd',
     mainTitle = 'Jobs & Earning Opportunities for Members',
@@ -356,9 +412,9 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
         <Text style={styles.greeting}>{greeting}</Text>
 
         {/* Introduction */}
-        <View wrap={false}>
+        <View>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{intro.title || 'A BRIEF INTRODUCTION TO BRISK OLIVE'}</Text>
+            <Text style={styles.sectionTitle} minPresenceAhead={HEADING_KEEP}>{intro.title || 'A BRIEF INTRODUCTION TO BRISK OLIVE'}</Text>
             <Text style={styles.bodyText}>{intro.text}</Text>
             {images.servicesSummary && <Image style={styles.image} src={images.servicesSummary} />}
             <Text style={styles.bodyText}>{intro.clientsIntro}</Text>
@@ -367,39 +423,39 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
         </View>
 
         {/* Opportunities Summary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
+        <>
+          <Text style={[styles.sectionTitle, { marginTop: 20 }]} minPresenceAhead={HEADING_KEEP}>
             A SUMMARY OF EARNING & OTHER OPPORTUNITIES FOR BRISK OLIVE MEMBERS - {currentDate}
           </Text>
 
           {/* Jobs */}
           {jobs?.length > 0 && (
-            <View>
-              <Text style={styles.subsectionTitle}>{jobsSection.title || '1. Get jobs across India'}</Text>
-              <Text style={styles.bodyText}>{jobsSection.description}</Text>
-              <Text style={[styles.bodyText, { marginTop: 8, fontWeight: 'bold' }]}>
-                {jobsSection.registrationText || 'Open Jobs from Brisk Olive:'}
-              </Text>
-              <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                  <Text style={styles.tableCell}>Company</Text>
-                  <Text style={styles.tableCell}>Industry</Text>
-                  <Text style={styles.tableCell}>Designation</Text>
-                  <Text style={styles.tableCell}>Location</Text>
-                  <Text style={styles.tableCell}>Salary</Text>
-                </View>
-                {jobs.map((job, i) => (
-                  <View key={i} style={styles.tableRow} wrap={false}>
-                    <Text style={styles.tableCell}>
-                      {job.job_showcompanynameinposts === false ? 'Company Unspecified' : (job.job_company || '-')}
+            <>
+              <DataTable
+                lead={
+                  <>
+                    <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>{jobsSection.title || '1. Get jobs across India'}</Text>
+                    <Text style={styles.bodyText} minPresenceAhead={90}>{jobsSection.description}</Text>
+                    <Text style={[styles.bodyText, { marginTop: 8, fontWeight: 'bold' }]}>
+                      {jobsSection.registrationText || 'Open Jobs from Brisk Olive:'}
                     </Text>
-                    <Text style={styles.tableCell}>{job.job_industry || '-'}</Text>
-                    <Text style={styles.tableCell}>{job.job_title || '-'}</Text>
-                    <Text style={styles.tableCell}>{job.job_location || '-'}</Text>
-                    <Text style={styles.tableCell}>{job.job_salaryrange_maximum || '-'}</Text>
-                  </View>
-                ))}
-              </View>
+                  </>
+                }
+                columns={[
+                  { label: 'Company', flex: 1.3 },
+                  { label: 'Industry', flex: 1 },
+                  { label: 'Designation', flex: 1.3 },
+                  { label: 'Location', flex: 1 },
+                  { label: 'Salary', flex: 0.8 },
+                ]}
+                rows={jobs.map((job) => [
+                  job.job_showcompanynameinposts === false ? 'Company Unspecified' : (job.job_company || '-'),
+                  job.job_industry || '-',
+                  job.job_title || '-',
+                  job.job_location || '-',
+                  job.job_salaryrange_maximum || '-',
+                ])}
+              />
               <Text style={styles.bodyText}>
                 To apply / register:{' '}
                 <Link style={styles.link} src={jobsSection.registrationLink}>
@@ -414,109 +470,115 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                   {images.successStory1 && <Image style={styles.image} src={images.successStory1} />}
                 </View>
               )}
-            </View>
+            </>
           )}
 
           {/* Community Jobs */}
           {communityJobs?.length > 0 && (
-            <View>
-              <Text style={styles.subsectionTitle}>
-                {communityJobsSection.title || 'Community Job Postings'}
-              </Text>
-              <Text style={styles.bodyText}>{communityJobsSection.description}</Text>
-              <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                  <Text style={styles.tableCell}>Company</Text>
-                  <Text style={styles.tableCell}>Designation</Text>
-                  <Text style={styles.tableCell}>Location</Text>
-                  <Text style={styles.tableCell}>Experience</Text>
-                  <Text style={styles.tableCell}>Salary</Text>
-                </View>
-                {communityJobs.map((job, i) => (
-                  <View key={i} style={styles.tableRow} wrap={false}>
-                    <Text style={styles.tableCell}>{job.job_company || '-'}</Text>
-                    <Text style={styles.tableCell}>{job.job_designation || '-'}</Text>
-                    <Text style={styles.tableCell}>{job.job_location || '-'}</Text>
-                    <Text style={styles.tableCell}>{job.job_experience_required || '-'}</Text>
-                    <Text style={styles.tableCell}>
-                      {job.job_salary_minimum || job.job_salary_maximum
-                        ? `₹${job.job_salary_minimum || 0} - ₹${job.job_salary_maximum || 0}`
-                        : '-'}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+            <>
+              <DataTable
+                lead={
+                  <>
+                    <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>{communityJobsSection.title || 'Community Job Postings'}</Text>
+                    <Text style={styles.bodyText} minPresenceAhead={90}>{communityJobsSection.description}</Text>
+                  </>
+                }
+                columns={[
+                  { label: 'Company', flex: 1.2 },
+                  { label: 'Designation', flex: 1.3 },
+                  { label: 'Location', flex: 1 },
+                  { label: 'Experience', flex: 0.9 },
+                  { label: 'Salary', flex: 1 },
+                ]}
+                rows={communityJobs.map((job) => [
+                  job.job_company || '-',
+                  job.job_designation || '-',
+                  job.job_location || '-',
+                  job.job_experience_required || '-',
+                  job.job_salary_minimum || job.job_salary_maximum
+                    ? `₹${job.job_salary_minimum || 0} - ₹${job.job_salary_maximum || 0}`
+                    : '-',
+                ])}
+              />
               <ApplyViaAppNote />
-            </View>
+            </>
           )}
 
           {/* Temporary Staffing — projectsmaster entries where project_company is
               TCS are shown here instead of under Projects (no company column,
               since every row here is the same company by definition). */}
-          <View wrap={false}>
-            <Text style={styles.subsectionTitle}>
-              {tempStaffing.title || '2. Temporary Staffing Assignments for You'}
-            </Text>
-            <Text style={styles.bodyText}>{tempStaffing.introText}</Text>
-            {images.examInvigilator && <Image style={styles.image} src={images.examInvigilator} />}
+          <>
+            {(() => {
+              const lead = (
+                <>
+                  <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>{tempStaffing.title || '2. Temporary Staffing Assignments for You'}</Text>
+                  <Text style={styles.bodyText} minPresenceAhead={90}>{tempStaffing.introText}</Text>
+                  {images.examInvigilator && <Image style={styles.image} src={images.examInvigilator} />}
+                </>
+              );
+              return tempStaffingProjects?.length > 0 ? null : lead;
+            })()}
             {tempStaffingProjects?.length > 0 && (
-              <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                  <Text style={styles.tableCell}>Ser</Text>
-                  <Text style={styles.tableCell}>Assignment</Text>
-                  <Text style={styles.tableCell}>Description</Text>
-                  <Text style={styles.tableCell}>Apply</Text>
-                </View>
-                {tempStaffingProjects.map((proj, i) => (
-                  <View key={i} style={styles.tableRow} wrap={false}>
-                    <Text style={styles.tableCell}>{String(i + 1).padStart(2, '0')}.</Text>
-                    <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
-                    <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
-                    <Text style={styles.tableCell}>
-                      <Link src={MEMBER_APP_LINK}>{'Apply'}</Link>
-                    </Text>
-                  </View>
-                ))}
-              </View>
+              <DataTable
+                lead={
+                  <>
+                    <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>{tempStaffing.title || '2. Temporary Staffing Assignments for You'}</Text>
+                    <Text style={styles.bodyText} minPresenceAhead={90}>{tempStaffing.introText}</Text>
+                    {images.examInvigilator && <Image style={styles.image} src={images.examInvigilator} />}
+                  </>
+                }
+                columns={[
+                  { label: 'Ser', flex: 0.35 },
+                  { label: 'Assignment', flex: 1.4 },
+                  { label: 'Description', flex: 2.6 },
+                  { label: 'Apply', flex: 0.6 },
+                ]}
+                rows={tempStaffingProjects.map((proj, i) => [
+                  `${String(i + 1).padStart(2, '0')}.`,
+                  proj.project_title || '-',
+                  proj.project_description || '-',
+                  applyLink,
+                ])}
+              />
             )}
-          </View>
+          </>
 
           {/* Projects */}
           {projects?.length > 0 && (
-            <View>
-              <Text style={styles.subsectionTitle}>
-                {projectsSection.title || '3. Work in our Projects / Surveys / Audits & Consultancies'}
-              </Text>
-              <Text style={styles.bodyText}>{projectsSection.intro}</Text>
-              <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                  <Text style={styles.tableCell}>Ser</Text>
-                  <Text style={styles.tableCell}>Project</Text>
-                  <Text style={styles.tableCell}>Description</Text>
-                  <Text style={styles.tableCell}>Apply</Text>
-                </View>
-                {projects.map((proj, i) => (
-                  <View key={i} style={styles.tableRow} wrap={false}>
-                    <Text style={styles.tableCell}>{String(i + 1).padStart(2, '0')}.</Text>
-                    <Text style={styles.tableCell}>{proj.project_title || '-'}</Text>
-                    <Text style={styles.tableCell}>{proj.project_description || '-'}</Text>
-                    <Text style={styles.tableCell}>
-                      <Link src={MEMBER_APP_LINK}>{'Apply'}</Link>
+            <>
+              <DataTable
+                lead={
+                  <>
+                    <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>
+                      {projectsSection.title || '3. Work in our Projects / Surveys / Audits & Consultancies'}
                     </Text>
-                  </View>
-                ))}
-              </View>
+                    <Text style={styles.bodyText} minPresenceAhead={90}>{projectsSection.intro}</Text>
+                  </>
+                }
+                columns={[
+                  { label: 'Ser', flex: 0.35 },
+                  { label: 'Project', flex: 1.4 },
+                  { label: 'Description', flex: 2.6 },
+                  { label: 'Apply', flex: 0.6 },
+                ]}
+                rows={projects.map((proj, i) => [
+                  `${String(i + 1).padStart(2, '0')}.`,
+                  proj.project_title || '-',
+                  proj.project_description || '-',
+                  applyLink,
+                ])}
+              />
               <Text style={[styles.bodyText, { marginTop: 10 }]}>{projectsSection.otherProjectsTitle}</Text>
               <Text style={styles.bodyText}>{projectsSection.jewarText}</Text>
               {images.jewarAirport && <Image style={styles.image} src={images.jewarAirport} />}
               <Text style={styles.bodyText}>{projectsSection.solarText}</Text>
               {images.solarOandM && <Image style={styles.image} src={images.solarOandM} />}
-            </View>
+            </>
           )}
 
           {/* Regional Partners */}
-          <View>
-            <Text style={styles.subsectionTitle}>{rpSettings.title || '4. Regional Partners'}</Text>
+          <>
+            <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>{rpSettings.title || '4. Regional Partners'}</Text>
             <Text style={styles.bodyText}>{rpSettings.intro}</Text>
             {regionalPartners.length === 0 ? (
               <Text style={styles.bodyText}>No regional partners registered yet.</Text>
@@ -533,42 +595,40 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                 Become a Regional Partner
               </Link>
             </Text>
-          </View>
+          </>
 
           {/* Defence Projects */}
-          <View wrap={false}>
-            <Text style={styles.subsectionTitle}>{defence.title || '5. Defence Projects'}</Text>
+          <View>
+            <Text style={styles.subsectionTitle} minPresenceAhead={260}>{defence.title || '5. Defence Projects'}</Text>
             <Text style={styles.bodyText}>{defence.text}</Text>
             {images.defenceProject && <Image style={styles.image} src={images.defenceProject} />}
           </View>
 
           {/* Workshops */}
           {workshops?.length > 0 && (
-            <View>
-              <Text style={styles.subsectionTitle}>
-                {workshopsSection.title || '6. Upcoming Workshops'}
-              </Text>
-              <Text style={styles.bodyText}>{workshopsSection.intro}</Text>
-              <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                  <Text style={styles.tableCell}>Workshop</Text>
-                  <Text style={styles.tableCell}>Organizer</Text>
-                  <Text style={styles.tableCell}>Location</Text>
-                  <Text style={styles.tableCell}>Date</Text>
-                  <Text style={styles.tableCell}>Fee</Text>
-                </View>
-                {workshops.map((workshop, i) => (
-                  <View key={i} style={styles.tableRow} wrap={false}>
-                    <Text style={styles.tableCell}>{workshop.workshop_title || '-'}</Text>
-                    <Text style={styles.tableCell}>{workshop.workshop_organizer || '-'}</Text>
-                    <Text style={styles.tableCell}>{workshop.workshop_location || '-'}</Text>
-                    <Text style={styles.tableCell}>{formatDDMMMYYYY(workshop.workshop_start_date) || '-'}</Text>
-                    <Text style={styles.tableCell}>
-                      {workshop.workshop_fee || workshop.workshop_fee === 0 ? `₹${workshop.workshop_fee}` : '-'}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+            <>
+              <DataTable
+                lead={
+                  <>
+                    <Text style={styles.subsectionTitle} minPresenceAhead={HEADING_KEEP}>{workshopsSection.title || '6. Upcoming Workshops'}</Text>
+                    <Text style={styles.bodyText} minPresenceAhead={90}>{workshopsSection.intro}</Text>
+                  </>
+                }
+                columns={[
+                  { label: 'Workshop', flex: 2 },
+                  { label: 'Organizer', flex: 1.2 },
+                  { label: 'Location', flex: 1.4 },
+                  { label: 'Date', flex: 0.9 },
+                  { label: 'Fee', flex: 0.6 },
+                ]}
+                rows={workshops.map((workshop) => [
+                  workshop.workshop_title || '-',
+                  workshop.workshop_organizer || '-',
+                  workshop.workshop_location || '-',
+                  formatDDMMMYYYY(workshop.workshop_start_date) || '-',
+                  workshop.workshop_fee || workshop.workshop_fee === 0 ? `₹${workshop.workshop_fee}` : '-',
+                ])}
+              />
               {workshopsSection.registrationLink && (
                 <Text style={styles.bodyText}>
                   To register:{' '}
@@ -578,14 +638,14 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
                 </Text>
               )}
               <ApplyViaAppNote />
-            </View>
+            </>
           )}
 
           {/* About Us */}
-          <View wrap={false}>
+          <View>
             <View style={{ marginTop: 25, marginBottom: 20 }}>
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
+                <Text style={styles.sectionTitle} minPresenceAhead={140}>
                   {aboutus.title || 'About Brisk Olive - Your Partner in Growth'}
                 </Text>
                 <Text style={styles.bodyText}>{aboutus.text}</Text>
@@ -630,7 +690,7 @@ const NewsletterDocument = ({ jobs, projects, workshops, communityJobs, tempStaf
             <Text>{footer.email || 'info@briskolive.com'}</Text>
             <Text>{footer.copyright || `© ${new Date().getFullYear()} Brisk Olive Business Solutions Pvt. Ltd.`}</Text>
           </View>
-        </View>
+        </>
       </Page>
     </Document>
   );

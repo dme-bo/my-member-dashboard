@@ -19,9 +19,10 @@ import {
   FaSearch,
   FaWhatsapp,
 } from "react-icons/fa";
-import { collection, db, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "../firestoreClient";
+import { collection, db, addDoc, doc, getDocs, updateDoc, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import WorkshopDetailModal from "../components/WorkshopDetailModal";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 
 const COLLECTION_NAME = "trainingsessions";
@@ -81,7 +82,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [form, setForm] = useState(createEmptyForm());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [deletingId, setDeletingId] = useState("");
   const [togglingId, setTogglingId] = useState("");
   const [reminderModal, setReminderModal] = useState(null); // { session, field }
   const [sendingTraineeKey, setSendingTraineeKey] = useState("");
@@ -89,6 +89,7 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [messageDrafts, setMessageDrafts] = useState({ first: "", final: "" });
   const [savingMessage, setSavingMessage] = useState(""); // "first" | "final" | ""
   const [memberSearch, setMemberSearch] = useState("");
+  const [detailSessionId, setDetailSessionId] = useState(null); // workshop detail modal
   const [addTraineesModal, setAddTraineesModal] = useState(null); // { session, trainees }
   const [addTraineesSearch, setAddTraineesSearch] = useState("");
   const [savingTrainees, setSavingTrainees] = useState(false);
@@ -219,16 +220,48 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
     [sessions]
   );
 
-  const getSessionStatus = (session) => (String(session.date || "") >= todayStr() ? "Upcoming" : "Completed");
+  // One list of workshops: every scheduled session, plus workshops with applicants
+  // that have not been scheduled yet (shown as a row with a Schedule button).
+  const entries = useMemo(() => {
+    const scheduledIds = new Set(sessions.map((session) => session.workshopId).filter(Boolean));
+    const pending = workshops
+      .filter((workshop) => !scheduledIds.has(workshop.id))
+      .map((workshop) => {
+        const { date, time } = parseWorkshopDateTime(workshop.workshop_start_date);
+        return {
+          id: `workshop-${workshop.id}`,
+          __workshop: workshop,
+          date,
+          time,
+          topic: workshop.workshop_title || '',
+          trainer: '',
+          workshopOrganizer: workshop.workshop_organizer || '',
+          workshopLocation: workshop.workshop_location || '',
+          workshopFee: workshop.workshop_fee,
+        };
+      });
+    return [...sortedSessions, ...pending].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  }, [sessions, sortedSessions, workshops]);
+
+  // A workshop scheduled from now on is Completed only when someone marks it so (in
+  // its detail modal) — passing its date does not move it. Sessions saved before that
+  // existed have no `completed` field at all, so they follow their date until someone
+  // marks or reopens them. Applicant-only workshops (never scheduled) follow their date.
+  const getSessionStatus = (session) => {
+    if (typeof session.completed === "boolean") return session.completed ? "Completed" : "Upcoming";
+    // Only a workshop with a date today or later is Upcoming; no date (or a past
+    // date) means Completed.
+    return session.date && session.date >= todayStr() ? "Upcoming" : "Completed";
+  };
 
   const filteredSessions = useMemo(() => {
     const term = topicSearch.trim().toLowerCase();
-    return sortedSessions.filter((session) => {
+    return entries.filter((session) => {
       if (statusFilters.length && !statusFilters.includes(getSessionStatus(session))) return false;
       if (term && !String(session.topic || "").toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [sortedSessions, statusFilters, topicSearch]);
+  }, [entries, statusFilters, topicSearch]);
 
   const hasActiveFilters = statusFilters.length > 0 || topicSearch.trim() !== "";
   const clearFilters = () => {
@@ -245,7 +278,7 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
     { key: "organizer", label: "Organizer" },
   ];
 
-  const groupedSessions = useMemo(() => {
+  const groupSessions = (list) => {
     if (!sessionsGroupBy) return null;
     const getLabel = (session) => {
       if (sessionsGroupBy === "status") return getSessionStatus(session);
@@ -254,13 +287,23 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
       return "Unspecified";
     };
     const groups = new Map();
-    for (const session of filteredSessions) {
+    for (const session of list) {
       const label = getLabel(session);
       if (!groups.has(label)) groups.set(label, []);
       groups.get(label).push(session);
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [sessionsGroupBy, filteredSessions]);
+  };
+
+  // Upcoming first (soonest at the top), then completed (most recent at the top).
+  const upcomingSessions = useMemo(
+    () => filteredSessions.filter((session) => getSessionStatus(session) === "Upcoming"),
+    [filteredSessions]
+  );
+  const completedSessions = useMemo(
+    () => filteredSessions.filter((session) => getSessionStatus(session) === "Completed").reverse(),
+    [filteredSessions]
+  );
 
   const uploadPickerSessions = useMemo(() => {
     const term = uploadPickerSearch.trim().toLowerCase();
@@ -270,15 +313,15 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   }, [sortedSessions, uploadPickerSearch]);
 
   const counts = useMemo(() => {
-    const upcoming = sessions.filter((session) => getSessionStatus(session) === "Upcoming").length;
+    const upcoming = entries.filter((session) => getSessionStatus(session) === "Upcoming").length;
     const totalAttendance = sessions.reduce((sum, session) => sum + (session.attendees?.length || 0), 0);
     return {
-      total: sessions.length,
+      total: entries.length,
       upcoming,
-      completed: sessions.length - upcoming,
+      completed: entries.length - upcoming,
       totalAttendance,
     };
-  }, [sessions]);
+  }, [sessions, entries]);
 
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -301,6 +344,17 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
           workshop_status: session.workshopStatus,
         }
       : null;
+
+  // Saves fields on a session doc and mirrors them into local state.
+  const patchSession = async (sessionId, fields) => {
+    try {
+      await updateDoc(doc(db, COLLECTION_NAME, sessionId), fields);
+      setSessions((prev) => prev.map((item) => (item.id === sessionId ? { ...item, ...fields } : item)));
+    } catch (error) {
+      console.error("Error saving workshop changes:", error);
+      showToast("Failed to save. Please try again.", "error");
+    }
+  };
 
   const openScheduleModal = (session) => {
     setEditingSessionId(session.id);
@@ -535,6 +589,7 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
           whatsappReminderSent: false,
           whatsappLastReminderSent: false,
           whatsappConfirmedIds: [],
+          completed: false,
           documents: [],
           emailSentAt: null,
           createdAt: serverTimestamp(),
@@ -583,19 +638,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
       setFormError("Failed to save. Please try again.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDeleteSession = async (session) => {
-    setDeletingId(session.id);
-    try {
-      await deleteDoc(doc(db, COLLECTION_NAME, session.id));
-      setSessions((prev) => prev.filter((item) => item.id !== session.id));
-    } catch (error) {
-      console.error("Error deleting training session:", error);
-      showToast("Failed to delete. Please try again.", "error");
-    } finally {
-      setDeletingId("");
     }
   };
 
@@ -996,11 +1038,41 @@ Please don't miss it — we look forward to your participation!`;
 
   const renderSessionRow = (session) => {
     const status = getSessionStatus(session);
+    if (session.__workshop) {
+      const workshop = session.__workshop;
+      return (
+        <tr key={session.id}>
+          <td>{session.date ? formatDateDisplay(session.date) : "-"}</td>
+          <td>{session.time || "-"}</td>
+          <td style={{ cursor: "pointer" }} onClick={() => handlePickWorkshop(workshop)} title="Open to schedule this workshop">
+            <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic || "-"}</div>
+            {(session.workshopOrganizer || session.workshopLocation) && (
+              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                {[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
+              </div>
+            )}
+          </td>
+          <td>{session.workshopFee || session.workshopFee === 0 ? `₹${session.workshopFee}` : "-"}</td>
+          <td>
+            <span className="training-attendees-btn" title="Applicants">
+              <FaUserFriends size={11} />
+              {workshop.applicantCount}
+            </span>
+          </td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          <td>
+            <span className={`training-status-badge ${status.toLowerCase()}`}>{status}</span>
+          </td>
+        </tr>
+      );
+    }
     return (
       <tr key={session.id}>
         <td>{formatDateDisplay(session.date)}</td>
         <td>{session.time || "-"}</td>
-        <td style={{ cursor: "pointer" }} onClick={() => openScheduleModal(session)} title="Click to edit">
+        <td style={{ cursor: "pointer" }} onClick={() => setDetailSessionId(session.id)} title="Open workshop">
           <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic}</div>
           {(session.workshopOrganizer || session.workshopLocation) && (
             <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
@@ -1010,7 +1082,7 @@ Please don't miss it — we look forward to your participation!`;
         </td>
         <td>{session.workshopFee || session.workshopFee === 0 ? `₹${session.workshopFee}` : "-"}</td>
         <td>
-          <button type="button" className="training-attendees-btn" onClick={() => openScheduleModal(session)}>
+          <button type="button" className="training-attendees-btn" onClick={() => setDetailSessionId(session.id)}>
             <FaUserFriends size={11} />
             {(session.attendees || []).length}
           </button>
@@ -1062,17 +1134,6 @@ Please don't miss it — we look forward to your participation!`;
         </td>
         <td>
           <span className={`training-status-badge ${status.toLowerCase()}`}>{status}</span>
-        </td>
-        <td>
-          <button
-            type="button"
-            className="training-delete-btn"
-            onClick={() => handleDeleteSession(session)}
-            disabled={deletingId === session.id}
-            title="Remove"
-          >
-            <FaTrashAlt size={11} />
-          </button>
         </td>
       </tr>
     );
@@ -1843,8 +1904,8 @@ Please don't miss it — we look forward to your participation!`;
 
       <div className="training-header">
         <div>
-          <h2>Training</h2>
-          <p>Schedule weekly training sessions and upload documents.</p>
+          <h2>Workshop</h2>
+          <p>Schedule workshops and upload documents.</p>
         </div>
         <div className="training-header-actions">
           <button type="button" className="training-btn training-btn-secondary" onClick={openUploadPicker}>
@@ -1867,7 +1928,7 @@ Please don't miss it — we look forward to your participation!`;
           onClick={() => setActiveView("sessions")}
         >
           <FaChalkboardTeacher size={13} />
-          Training Sessions
+          Workshops
         </button>
         <button
           type="button"
@@ -1926,7 +1987,7 @@ Please don't miss it — we look forward to your participation!`;
           <div className="card-icon blue">
             <FaChalkboardTeacher size={24} />
           </div>
-          <div className="card-label">Total Sessions</div>
+          <div className="card-label">Total Workshops</div>
           <div className="card-value">{counts.total.toLocaleString()}</div>
         </div>
         <div className="stat-card">
@@ -1952,99 +2013,56 @@ Please don't miss it — we look forward to your participation!`;
         </div>
       </div>
 
-      <div className="training-table-card">
-        <h3>Training Sessions ({filteredSessions.length})</h3>
+      {[
+        { key: 'upcoming', title: 'Upcoming Workshops', list: upcomingSessions, empty: 'No upcoming workshops.' },
+        { key: 'completed', title: 'Completed Workshops', list: completedSessions, empty: 'No completed workshops yet.' },
+      ]
+        // A status filter leaves one section empty; hide it instead of showing a blank card.
+        .filter((section) => !statusFilters.length || section.list.length > 0)
+        .map((section, index) => {
+          const grouped = groupSessions(section.list);
+          return (
+            <div className="training-table-card" key={section.key} style={index > 0 ? { marginTop: '24px' } : undefined}>
+              <h3>{section.title} ({section.list.length})</h3>
 
-        {loading ? (
-          <SkeletonLoader rows={5} label="Loading training sessions…" />
-        ) : sessions.length === 0 ? (
-          <div className="training-empty">No training sessions added yet.</div>
-        ) : filteredSessions.length === 0 ? (
-          <div className="training-empty">No training sessions match these filters.</div>
-        ) : (
-          <table className="training-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Workshop</th>
-                <th>Fee</th>
-                <th>Trainees</th>
-                <th>Meeting Link</th>
-                <th>Documents</th>
-                <th>Reminders</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupedSessions
-                ? groupedSessions.map(([label, items]) => (
-                    <Fragment key={label}>
-                      <tr>
-                        <td colSpan={10} style={{ padding: "10px 16px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
-                          {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
-                        </td>
-                      </tr>
-                      {items.map(renderSessionRow)}
-                    </Fragment>
-                  ))
-                : filteredSessions.map(renderSessionRow)}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="training-table-card" style={{ marginTop: "24px" }}>
-        <h3>Workshops ({workshops.length})</h3>
-
-        {workshopsLoading ? (
-          <SkeletonLoader rows={5} label="Loading workshops…" />
-        ) : workshops.length === 0 ? (
-          <div className="training-empty">No workshops with applicants found.</div>
-        ) : (
-          <table className="training-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Organizer</th>
-                <th>Location</th>
-                <th>Start Date</th>
-                <th>Fee</th>
-                <th>Applicants</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {workshops.map((workshop) => {
-                const startDate = parseWorkshopDateTime(workshop.workshop_start_date).date;
-                return (
-                  <tr key={workshop.id}>
-                    <td style={{ color: "#1976d2", fontWeight: 700 }}>{workshop.workshop_title || "-"}</td>
-                    <td>{workshop.workshop_organizer || "-"}</td>
-                    <td>{workshop.workshop_location || "-"}</td>
-                    <td>{startDate ? formatDateDisplay(startDate) : "-"}</td>
-                    <td>{workshop.workshop_fee || workshop.workshop_fee === 0 ? `₹${workshop.workshop_fee}` : "-"}</td>
-                    <td>
-                      <span className="training-attendees-btn">
-                        <FaUserFriends size={11} />
-                        {workshop.applicantCount}
-                      </span>
-                    </td>
-                    <td>{workshop.workshop_status || "-"}</td>
-                    <td>
-                      <button type="button" className="training-btn training-btn-secondary" onClick={() => handlePickWorkshop(workshop)}>
-                        Schedule
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+              {loading || workshopsLoading ? (
+                <SkeletonLoader rows={5} label="Loading workshops…" />
+              ) : section.list.length === 0 ? (
+                <div className="training-empty">{hasActiveFilters ? 'No workshops match these filters.' : section.empty}</div>
+              ) : (
+                <table className="training-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Time</th>
+                      <th>Workshop</th>
+                      <th>Fee</th>
+                      <th>Trainees</th>
+                      <th>Meeting Link</th>
+                      <th>Documents</th>
+                      <th>Reminders</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grouped
+                      ? grouped.map(([label, items]) => (
+                          <Fragment key={label}>
+                            <tr>
+                              <td colSpan={9} style={{ padding: '10px 16px', fontWeight: 700, fontSize: '13px', color: '#334155', background: '#f1f5f9' }}>
+                                {label} <span style={{ fontWeight: 500, color: '#64748b' }}>({items.length})</span>
+                              </td>
+                            </tr>
+                            {items.map(renderSessionRow)}
+                          </Fragment>
+                        ))
+                      : section.list.map(renderSessionRow)}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
       </>
       )}
 
@@ -2673,6 +2691,18 @@ Please don't miss it — we look forward to your participation!`;
             </div>
           </div>
         </div>
+      )}
+
+      {detailSessionId && sessions.find((item) => item.id === detailSessionId) && (
+        <WorkshopDetailModal
+          session={sessions.find((item) => item.id === detailSessionId)}
+          completed={getSessionStatus(sessions.find((item) => item.id === detailSessionId)) === "Completed"}
+          members={allMembers}
+          onClose={() => setDetailSessionId(null)}
+          onPatch={patchSession}
+          onEditDetails={openScheduleModal}
+          onManageDocuments={opendocumentsModal}
+        />
       )}
 
       {addTraineesModal && (
