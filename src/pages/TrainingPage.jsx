@@ -28,6 +28,8 @@ import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "..
 const COLLECTION_NAME = "trainingsessions";
 const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
 const WORKSHOP_APPLICANTS_SUBCOLLECTION = "workshop_users_applied";
+// workshopsmaster/{workshopId}/attendance/{userId}: a document per member marked present.
+const WORKSHOP_ATTENDANCE_SUBCOLLECTION = "attendance";
 const MATERIAL_TYPES = ["Feedback Form", "Members Training Update", "Training Video"];
 
 const WORKSHOP_MONTHS = {
@@ -90,6 +92,8 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [savingMessage, setSavingMessage] = useState(""); // "first" | "final" | ""
   const [memberSearch, setMemberSearch] = useState("");
   const [detailSessionId, setDetailSessionId] = useState(null); // workshop detail modal
+  const [detailApplicants, setDetailApplicants] = useState([]); // registered for the open workshop
+  const [detailPresentIds, setDetailPresentIds] = useState([]); // marked present in the attendance collection
   const [addTraineesModal, setAddTraineesModal] = useState(null); // { session, trainees }
   const [addTraineesSearch, setAddTraineesSearch] = useState("");
   const [savingTrainees, setSavingTrainees] = useState(false);
@@ -182,7 +186,11 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
           const applicantsSnap = await getDocs(
             collection(db, WORKSHOP_COLLECTION_NAME, docSnap.id, WORKSHOP_APPLICANTS_SUBCOLLECTION)
           );
-          return { id: docSnap.id, ...docSnap.data(), applicantCount: applicantsSnap.size };
+          const applicantIds = applicantsSnap.docs.map((applicantDoc) => {
+            const data = applicantDoc.data() || {};
+            return data.user_id || data.uid || data.userId || applicantDoc.id;
+          });
+          return { id: docSnap.id, ...docSnap.data(), applicantCount: applicantsSnap.size, applicantIds };
         })
       );
       setWorkshops(results.filter(Boolean));
@@ -247,6 +255,19 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   // its detail modal) — passing its date does not move it. Sessions saved before that
   // existed have no `completed` field at all, so they follow their date until someone
   // marks or reopens them. Applicant-only workshops (never scheduled) follow their date.
+  // A session's attendee list is a snapshot from when it was scheduled, so it
+  // misses people who registered afterwards. The exact count is everyone who has
+  // registered for the workshop plus anyone added manually.
+  const getTraineeCount = (session) => {
+    const ids = new Set(
+      (session.attendees || []).map((t) => (typeof t === "string" ? t : t?.id)).filter(Boolean)
+    );
+    const workshop = workshops.find((item) => item.id === session.workshopId);
+    const removed = new Set(session.removedTraineeIds || []);
+    (workshop?.applicantIds || []).forEach((id) => { if (!removed.has(id)) ids.add(id); });
+    return ids.size;
+  };
+
   const getSessionStatus = (session) => {
     if (typeof session.completed === "boolean") return session.completed ? "Completed" : "Upcoming";
     // Only a workshop with a date today or later is Upcoming; no date (or a past
@@ -355,6 +376,46 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
       showToast("Failed to save. Please try again.", "error");
     }
   };
+
+  useEffect(() => {
+    const session = sessions.find((item) => item.id === detailSessionId);
+    if (!session?.workshopId) {
+      setDetailApplicants([]);
+      setDetailPresentIds([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const applicants = await loadApplicantsForWorkshop(session.workshopId);
+        const attendanceSnap = await getDocs(
+          collection(db, WORKSHOP_COLLECTION_NAME, session.workshopId, WORKSHOP_ATTENDANCE_SUBCOLLECTION)
+        );
+        const presentIds = attendanceSnap.docs.map((attendanceDoc) => {
+          const data = attendanceDoc.data() || {};
+          return data.user_id || data.uid || data.userId || attendanceDoc.id;
+        });
+        // Someone marked present who never registered still belongs in the list.
+        const known = new Set(applicants.map((person) => person.id));
+        const members = await ensureMembersLoaded();
+        const walkIns = presentIds
+          .filter((id) => !known.has(id))
+          .map((id) => {
+            const member = members.find((m) => m.id === id);
+            return member
+              ? { id, name: getMemberName(member), phone: getMemberPhone(member), email: getMemberEmail(member) }
+              : { id, name: id, phone: "", email: "" };
+          });
+        if (cancelled) return;
+        setDetailApplicants([...applicants, ...walkIns]);
+        setDetailPresentIds(presentIds);
+      } catch (error) {
+        console.error("Error loading registered trainees / attendance:", error);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailSessionId]);
 
   const openScheduleModal = (session) => {
     setEditingSessionId(session.id);
@@ -1084,7 +1145,7 @@ Please don't miss it — we look forward to your participation!`;
         <td>
           <button type="button" className="training-attendees-btn" onClick={() => setDetailSessionId(session.id)}>
             <FaUserFriends size={11} />
-            {(session.attendees || []).length}
+            {getTraineeCount(session)}
           </button>
           <button
             type="button"
@@ -2698,6 +2759,8 @@ Please don't miss it — we look forward to your participation!`;
           session={sessions.find((item) => item.id === detailSessionId)}
           completed={getSessionStatus(sessions.find((item) => item.id === detailSessionId)) === "Completed"}
           members={allMembers}
+          registered={detailApplicants}
+          presentIds={detailPresentIds}
           onClose={() => setDetailSessionId(null)}
           onPatch={patchSession}
           onEditDetails={openScheduleModal}

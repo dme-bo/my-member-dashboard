@@ -39,7 +39,7 @@ function shiftMinutes(timeStr, minutes) {
 
 const cleanTime = (time) => (time && time !== "-" ? time : "");
 
-export default function WorkshopDetailModal({ session, completed, members, onClose, onPatch, onEditDetails, onManageDocuments }) {
+export default function WorkshopDetailModal({ session, completed, members, registered = [], presentIds = [], onClose, onPatch, onEditDetails, onManageDocuments }) {
   const [tab, setTab] = useState("overview");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
@@ -51,11 +51,16 @@ export default function WorkshopDetailModal({ session, completed, members, onClo
     improvements: session.trainerFeedback?.improvements || "",
   });
 
-  const trainees = useMemo(
-    () => (session.attendees || []).map((t) => (typeof t === "string" ? { id: t, name: t } : t)),
-    [session.attendees]
-  );
+  const trainees = useMemo(() => {
+    const saved = (session.attendees || []).map((t) => (typeof t === "string" ? { id: t, name: t } : t));
+    const have = new Set(saved.map((t) => t.id));
+    const removed = new Set(session.removedTraineeIds || []);
+    return [...saved, ...registered.filter((person) => !have.has(person.id) && !removed.has(person.id))];
+  }, [session.attendees, session.removedTraineeIds, registered]);
   const attendance = session.attendance || {};
+  const presentSet = useMemo(() => new Set(presentIds), [presentIds]);
+  const markFor = (traineeId) =>
+    attendance[traineeId] || (presentSet.has(traineeId) ? { status: "present", source: "auto" } : null);
   const reminders = session.reminders || {};
   const documents = session.documents || [];
 
@@ -78,11 +83,12 @@ export default function WorkshopDetailModal({ session, completed, members, onClo
           email: trainee.email || (member ? getMemberEmail(member) : "") || "",
           phone: trainee.phone || (member ? getMemberPhone(member) : "") || "",
           city: trainee.city || (member ? getMemberCity(member) : "") || "",
-          mark: attendance[trainee.id] || null,
+          mark: markFor(trainee.id),
           confirmed: (session.whatsappConfirmedIds || []).includes(trainee.id),
         };
       }),
-    [trainees, memberById, attendance, session.whatsappConfirmedIds]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trainees, memberById, attendance, presentSet, session.whatsappConfirmedIds]
   );
 
   const counts = useMemo(() => {
@@ -115,7 +121,11 @@ export default function WorkshopDetailModal({ session, completed, members, onClo
   };
 
   const markAttendance = (traineeId, status) => {
-    const current = attendance[traineeId]?.status;
+    const existing = markFor(traineeId);
+    // Marked present by the attendance collection: Present is already true, and
+    // only an explicit Absent can override it.
+    if (existing?.source === "auto" && status === "present") return undefined;
+    const current = existing?.status;
     const next = { ...attendance };
     if (current === status) delete next[traineeId];
     else next[traineeId] = { status, source: "manual", markedAt: new Date().toISOString() };
@@ -125,7 +135,7 @@ export default function WorkshopDetailModal({ session, completed, members, onClo
   const markAllPresent = () => {
     const next = { ...attendance };
     rows.forEach((row) => {
-      if (!next[row.id]) next[row.id] = { status: "present", source: "manual", markedAt: new Date().toISOString() };
+      if (!row.mark) next[row.id] = { status: "present", source: "manual", markedAt: new Date().toISOString() };
     });
     return patch({ attendance: next });
   };
@@ -143,7 +153,12 @@ export default function WorkshopDetailModal({ session, completed, members, onClo
   const removeTrainee = (traineeId) => {
     const next = { ...attendance };
     delete next[traineeId];
-    return patch({ attendees: trainees.filter((t) => t.id !== traineeId), attendance: next });
+    return patch({
+      attendees: trainees.filter((t) => t.id !== traineeId),
+      attendance: next,
+      // so a registered person who was removed does not reappear from the registrations
+      removedTraineeIds: [...new Set([...(session.removedTraineeIds || []), traineeId])],
+    });
   };
 
   const toggleCompleted = () => {

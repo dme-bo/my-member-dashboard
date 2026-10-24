@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Bar } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { parseMemberDate } from '../utils/memberFields';
@@ -83,34 +83,31 @@ export default function RegistrationTrend({ members }) {
   const chartData = useMemo(() => ({
     labels: rows.map((r) => r.label),
     datasets: [
-      // Two stacked series (one value each) so the legend explains the colours.
       {
-        type: 'bar',
-        label: 'Met target',
-        data: rows.map((r) => (r.actual >= target ? r.actual : null)),
-        backgroundColor: '#1976d2',
-        borderRadius: 4,
-        maxBarThickness: 44,
+        label: 'Actual',
+        data: rows.map((r) => r.actual),
+        borderColor: '#1976d2',
+        backgroundColor: 'rgba(25, 118, 210, 0.12)',
+        borderWidth: 3,
+        tension: 0.3,
+        fill: true,
+        // a point is solid blue when that period met the target, hollow when it fell short
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        pointBorderColor: '#1976d2',
+        pointBorderWidth: 2,
+        pointBackgroundColor: rows.map((r) => (r.actual >= target ? '#1976d2' : '#fff')),
         order: 2,
       },
       {
-        type: 'bar',
-        label: 'Below target',
-        data: rows.map((r) => (r.actual < target ? r.actual : null)),
-        backgroundColor: '#90caf9',
-        borderRadius: 4,
-        maxBarThickness: 44,
-        order: 2,
-      },
-      {
-        type: 'line',
         label: 'Target',
         data: rows.map(() => target),
-        backgroundColor: '#e53935',
         borderColor: '#e53935',
+        backgroundColor: '#e53935',
         borderDash: [6, 4],
         borderWidth: 2,
         pointRadius: 0,
+        pointHoverRadius: 0,
         fill: false,
         order: 1,
         datalabels: { display: false },
@@ -121,90 +118,87 @@ export default function RegistrationTrend({ members }) {
   const options = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (context) =>
+            context.dataset.label === 'Target'
+              ? `Target: ${context.raw}`
+              : `Actual: ${context.raw}${target ? ` (${Math.round((context.raw / target) * 100)}% of target)` : ''}`,
+        },
+      },
       datalabels: {
-        color: '#000',
+        color: '#0f172a',
         anchor: 'end',
         align: 'top',
+        offset: 4,
         font: { weight: 'bold', size: 12 },
-        formatter: (v) => (v > 0 ? v : ''),
       },
     },
     scales: {
-      y: { beginAtZero: true, stacked: true, ticks: { precision: 0 }, grace: '8%' },
-      x: { stacked: true, grid: { display: false }, ticks: { autoSkip: false } },
+      y: { beginAtZero: true, ticks: { precision: 0 }, grace: '12%' },
+      x: { grid: { display: false }, ticks: { autoSkip: false } },
     },
-    layout: { padding: { top: 24 } },
-  }), []);
+    layout: { padding: { top: 24, right: 12 } },
+  }), [target]);
 
   const current = rows[rows.length - 1];
   const previous = rows[rows.length - 2];
   const fmtPct = (v) => (v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`);
-  const tone = (v) => (v === null || v === 0 ? '#64748b' : v > 0 ? '#15803d' : '#b91c1c');
+
+  const unit = period === 'Daily' ? 'day' : period === 'Weekly' ? 'week' : 'month';
+  const achievedTone = current.achievement !== null && current.achievement >= 100 ? 'bo-kpi-success' : 'bo-kpi-warning';
+  const changeTone = current.change === null || current.change === 0 ? 'bo-kpi-info' : current.change > 0 ? 'bo-kpi-success' : 'bo-kpi-danger';
 
   return (
-    <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
-      <h3>Registration Trends — Target vs Actual</h3>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 0, border: '1px solid #bcd6f2', borderRadius: 6, overflow: 'hidden' }}>
-          {Object.keys(PERIODS).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              style={{ padding: '6px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: p === period ? '#1976d2' : '#fff', color: p === period ? '#fff' : '#1976d2' }}
-            >
-              {p}
-            </button>
-          ))}
+    <section className="bo-card" aria-labelledby="h-trend">
+      <div className="bo-card-head">
+        <h2 id="h-trend">Registration trends — Target vs actual</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+          <div role="group" aria-label="Period" style={{ display: 'inline-flex' }}>
+            {Object.keys(PERIODS).map((p) => (
+              <button key={p} type="button" className="bo-tog" aria-pressed={p === period} onClick={() => setPeriod(p)}>
+                {p}
+              </button>
+            ))}
+          </div>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#3c4047' }}>
+            Target per {unit}
+            <input
+              type="number"
+              min="0"
+              value={targets[period] ?? PERIODS[period].defaultTarget}
+              onChange={(e) => updateTarget(e.target.value)}
+              aria-label={`Target per ${unit}`}
+              style={{ width: 72, height: 28, boxSizing: 'border-box', padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 4, font: 'inherit', fontSize: 14, textAlign: 'right' }}
+            />
+          </label>
         </div>
+      </div>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569' }}>
-          Target per {period === 'Daily' ? 'day' : period === 'Weekly' ? 'week' : 'month'}
-          <input
-            type="number"
-            min="0"
-            value={targets[period] ?? PERIODS[period].defaultTarget}
-            onChange={(e) => updateTarget(e.target.value)}
-            style={{ width: 80, height: 30, padding: '0 8px', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: 13 }}
-          />
-        </label>
-
-        <div style={{ display: 'flex', gap: 20, fontSize: 13, color: '#475569' }}>
-          <span>This {period === 'Daily' ? 'day' : period === 'Weekly' ? 'week' : 'month'}: <strong style={{ color: '#0f172a' }}>{current.actual}</strong> of {target} ({current.achievement === null ? '—' : `${current.achievement.toFixed(0)}%`})</span>
-          <span>vs previous: <strong style={{ color: tone(current.change) }}>{fmtPct(current.change)}</strong> ({previous.actual})</span>
-        </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+        <span className="bo-kpi"><b>{current.actual.toLocaleString()}</b>This {unit}</span>
+        <span className="bo-kpi bo-kpi-info"><b>{target.toLocaleString()}</b>Target</span>
+        <span className={`bo-kpi ${achievedTone}`}><b>{current.achievement === null ? '—' : `${current.achievement.toFixed(0)}%`}</b>Achieved</span>
+        <span className={`bo-kpi ${changeTone}`}><b>{fmtPct(current.change)}</b>vs previous ({previous.actual.toLocaleString()})</span>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: '#5f6670' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#1976d2', border: '2px solid #1976d2', boxSizing: 'border-box' }} />Met target
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', border: '2px solid #1976d2', boxSizing: 'border-box' }} />Below target
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span aria-hidden="true" style={{ width: 14, borderTop: '2px dashed #e53935' }} />Target
+          </span>
+        </span>
       </div>
 
       <div className="chart-container">
-        <Bar data={chartData} options={options} plugins={PLUGINS} />
+        <Line data={chartData} options={options} plugins={PLUGINS} />
       </div>
-
-      <div style={{ overflowX: 'auto', marginTop: 16 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: '#1976d2', color: '#fff' }}>
-              {['Period', 'Actual', 'Target', 'Variance', 'Achievement', 'vs Previous'].map((h, i) => (
-                <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 ? 'left' : 'right', fontWeight: 600 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[...rows].reverse().map((r) => (
-              <tr key={r.label} style={{ borderBottom: '1px solid #edf0f3', background: r.current ? '#e3f2fd' : undefined }}>
-                <td style={{ padding: '7px 10px' }}>{r.label}{r.current ? ' (current)' : ''}</td>
-                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>{r.actual}</td>
-                <td style={{ padding: '7px 10px', textAlign: 'right' }}>{target}</td>
-                <td style={{ padding: '7px 10px', textAlign: 'right', color: tone(r.variance) }}>{r.variance > 0 ? '+' : ''}{r.variance}</td>
-                <td style={{ padding: '7px 10px', textAlign: 'right' }}>{r.achievement === null ? '—' : `${r.achievement.toFixed(0)}%`}</td>
-                <td style={{ padding: '7px 10px', textAlign: 'right', color: tone(r.change) }}>{fmtPct(r.change)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </section>
   );
 }

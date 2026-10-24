@@ -1,13 +1,6 @@
 // src/pages/DashboardPage.jsx
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import {
-  FaUsers,
-  FaClock,
-  FaUserPlus,
-  FaCalendarAlt,
-  FaClipboardCheck,
-} from 'react-icons/fa';
-import { Pie, Bar } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Chart } from 'react-google-charts';
@@ -67,33 +60,6 @@ function RawDataRow({ index, style, data }) {
 // collection keys documents by a plain 10-digit number) regardless of
 // +91/91/0 prefixing on the member's own stored value.
 const last10Digits = (value) => String(value || '').replace(/\D/g, '').slice(-10);
-
-const PIE_CHART_OPTIONS = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { position: 'right', labels: { font: { size: 14 } } },
-    tooltip: {
-      callbacks: {
-        label: (context) => {
-          const value = context.raw || 0;
-          const total = context.dataset.data.reduce((a, b) => a + b, 0);
-          const percentage = total ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-          return `${context.label}: ${value} (${percentage})`;
-        },
-      },
-    },
-    datalabels: {
-      color: '#fff',
-      font: { weight: 'bold', size: 16 },
-      formatter: (value, context) => {
-        const total = context.dataset.data.reduce((a, b) => a + b, 0);
-        const percentage = Math.round((value / total) * 100);
-        return percentage >= 8 ? `${percentage}%` : '';
-      },
-    },
-  },
-};
 
 const BAR_CHART_OPTIONS = {
   responsive: true,
@@ -155,11 +121,40 @@ const createDistributionBarOptions = (total) => {
 
 const CHART_DATALABELS_PLUGINS = [ChartDataLabels];
 
+const pctText = (value, total) => (total ? `${((value / total) * 100).toFixed(1)}%` : '0%');
+
+// Ranked horizontal bars with the count and the share of the total.
+function BarList({ entries, total, color }) {
+  const max = entries.length ? Math.max(...entries.map(([, value]) => value)) : 1;
+  return (
+    <ul className="bo-bars">
+      {entries.map(([label, value]) => (
+        <li key={label} className="bo-bar" title={`${label}: ${value.toLocaleString()} (${pctText(value, total)})`}>
+          <span className="bo-bar-label">{label}</span>
+          <span className="bo-bar-track">
+            <span className="bo-bar-fill" style={{ width: `${Math.max((value / max) * 100, 0.8)}%`, background: color }} />
+          </span>
+          <span className="bo-bar-val">
+            {value.toLocaleString()} <small>{pctText(value, total)}</small>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const BO_PRIMARY = '#1976d2';
+const BO_ACCENT = '#c98a2e';
+const BO_MUTED = '#9aa39a';
+const TYPE_PILL_CLASS = { job: 'bo-t-job', tcs: 'bo-t-tcs', project: 'bo-t-proj' };
+
 export default function DashboardPage({ memberRecords = [], membersLoading = false, onMemberClick }) {
   const [dashboardView, setDashboardView] = useState('members'); // 'members' | 'finance'
   const [members, setMembers] = useState(memberRecords);
   const [loading, setLoading] = useState(membersLoading);
 
+  const [showAllRanks, setShowAllRanks] = useState(false);
+  const [showAllRequirements, setShowAllRequirements] = useState(false);
   const [tcsCoordinatorOnly, setTcsCoordinatorOnly] = useState(false);
   const [tcsCoordinatorPhones, setTcsCoordinatorPhones] = useState(() => new Set());
   const [requirementTypeFilter, setRequirementTypeFilter] = useState('All');
@@ -435,13 +430,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     return matches;
   }, [rawDataView, rawDataHaystacks, debouncedRawDataSearch]);
 
-  const onBlockKeyDown = (event, action) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      action();
-    }
-  };
-
   // Analytics (unchanged logic) ────────────────────────────────────────────────
   const analytics = useMemo(() => {
     if (loading || !filteredMembers.length) return null;
@@ -568,20 +556,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     }],
   });
 
-  const genderChartData = useMemo(() => (analytics ? createChartData(analytics.genderCounts) : null), [analytics]);
-  // One colour per category so the bars double as a legend.
-  const categoryChartData = useMemo(() => (analytics ? createChartData(analytics.categoryCounts) : null), [analytics]);
-  // Ranked single-metric bars use one colour; varied colours only add noise.
-  const serviceChartData = useMemo(() => (analytics ? createChartData(analytics.serviceCounts, SINGLE_BAR_COLORS) : null), [analytics]);
-  const rankChartData = useMemo(() => (analytics ? createChartData(analytics.rankCounts, SINGLE_BAR_COLORS) : null), [analytics]);
-
-  // Distribution bars show "count (x%)" where x is the share of members that
-  // have that field filled in (rank is capped to the top 15 bars, so the % is
-  // still against the full total, not just the bars shown).
-  const categoryBarOptions = useMemo(() => createDistributionBarOptions(analytics?.categoryTotal), [analytics]);
-  const serviceBarOptions = useMemo(() => createDistributionBarOptions(analytics?.serviceTotal), [analytics]);
-  const rankBarOptions = useMemo(() => createDistributionBarOptions(analytics?.rankTotal), [analytics]);
-
   // Group By (toolbar) → one extra chart: members per group, with count and % of
   // the members in view. Multi-value fields (Tags, Project) can place a member in
   // several groups, so those shares can add up past 100%.
@@ -603,8 +577,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
       hidden: Math.max(0, entries.length - 20),
     };
   }, [groupBy, filteredMembers, filterOptions]);
-
-  const pieOptions = PIE_CHART_OPTIONS;
 
   useEffect(() => {
     import('../components/FinanceAnalytics').catch(() => {});
@@ -1393,6 +1365,60 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         
+        /* ── Dashboard design: cards, KPI pills, bar lists ───────────────── */
+        .dashboard-container.members-mode { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #212529; }
+        .dash-title { flex-wrap: wrap; align-items: center; gap: 14px; }
+        .dash-body { display: flex; flex-direction: column; gap: 16px; }
+        .bo-kpis { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .bo-kpi { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px 0 10px; border-radius: 14px; border: 1px solid #d5dde8; background: #eef2f7; color: #1f2d3d; font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; }
+        .bo-kpi::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .bo-kpi b { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .bo-kpi-success { border-color: #c6e5cf; background: #e6f4ea; color: #1e6b32; }
+        .bo-kpi-danger { border-color: #f5c9c9; background: #fdecec; color: #9b1c1c; }
+        .bo-kpi-info { border-color: #c9dcf3; background: #e8f1fb; color: #0d5aa7; }
+        .bo-kpi-warning { border-color: #f3dcae; background: #fdf3e1; color: #8a5300; }
+        button.bo-kpi { cursor: pointer; transition: box-shadow .15s; }
+        button.bo-kpi:hover { box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+        .bo-card { background: #fff; border: 1px solid #e3e7ed; border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .bo-card h2 { margin: 0; font-size: 15px; font-weight: 600; color: #1d2127; }
+        .bo-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+        .bo-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+        @media (max-width: 900px) { .bo-grid-2 { grid-template-columns: 1fr; } }
+        .bo-th { padding: 9px 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; }
+        .bo-td { padding: 8px 10px; border-top: 1px solid #e9ecef; font-size: 13px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
+        .bo-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .bo-row:nth-child(odd) { background: #f7f8fb; }
+        .bo-trunc { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+        .bo-type { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+        .bo-t-job { background: #e8f1fb; color: #0d5aa7; }
+        .bo-t-tcs { background: #fdf3e1; color: #8a5300; }
+        .bo-t-proj { background: #e6f4ea; color: #1e6b32; }
+        .bo-chip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 13px; font: inherit; font-size: 12px; color: #3c4047; cursor: pointer; }
+        .bo-chip[aria-pressed="true"] { background: #1976d2; border-color: #1976d2; color: #fff; }
+        .bo-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; color: #1976d2; font-size: 13px; cursor: pointer; }
+        .bo-link:hover { color: #0d5aa7; text-decoration: underline; }
+        td.bo-num .bo-link { font-weight: 600; }
+        .bo-bars { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
+        .bo-bar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 118px; align-items: center; gap: 10px; font-size: 13px; color: #3c4047; }
+        .bo-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bo-bar-track { height: 12px; position: relative; }
+        .bo-bar-fill { display: block; height: 12px; min-width: 2px; border-radius: 0 4px 4px 0; }
+        .bo-bar-val { text-align: right; font-variant-numeric: tabular-nums; color: #1d2127; font-weight: 600; white-space: nowrap; }
+        .bo-bar-val small { font-weight: 400; color: #64748b; margin-left: 2px; }
+        .bo-legend-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 13px; color: #3c4047; }
+        .bo-legend-row span { display: inline-flex; align-items: center; gap: 6px; }
+        .bo-legend-row i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+        .bo-legend-row b { color: #1d2127; }
+        .bo-legend-row small { color: #64748b; }
+        .bo-tog { display: inline-flex; align-items: center; height: 28px; padding: 0 14px; border: 1px solid #cfd4da; background: #fff; font: inherit; font-size: 14px; color: #3c4047; cursor: pointer; }
+        .bo-tog[aria-pressed="true"] { background: #1976d2; border-color: #1976d2; color: #fff; font-weight: 600; }
+        .bo-tog:first-child { border-radius: 4px 0 0 4px; }
+        .bo-tog:last-child { border-radius: 0 4px 4px 0; }
+        .bo-tog + .bo-tog { margin-left: -1px; }
+        /* remaining chart cards (Group By, states) follow the same card look */
+        .charts-grid { grid-template-columns: 1fr; gap: 16px; }
+        .chart-card { border: 1px solid #e3e7ed; border-radius: 8px; box-shadow: none; padding: 16px 18px; }
+        .chart-card h3 { margin: 0 0 12px; padding-bottom: 0; border-bottom: 0; text-align: left; font-size: 15px; font-weight: 600; color: #1d2127; }
       `}</style>
 
       <div className={`dashboard-container ${dashboardView === 'finance' ? 'finance-mode' : 'members-mode'}`}>
@@ -1408,7 +1434,28 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           <div className="dash-title-row">
             <div className="dash-title">
               <h1>Dashboard</h1>
-              <span>{filteredMembers.length.toLocaleString()} Members</span>
+              <div className="bo-kpis" role="group" aria-label="Key numbers">
+                <button type="button" className="bo-kpi" title="Show the raw data" onClick={openTotalMembers}>
+                  <b>{(analytics?.total ?? filteredMembers.length).toLocaleString()}</b>Members
+                </button>
+                <span className="bo-kpi bo-kpi-info" title="Average experience">
+                  <b>{analytics?.avgExp ?? '0Y'}</b>Avg exp.
+                </span>
+                <button type="button" className="bo-kpi bo-kpi-warning" title="Registered today" onClick={openRegisteredToday}>
+                  <b>{registrationAnalytics?.registeredToday ?? 0}</b>Today
+                </button>
+                <button type="button" className="bo-kpi bo-kpi-info" title="Registered in the last 3 months" onClick={openLast3Months}>
+                  <b>{registrationAnalytics?.registered3Months ?? 0}</b>3 months
+                </button>
+                <button
+                  type="button"
+                  className="bo-kpi bo-kpi-success"
+                  title="Members who applied to any job or project"
+                  onClick={() => openRawData('Applied Members', 'Members who applied to any job or project', appliedInViewIds)}
+                >
+                  <b>{appliedMemberCount.toLocaleString()}</b>Applied
+                </button>
+              </div>
             </div>
             <div className="dash-title-actions">
               {viewToggle}
@@ -1454,91 +1501,16 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           </div>
         ) : hasData ? (
           <>
-            <div className="stats-grid">
-              <div
-                className="stat-card clickable"
-                role="button"
-                tabIndex={0}
-                title="Show the raw data"
-                onClick={openTotalMembers}
-                onKeyDown={(event) => onBlockKeyDown(event, openTotalMembers)}
-              >
-                <div className="card-icon blue">
-                  <FaUsers size={28} />
-                </div>
-                <div className="card-label">Total Members</div>
-                <div className="card-value">{analytics.total.toLocaleString()}</div>
-              </div>
-
-              <div className="stat-card">
-                <div className="card-icon red">
-                  <FaClock size={28} />
-                </div>
-                <div className="card-label">Avg Experience</div>
-                <div className="card-value">{analytics.avgExp}</div>
-              </div>
-
-              <div
-                className="stat-card clickable"
-                role="button"
-                tabIndex={0}
-                title="Show the raw data"
-                onClick={openRegisteredToday}
-                onKeyDown={(event) => onBlockKeyDown(event, openRegisteredToday)}
-              >
-                <div className="card-icon new">
-                  <FaUserPlus size={28} />
-                </div>
-                <div className="card-label">Registered Today</div>
-                <div className="card-value">{registrationAnalytics?.registeredToday ?? 0}</div>
-              </div>
-
-              <div
-                className="stat-card clickable"
-                role="button"
-                tabIndex={0}
-                title="Show the raw data"
-                onClick={openLast3Months}
-                onKeyDown={(event) => onBlockKeyDown(event, openLast3Months)}
-              >
-                <div className="card-icon quarter">
-                  <FaCalendarAlt size={28} />
-                </div>
-                <div className="card-label">Last 3 Months</div>
-                <div className="card-value">{registrationAnalytics?.registered3Months ?? 0}</div>
-              </div>
-
-              <div
-                className="stat-card clickable"
-                role="button"
-                tabIndex={0}
-                title="Show the raw data"
-                onClick={() =>
-                  openRawData('Applied Members', 'Members who applied to any job or project', appliedInViewIds)
-                }
-                onKeyDown={(event) =>
-                  onBlockKeyDown(event, () =>
-                    openRawData('Applied Members', 'Members who applied to any job or project', appliedInViewIds)
-                  )
-                }
-              >
-                <div className="card-icon applied">
-                  <FaClipboardCheck size={28} />
-                </div>
-                <div className="card-label">Applied Members</div>
-                <div className="card-value">{appliedMemberCount.toLocaleString()}</div>
-              </div>
-            </div>
-
-            <div className="requirement-section">
-              <div className="requirement-section-header">
-                <h3>Requirement Wise Applicants</h3>
-                <div className="requirement-type-filter">
+            <section className="bo-card" aria-labelledby="h-req">
+              <div className="bo-card-head">
+                <h2 id="h-req">Requirement-wise applicants</h2>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} role="group" aria-label="Requirement type">
                   {REQUIREMENT_TYPE_FILTERS.map((option) => (
                     <button
                       key={option.key}
                       type="button"
-                      className={requirementTypeFilter === option.key ? 'active' : ''}
+                      className="bo-chip"
+                      aria-pressed={requirementTypeFilter === option.key}
                       onClick={() => setRequirementTypeFilter(option.key)}
                     >
                       {option.label}
@@ -1549,33 +1521,109 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
               {visibleRequirementBlocks.length === 0 ? (
                 <div className="requirement-empty">No applicants for the current filters.</div>
               ) : (
-                <div className="requirement-grid">
-                  {visibleRequirementBlocks.map((block) => {
-                    const subtitle = `${REQUIREMENT_TYPE_LABELS[block.type]}${block.company ? ` • ${block.company}` : ''}`;
-                    const open = () => openRawData(block.title, subtitle, block.activeMemberIds);
-                    return (
-                      <div
-                        key={block.id}
-                        className="requirement-block"
-                        role="button"
-                        tabIndex={0}
-                        title="Show the raw data"
-                        onClick={open}
-                        onKeyDown={(event) => onBlockKeyDown(event, open)}
-                      >
-                        <span className={`requirement-type ${block.type.toLowerCase()}`}>
-                          {REQUIREMENT_TYPE_LABELS[block.type]}
-                        </span>
-                        <div className="requirement-title">{block.title}</div>
-                        <div className="requirement-company">{block.company || ' '}</div>
-                        <div className="requirement-count">
-                          {block.count.toLocaleString()} <span>applicant{block.count === 1 ? '' : 's'}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th className="bo-th">Type</th>
+                        <th className="bo-th">Requirement</th>
+                        <th className="bo-th">Company</th>
+                        <th className="bo-th bo-num">Applicants</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(showAllRequirements ? visibleRequirementBlocks : visibleRequirementBlocks.slice(0, 8)).map((block) => {
+                        const subtitle = `${REQUIREMENT_TYPE_LABELS[block.type]}${block.company ? ` • ${block.company}` : ''}`;
+                        return (
+                          <tr key={block.id} className="bo-row">
+                            <td className="bo-td">
+                              <span className={`bo-type ${TYPE_PILL_CLASS[block.type.toLowerCase()] || ''}`}>
+                                {REQUIREMENT_TYPE_LABELS[block.type]}
+                              </span>
+                            </td>
+                            <td className="bo-td"><span className="bo-trunc" style={{ maxWidth: 420 }} title={block.title}>{block.title}</span></td>
+                            <td className="bo-td"><span className="bo-trunc" title={block.company}>{block.company || '—'}</span></td>
+                            <td className="bo-td bo-num">
+                              <button
+                                type="button"
+                                className="bo-link"
+                                title="Show the raw data"
+                                onClick={() => openRawData(block.title, subtitle, block.activeMemberIds)}
+                              >
+                                {block.count.toLocaleString()}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
+              {visibleRequirementBlocks.length > 8 && (
+                <button type="button" className="bo-link" onClick={() => setShowAllRequirements((value) => !value)}>
+                  {showAllRequirements ? 'Show fewer' : `View all ${visibleRequirementBlocks.length} requirements →`}
+                </button>
+              )}
+            </section>
+
+            <div className="bo-grid-2">
+              <section className="bo-card" aria-labelledby="h-gender">
+                <h2 id="h-gender">Gender</h2>
+                {(() => {
+                  const male = analytics.genderCounts.Male || 0;
+                  const female = analytics.genderCounts.Female || 0;
+                  const total = male + female;
+                  return (
+                    <>
+                      <div
+                        role="img"
+                        aria-label={`Male ${pctText(male, total)}, Female ${pctText(female, total)}`}
+                        style={{ display: 'flex', gap: 2, height: 16 }}
+                      >
+                        <span style={{ width: `${total ? (male / total) * 100 : 0}%`, background: BO_PRIMARY, borderRadius: '4px 0 0 4px' }} />
+                        <span style={{ width: `${total ? (female / total) * 100 : 0}%`, background: BO_ACCENT, borderRadius: '0 4px 4px 0' }} />
+                      </div>
+                      <div className="bo-legend-row">
+                        <span><i style={{ background: BO_PRIMARY }} />Male <b>{male.toLocaleString()}</b> <small>{pctText(male, total)}</small></span>
+                        <span><i style={{ background: BO_ACCENT }} />Female <b>{female.toLocaleString()}</b> <small>{pctText(female, total)}</small></span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </section>
+
+              <section className="bo-card" aria-labelledby="h-cat">
+                <h2 id="h-cat">By category</h2>
+                <BarList entries={Object.entries(analytics.categoryCounts)} total={analytics.categoryTotal} color={BO_PRIMARY} />
+              </section>
+
+              <section className="bo-card" aria-labelledby="h-svc">
+                <h2 id="h-svc">By service</h2>
+                {(() => {
+                  const all = Object.entries(analytics.serviceCounts);
+                  const top = all.slice(0, 7);
+                  const others = analytics.serviceTotal - top.reduce((sum, [, n]) => sum + n, 0);
+                  return (
+                    <>
+                      <BarList entries={top} total={analytics.serviceTotal} color={BO_PRIMARY} />
+                      {others > 0 && <BarList entries={[['Others', others]]} total={analytics.serviceTotal} color={BO_MUTED} />}
+                    </>
+                  );
+                })()}
+              </section>
+
+              <section className="bo-card" aria-labelledby="h-rank">
+                <h2 id="h-rank">{showAllRanks ? 'By rank (top 15)' : 'By rank (top 5)'}</h2>
+                <BarList
+                  entries={Object.entries(analytics.rankCounts).slice(0, showAllRanks ? 15 : 5)}
+                  total={analytics.rankTotal}
+                  color={BO_PRIMARY}
+                />
+                <button type="button" className="bo-link" onClick={() => setShowAllRanks((value) => !value)}>
+                  {showAllRanks ? 'Show fewer' : 'View all ranks →'}
+                </button>
+              </section>
             </div>
 
             <div className="charts-grid">
@@ -1590,34 +1638,6 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                   </div>
                 </div>
               )}
-
-              <div className="chart-card">
-                <h3>Gender Wise Distribution</h3>
-                <div className="chart-container">
-                  <Pie data={genderChartData} options={pieOptions} plugins={CHART_DATALABELS_PLUGINS} />
-                </div>
-              </div>
-
-              <div className="chart-card">
-                <h3>Category Wise Distribution</h3>
-                <div className="chart-container">
-                  <Bar data={categoryChartData} options={categoryBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
-                </div>
-              </div>
-
-              <div className="chart-card">
-                <h3>Service Wise Distribution</h3>
-                <div className="chart-container" style={{ minHeight: Math.max(360, Object.keys(analytics.serviceCounts).length * 32 + 60) }}>
-                  <Bar data={serviceChartData} options={serviceBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
-                </div>
-              </div>
-
-              <div className="chart-card">
-                <h3>Ranks Wise Distribution</h3>
-                <div className="chart-container" style={{ minHeight: Math.max(360, Object.keys(analytics.rankCounts).length * 28 + 60) }}>
-                  <Bar data={rankChartData} options={rankBarOptions} plugins={CHART_DATALABELS_PLUGINS} />
-                </div>
-              </div>
 
               <RegistrationTrend members={filteredMembersNoDateRange} />
 
