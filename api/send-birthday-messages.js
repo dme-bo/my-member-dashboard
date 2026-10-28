@@ -1,5 +1,16 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "./_lib/firebaseAdmin.js";
-import { birthMonthDay, isBirthdayToday, istDateKey, istParts, toMsg91Mobile } from "./_lib/birthday.js";
+import {
+  LOG_COLLECTION,
+  RUNS_COLLECTION,
+  birthMonthDay,
+  isBirthdayToday,
+  istDateKey,
+  istParts,
+  msg91RequestId,
+  smsLogEntries,
+  toMsg91Mobile,
+} from "./_lib/birthday.js";
 
 // Daily cron (vercel.json, 08:00 IST = 02:30 UTC): SMS a birthday wish through
 // MSG91 to every member in `users` whose `dateofbirth` is today.
@@ -7,10 +18,15 @@ import { birthMonthDay, isBirthdayToday, istDateKey, istParts, toMsg91Mobile } f
 // Safe by default:
 //   * Nothing is sent unless BIRTHDAY_SMS_LIVE=true. Without it this only lists
 //     who WOULD be messaged (same as ?dryRun=1).
-//   * Each member is stamped `birthday_sms_sent_on: YYYY-MM-DD` after a
-//     successful send, so a re-run or a double cron fire never texts anyone twice.
+//   * Nothing is ever written to `users`. Before sending, today's
+//     `birthday_sms_log` is read and anyone already accepted today is skipped, so a
+//     re-run or a double cron fire never texts anyone twice.
 //   * ?testTo=<10-digit mobile> sends ONE message to that number only and
 //     touches no member records.
+//   * Every send attempt is logged: one document per recipient in
+//     `birthday_sms_log` (who, when, MSG91 request id, accepted/failed) and a
+//     per-day summary in `birthday_sms_runs`. A logging failure never stops or
+//     repeats a send.
 //
 // Environment (MSG91_AUTH_KEY plus ONE of the two ways to name the template):
 //   A) MSG91_TEMPLATE_ID: the MSG91 template id (sender + wording live in the
@@ -22,11 +38,10 @@ import { birthMonthDay, isBirthdayToday, istDateKey, istParts, toMsg91Mobile } f
 
 const MSG91_FLOW_URL = "https://control.msg91.com/api/v5/flow/";
 const CHUNK_SIZE = 100;
-const SENT_FIELD = "birthday_sms_sent_on";
 const USER_FIELDS = [
   "dateofbirth", "date_of_birth", "dob", "DOB", "Dob",
   "phone_number", "phone", "mobile", "contact_number", "mobile_number",
-  "full_name", "name", SENT_FIELD,
+  "full_name", "name",
 ];
 
 const firstValue = (data, keys) => {
@@ -134,13 +149,37 @@ export default async function handler(req, res) {
       const mobile = toMsg91Mobile(testTo, country);
       if (!mobile) return res.status(400).json({ error: "testTo is not a valid mobile number." });
       const result = await sendSms(config, [mobile]);
-      return res.status(result.ok ? 200 : 502).json({ ok: result.ok, test: true, mode: config.mode, to: mobile, msg91: result.body });
+      let logError = "";
+      try {
+        const entry = {
+          date: istDateKey(),
+          memberId: null,
+          name: "(test message)",
+          mobile,
+          status: result.ok ? "accepted" : "failed",
+          msg91RequestId: result.ok ? msg91RequestId(result.body) : "",
+          error: result.ok ? "" : JSON.stringify(result.body ?? {}).slice(0, 500),
+          httpStatus: result.status ?? null,
+          mode: config.mode,
+          trigger: "test",
+          sentAt: FieldValue.serverTimestamp(),
+        };
+        await getAdminDb().collection(LOG_COLLECTION).add(entry);
+      } catch (error) {
+        logError = error.message;
+      }
+      return res.status(result.ok ? 200 : 502).json({ ok: result.ok, test: true, mode: config.mode, to: mobile, msg91: result.body, ...(logError ? { logError } : {}) });
     }
 
     const todayKey = istDateKey();
     const today = istParts(new Date());
     const db = getAdminDb();
     const snapshot = await db.collection("users").select(...USER_FIELDS).get();
+
+    // Who was already messaged today (accepted by MSG91), from the log — the only
+    // record of sends, so the users collection stays untouched.
+    const loggedToday = await db.collection(LOG_COLLECTION).where("date", "==", todayKey).where("status", "==", "accepted").get();
+    const messagedIds = new Set(loggedToday.docs.map((doc) => doc.data()?.memberId).filter(Boolean));
 
     const due = [];
     let alreadySent = 0;
@@ -149,7 +188,7 @@ export default async function handler(req, res) {
       const data = doc.data() || {};
       const dob = birthMonthDay(firstValue(data, ["dateofbirth", "date_of_birth", "dob", "DOB", "Dob"]));
       if (!isBirthdayToday(dob, today)) return;
-      if (data[SENT_FIELD] === todayKey) {
+      if (messagedIds.has(doc.id)) {
         alreadySent += 1;
         return;
       }
@@ -194,23 +233,51 @@ export default async function handler(req, res) {
 
     if (config.error) return res.status(500).json({ error: config.error });
 
+    const trigger = req.headers?.["user-agent"]?.startsWith("vercel-cron") ? "cron" : "manual";
+    const logErrors = [];
+    // The log is also the "already messaged today" record, so a failed write is retried once.
+    const writeLog = async (chunk, result) => {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const batch = db.batch();
+          smsLogEntries({ chunk, result, todayKey, trigger, mode: config.mode, sentAt: FieldValue.serverTimestamp() }).forEach(({ id, data }) =>
+            batch.set(db.collection(LOG_COLLECTION).doc(id), data)
+          );
+          await batch.commit();
+          return;
+        } catch (error) {
+          if (attempt === 2) logErrors.push(error.message);
+        }
+      }
+    };
+
     let sent = 0;
     const failures = [];
     for (let i = 0; i < recipients.length; i += CHUNK_SIZE) {
       const chunk = recipients.slice(i, i + CHUNK_SIZE);
       const result = await sendSms(config, chunk.map((member) => member.mobile));
+      await writeLog(chunk, result);
       if (!result.ok) {
         failures.push({ from: i, count: chunk.length, status: result.status, msg91: result.body });
         continue;
       }
-      // Stamp only after MSG91 accepted the chunk, so a failed chunk is retried by the next run.
-      const batch = db.batch();
-      chunk.forEach((member) => member.ids.forEach((id) => batch.update(db.collection("users").doc(id), { [SENT_FIELD]: todayKey })));
-      await batch.commit();
+      // A failed chunk is logged as "failed" and is retried by the next run; an
+      // accepted one is recorded in the log above, which is what stops a repeat.
       sent += chunk.length;
     }
 
-    return res.status(failures.length ? 207 : 200).json({ ...summary, sent, failed: recipients.length - sent, failures });
+    try {
+      await db.collection(RUNS_COLLECTION).doc(todayKey).set(
+        { date: todayKey, trigger, mode: config.mode, usersScanned: snapshot.size, toSend: recipients.length, sent, failed: recipients.length - sent, ranAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+    } catch (error) {
+      logErrors.push(error.message);
+    }
+
+    return res
+      .status(failures.length ? 207 : 200)
+      .json({ ...summary, sent, failed: recipients.length - sent, failures, ...(logErrors.length ? { logErrors } : {}) });
   } catch (error) {
     console.error("send-birthday-messages failed:", error);
     return res.status(500).json({ error: error.message || "Failed to send birthday messages." });

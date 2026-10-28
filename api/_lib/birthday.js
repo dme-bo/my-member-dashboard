@@ -82,3 +82,35 @@ export function toMsg91Mobile(phone, country = "91") {
   const national = digits.startsWith(country) ? digits.slice(country.length) : "";
   return national.length === 10 && /^[6-9]/.test(national) ? digits : "";
 }
+
+// ── Send log ────────────────────────────────────────────────────────────────
+// One document per recipient in `birthday_sms_log` (id: <date>_<memberId>), so
+// "who was messaged, when, and what did MSG91 say" can be answered later.
+export const LOG_COLLECTION = "birthday_sms_log";
+export const RUNS_COLLECTION = "birthday_sms_runs";
+
+// MSG91 returns one request id per API call (a whole chunk of numbers). It comes
+// back as raw text from the text API and as `message` from the template API.
+export const msg91RequestId = (body) => String(body?.raw ?? body?.message ?? "").slice(0, 120);
+
+export function smsLogEntries({ chunk, result, todayKey, trigger, mode, sentAt }) {
+  const status = result.ok ? "accepted" : "failed";
+  return chunk.flatMap((recipient) =>
+    recipient.ids.map((memberId) => ({
+      id: `${todayKey}_${memberId}`,
+      data: {
+        date: todayKey,
+        memberId,
+        name: recipient.name || "",
+        mobile: recipient.mobile,
+        status, // "accepted" = MSG91 took it; delivery to the handset is in MSG91's own report
+        msg91RequestId: result.ok ? msg91RequestId(result.body) : "",
+        error: result.ok ? "" : JSON.stringify(result.body ?? {}).slice(0, 500),
+        httpStatus: result.status ?? null,
+        mode,
+        trigger, // "cron" | "manual"
+        sentAt,
+      },
+    }))
+  );
+}
