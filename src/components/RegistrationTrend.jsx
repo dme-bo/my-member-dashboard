@@ -5,9 +5,9 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { parseMemberDate } from '../utils/memberFields';
 
 const PERIODS = {
-  Daily: { count: 14, defaultTarget: 5 },
-  Weekly: { count: 12, defaultTarget: 25 },
-  Monthly: { count: 12, defaultTarget: 100 },
+  Daily: { count: 14, defaultTarget: 25 },
+  Weekly: { count: 12, defaultTarget: 175 },
+  Monthly: { count: 12, defaultTarget: 750 },
 };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const STORAGE_KEY = 'registrationTargets';

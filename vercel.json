@@ -25,6 +25,10 @@
     {
       "path": "/api/deactivate-inactive-partners",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/send-birthday-messages",
+      "schedule": "30 2 * * *"
     }
   ],
   "functions": {
@@ -38,6 +42,9 @@
       "maxDuration": 30
     },
     "api/deactivate-inactive-partners.js": {
+      "maxDuration": 60
+    },
+    "api/send-birthday-messages.js": {
       "maxDuration": 60
     }
   }
