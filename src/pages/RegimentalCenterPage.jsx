@@ -621,28 +621,28 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
         .regimental-view-toggle { display: flex; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
         .regimental-view-toggle button { display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; padding: 0; border: none; background: #fff; color: #64748b; cursor: pointer; }
         .regimental-view-toggle button + button { border-left: 1px solid #dde1e7; }
-        .regimental-view-toggle button[aria-pressed="true"] { background: #e3f2fd; color: #1976d2; }
+        .regimental-view-toggle button[aria-pressed="true"] { background: #f1f6d6; color: #5f6f14; }
         .regimental-kanban { padding: 16px 32px 24px; background: #f8fafc; min-height: 100%; box-sizing: border-box; }
         .regimental-kanban-section + .regimental-kanban-section { margin-top: 20px; }
         .regimental-kanban-heading { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #334155; }
         .regimental-kanban-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
         .regimental-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: #fff; border: 1px solid #dde1e7; border-radius: 8px; cursor: pointer; text-align: left; }
-        .regimental-card:hover { border-color: #90caf9; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); }
-        .regimental-card:focus-visible { outline: 2px solid #1976d2; outline-offset: 2px; }
-        .regimental-card.is-selected { border-color: #1976d2; background: #f5faff; }
+        .regimental-card:hover { border-color: #d9e49a; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); }
+        .regimental-card:focus-visible { outline: 2px solid #c2d45e; outline-offset: 2px; }
+        .regimental-card.is-selected { border-color: #c2d45e; background: #f5faff; }
         .regimental-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
         .regimental-card-name { font-size: 14px; font-weight: 600; color: #111827; line-height: 1.3; }
         .regimental-card-line { font-size: 13px; color: #64748b; }
         .regimental-card-line span { color: #94a3b8; margin-right: 6px; }
         .regimental-card-foot { margin-top: 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .regimental-actions-col { width: 84px; text-align: center; cursor: default; }
-        .regimental-edit-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid #dde1e7; border-radius: 4px; background: #fff; color: #1976d2; font: inherit; font-size: 12px; cursor: pointer; }
-        .regimental-edit-btn:hover { background: #f5faff; border-color: #90caf9; }
+        .regimental-edit-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid #dde1e7; border-radius: 4px; background: #fff; color: #5f6f14; font: inherit; font-size: 12px; cursor: pointer; }
+        .regimental-edit-btn:hover { background: #f5faff; border-color: #d9e49a; }
         .regimental-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .regimental-field-hint { margin-top: 4px; font-size: 12px; color: #64748b; }
         .regimental-field input[type="text"], .regimental-field input[type="tel"], .regimental-field input[type="email"], .regimental-field input:not([type]) { width: 100%; box-sizing: border-box; }
         @media (max-width: 560px) { .regimental-field-row { grid-template-columns: 1fr; } }
-        .regimental-group-count { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; }
+        .regimental-group-count { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #f1f6d6; color: #4a5a12; font-size: 12px; font-weight: 600; }
         .regimental-meta-row {
           display: flex;
           flex-wrap: wrap;
@@ -673,8 +673,8 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
           cursor: pointer;
           white-space: nowrap;
         }
-        .regimental-btn-primary { background: #1976d2; border-color: #1976d2; color: #fff; }
-        .regimental-btn-primary:hover { background: #1565c0; }
+        .regimental-btn-primary { background: #c2d45e; border-color: #c2d45e; color: #243014; }
+        .regimental-btn-primary:hover { background: #aabd3f; }
         .regimental-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
@@ -695,8 +695,8 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
           min-width: 1100px;
         }
         .regimental-table th {
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           text-align: left;
           height: 45px;
           padding: 0 10px;
@@ -721,8 +721,8 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
         .regimental-table .regimental-cb-col { width: 36px; padding: 0; text-align: center; }
         .regimental-table tbody tr { cursor: pointer; background: #fff; }
         .regimental-table tbody tr:nth-child(odd) { background: #f8fafc; }
-        .regimental-table tbody tr.is-selected { background: #e3f2fd; }
-        .regimental-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .regimental-table tbody tr.is-selected { background: #f1f6d6; }
+        .regimental-cb { width: 13px; height: 13px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
         .regimental-table th .regimental-cb { width: 14px; height: 14px; accent-color: #ffffff; }
         .regimental-tag-badge {
           display: inline-flex;
@@ -767,8 +767,8 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: linear-gradient(135deg, #0f766e, #1976d2);
-          color: #fff;
+          background: linear-gradient(135deg, #0f766e, #c2d45e);
+          color: #243014;
           border-top-left-radius: 16px;
           border-top-right-radius: 16px;
         }
@@ -860,7 +860,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
           background: #f8fafc;
         }
         .regimental-member-row.selected {
-          background: #eff6ff;
+          background: #f1f6d6;
         }
         .regimental-member-name {
           font-weight: 600;

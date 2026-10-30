@@ -48,7 +48,7 @@ function AccordionSection({ label, options, selected, onChange, defaultOpen }) {
         <span>
           {label}
           {selected.length > 0 && (
-            <span style={{ marginLeft: "6px", fontWeight: 600, fontSize: "12px", color: "#1976d2" }}>({selected.length})</span>
+            <span style={{ marginLeft: "6px", fontWeight: 600, fontSize: "12px", color: "var(--accent-text, #c2d45e)" }}>({selected.length})</span>
           )}
         </span>
         <ChevronIcon open={open} />
@@ -67,7 +67,7 @@ function AccordionSection({ label, options, selected, onChange, defaultOpen }) {
                   style={{
                     padding: "7px 12px 7px 22px",
                     fontSize: "13px",
-                    color: active ? "#1976d2" : "#0f766e",
+                    color: active ? "var(--accent-text, #c2d45e)" : "#0f766e",
                     fontWeight: active ? 700 : 500,
                     cursor: "pointer",
                     display: "flex",

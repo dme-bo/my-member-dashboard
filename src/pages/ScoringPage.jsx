@@ -129,8 +129,8 @@ export default function ScoringPage({ memberRecords = [], membersLoading = false
               disabled={saving}
               style={{
                 padding: "6px 14px",
-                background: saving ? "#90caf9" : "#1976d2",
-                color: "#fff",
+                background: saving ? "#d9e49a" : "#c2d45e",
+                color: "#243014",
                 border: "none",
                 borderRadius: 6,
                 fontSize: 13,

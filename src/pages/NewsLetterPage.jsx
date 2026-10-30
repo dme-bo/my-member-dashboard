@@ -291,7 +291,7 @@ const sidebarSelectStyles = {
     minHeight: '30px',
     fontSize: '12px',
     border: 'none',
-    borderBottom: `1px solid ${state.isFocused ? '#1976d2' : '#dde1e7'}`,
+    borderBottom: `1px solid ${state.isFocused ? '#c2d45e' : '#dde1e7'}`,
     borderRadius: 0,
     boxShadow: 'none',
     background: 'transparent',
@@ -1370,7 +1370,7 @@ export default function BriskOliveNewsletterApp() {
               textAlign: 'center'
             }}
           >
-            <h3 style={{ marginTop: 0, color: '#1976d2' }}>Save Changes?</h3>
+            <h3 style={{ marginTop: 0, color: '#5f6f14' }}>Save Changes?</h3>
             <p style={{ color: '#4b5563', margin: '1rem 0 1.8rem' }}>
               This will update the newsletter configuration with the modified fields.
             </p>
@@ -1458,8 +1458,8 @@ export default function BriskOliveNewsletterApp() {
         .nl-outline-btn { border: 1px solid #dde1e7; background: #fff; color: #334155; }
         .nl-outline-btn:hover { background: #f8fafc; }
         .nl-outline-btn.is-disabled { color: #94a3b8; cursor: not-allowed; }
-        .nl-primary-btn { border: 1px solid #1976d2; background: #1976d2; color: #fff; font-weight: 600; }
-        .nl-primary-btn:hover { background: #1565c0; }
+        .nl-primary-btn { border: 1px solid #c2d45e; background: #c2d45e; color: #243014; font-weight: 600; }
+        .nl-primary-btn:hover { background: #aabd3f; }
         .nl-primary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .nl-range { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; margin-right: 2px; }
         .nl-icon-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #dde1e7; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; }
@@ -1589,8 +1589,8 @@ export default function BriskOliveNewsletterApp() {
         }
 
         .modal-save-btn {
-          background: #1976d2;
-          color: white;
+          background: #c2d45e;
+          color: #243014;
         }
 
         .loading {

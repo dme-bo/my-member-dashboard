@@ -29,7 +29,7 @@ export default function TableLoadingSpinner({ label = "Loading…" }) {
           height: "32px",
           borderRadius: "50%",
           border: "3px solid #dbe7f5",
-          borderTopColor: "#1976d2",
+          borderTopColor: "var(--accent, #c2d45e)",
           animation: "table-loading-spin 0.8s linear infinite",
         }}
       />

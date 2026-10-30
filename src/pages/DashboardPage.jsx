@@ -86,7 +86,7 @@ const BAR_CHART_OPTIONS = {
   layout: { padding: { top: 30 } },
 };
 
-const SINGLE_BAR_COLORS = Array(15).fill('#1976d2');
+const SINGLE_BAR_COLORS = Array(15).fill('#c2d45e');
 const makePct =(total) => (value) => (total ? ((value / total) * 100).toFixed(1) : '0.0');
 
 // Horizontal bars: service / rank names are long, and a ranked list reads
@@ -143,7 +143,7 @@ function BarList({ entries, total, color }) {
   );
 }
 
-const BO_PRIMARY = '#1976d2';
+const BO_PRIMARY = '#c2d45e';
 const BO_ACCENT = '#c98a2e';
 const BO_MUTED = '#9aa39a';
 const TYPE_PILL_CLASS = { job: 'bo-t-job', tcs: 'bo-t-tcs', project: 'bo-t-proj' };
@@ -541,7 +541,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
   };
 
   const createChartData = (counts, colors = [
-    '#1976d2', '#43a047', '#e53935', '#fb8c00', '#7e57c2',
+    '#c2d45e', '#43a047', '#e53935', '#fb8c00', '#7e57c2',
     '#00897b', '#0288d1', '#f4511e', '#3949ab', '#546e7a',
   ]) => ({
     labels: Object.keys(counts),
@@ -619,7 +619,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .dashboard-view-toggle {
           display: inline-flex;
           margin-bottom: 18px;
-          border: 1px solid #1976d2;
+          border: 1px solid #c2d45e;
           border-radius: 8px;
           overflow: hidden;
           background: #fff;
@@ -629,19 +629,19 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           padding: 9px 26px;
           border: none;
           background: #fff;
-          color: #1976d2;
+          color: #5f6f14;
           font-size: 14px;
           font-weight: 700;
           cursor: pointer;
         }
 
         .dashboard-view-toggle button + button {
-          border-left: 1px solid #1976d2;
+          border-left: 1px solid #c2d45e;
         }
 
         .dashboard-view-toggle button.active {
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
         }
 
         /* Members view header matches the Finance view's flat band (.fin-header). */
@@ -673,7 +673,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
         .member-date-range-wrapper { width: 100%; }
         .member-date-range-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 12px; color: #111827; outline: none; font-family: inherit; }
-        .member-date-range-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+        .member-date-range-input:focus { border-color: #c2d45e; box-shadow: 0 0 0 3px rgba(194, 212, 94, 0.12); }
         #member-date-range-portal { position: relative; z-index: 10200; }
         .member-date-range-popper { z-index: 10200; }
 
@@ -753,8 +753,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .filter-group select:focus {
-          border-color: #1976d2;
-          box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.12);
+          border-color: #c2d45e;
+          box-shadow: 0 0 0 3px rgba(194, 212, 94, 0.12);
         }
 
         .filter-group select option {
@@ -786,8 +786,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .date-range-row input[type="date"]:focus,
         .date-range-row select:focus,
         .date-picker-input:focus {
-          border-color: #2563eb;
-          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+          border-color: #c2d45e;
+          box-shadow: 0 0 0 4px rgba(194, 212, 94, 0.12);
         }
 
         .date-picker-wrapper {
@@ -858,8 +858,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .clear-btn {
           min-height: 40px;
           padding: 0 18px;
-          background: #1976d2;
-          color: white;
+          background: #c2d45e;
+          color: #243014;
           border: none;
           border-radius: 8px;
           font-weight: 600;
@@ -871,7 +871,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .clear-btn:hover {
-          background: #1565c0;
+          background: #aabd3f;
         }
 
         .stats-grid {
@@ -911,7 +911,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           font-size: 1.4rem;
         }
 
-        .card-icon.blue { background: #1976d2; }
+        .card-icon.blue { background: #c2d45e; color: #243014; }
         .card-icon.red { background: #475569; }
         .card-icon.new { background: #43a047; }
         .card-icon.quarter { background: #fb8c00; }
@@ -924,7 +924,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
         .stat-card.clickable:focus-visible,
         .requirement-block:focus-visible {
-          outline: 2px solid #1976d2;
+          outline: 2px solid #c2d45e;
           outline-offset: 2px;
         }
 
@@ -972,9 +972,9 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .requirement-type-filter button.active {
-          background: #1976d2;
-          border-color: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          border-color: #c2d45e;
+          color: #243014;
         }
 
         .requirement-grid {
@@ -999,8 +999,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
 
         .requirement-block:hover {
           transform: translateY(-2px);
-          border-color: #1976d2;
-          box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+          border-color: #c2d45e;
+          box-shadow: 0 4px 12px rgba(194, 212, 94, 0.15);
         }
 
         .requirement-type {
@@ -1009,8 +1009,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           border-radius: 10px;
           font-size: 11px;
           font-weight: 700;
-          color: #fff;
-          background: #1976d2;
+          color: #243014;
+          background: #c2d45e;
         }
 
         .requirement-type.project { background: #43a047; }
@@ -1039,7 +1039,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           margin-top: 6px;
           font-size: 1.5rem;
           font-weight: 700;
-          color: #1976d2;
+          color: #5f6f14;
         }
 
         .requirement-count span {
@@ -1129,8 +1129,8 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         .raw-data-search:focus {
-          border-color: #1976d2;
-          box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15);
+          border-color: #c2d45e;
+          box-shadow: 0 0 0 3px rgba(194, 212, 94, 0.15);
         }
 
         .raw-data-grid {
@@ -1195,12 +1195,12 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .state-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: 20px; align-items: start; }
         .state-table-wrap { max-height: 480px; overflow-y: auto; border: 1px solid #e5eaf1; border-radius: 8px; }
         .state-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .state-table th { position: sticky; top: 0; z-index: 3; background: #1976d2; color: #fff; text-align: left; font-weight: 600; padding: 9px 12px; }
+        .state-table th { position: sticky; top: 0; z-index: 3; background: #c2d45e; color: #243014; text-align: left; font-weight: 600; padding: 9px 12px; }
         .state-table th:nth-child(n+2), .state-table td.num { text-align: right; }
         .state-table td { padding: 7px 12px; border-bottom: 1px solid #eef1f5; color: #334155; }
         .state-table td.num { font-variant-numeric: tabular-nums; font-weight: 600; color: #0f172a; }
         .state-table td.pct { position: relative; z-index: 0; min-width: 110px; }
-        .state-table .pct-bar { position: absolute; left: 12px; top: 50%; height: 16px; transform: translateY(-50%); background: #dbeafe; border-radius: 3px; max-width: calc(100% - 24px); }
+        .state-table .pct-bar { position: absolute; left: 12px; top: 50%; height: 16px; transform: translateY(-50%); background: #e6eeb0; border-radius: 3px; max-width: calc(100% - 24px); }
         .state-table .pct-text { position: relative; display: block; text-align: right; font-variant-numeric: tabular-nums; }
         .state-table tfoot td { position: sticky; bottom: 0; z-index: 3; background: #f1f5f9; font-weight: 700; border-top: 1px solid #cbd5e1; }
         @media (max-width: 900px) { .state-split { grid-template-columns: 1fr; } }
@@ -1222,7 +1222,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
           text-align: center;
           color: #1a2332;
           padding-bottom: 12px;
-          border-bottom: 2px solid #e3f2fd;
+          border-bottom: 2px solid #f1f6d6;
         }
 
         .chart-container {
@@ -1365,6 +1365,13 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         }
 
         
+        /* Accent used by the shared controls (Filters, Group By, Favorites, sliders, loader) */
+        .dashboard-container {
+          --accent: #c2d45e;
+          --accent-hover: #aabd3f;
+          --accent-text: #5f6f14;
+          --on-accent: #243014;
+        }
         /* ── Dashboard design: cards, KPI pills, bar lists ───────────────── */
         .dashboard-container.members-mode { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #212529; }
         .dash-title { flex-wrap: wrap; align-items: center; gap: 14px; }
@@ -1375,7 +1382,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .bo-kpi b { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
         .bo-kpi-success { border-color: #c6e5cf; background: #e6f4ea; color: #1e6b32; }
         .bo-kpi-danger { border-color: #f5c9c9; background: #fdecec; color: #9b1c1c; }
-        .bo-kpi-info { border-color: #c9dcf3; background: #e8f1fb; color: #0d5aa7; }
+        .bo-kpi-info { border-color: #d9e49a; background: #f1f6d6; color: #4a5a12; }
         .bo-kpi-warning { border-color: #f3dcae; background: #fdf3e1; color: #8a5300; }
         button.bo-kpi { cursor: pointer; transition: box-shadow .15s; }
         button.bo-kpi:hover { box-shadow: 0 1px 4px rgba(0,0,0,.14); }
@@ -1384,19 +1391,19 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .bo-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
         .bo-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
         @media (max-width: 900px) { .bo-grid-2 { grid-template-columns: 1fr; } }
-        .bo-th { padding: 9px 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; }
+        .bo-th { padding: 9px 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; }
         .bo-td { padding: 8px 10px; border-top: 1px solid #e9ecef; font-size: 13px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
         .bo-num { text-align: right; font-variant-numeric: tabular-nums; }
         .bo-row:nth-child(odd) { background: #f7f8fb; }
         .bo-trunc { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
         .bo-type { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-        .bo-t-job { background: #e8f1fb; color: #0d5aa7; }
+        .bo-t-job { background: #f1f6d6; color: #4a5a12; }
         .bo-t-tcs { background: #fdf3e1; color: #8a5300; }
         .bo-t-proj { background: #e6f4ea; color: #1e6b32; }
         .bo-chip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 13px; font: inherit; font-size: 12px; color: #3c4047; cursor: pointer; }
-        .bo-chip[aria-pressed="true"] { background: #1976d2; border-color: #1976d2; color: #fff; }
-        .bo-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; color: #1976d2; font-size: 13px; cursor: pointer; }
-        .bo-link:hover { color: #0d5aa7; text-decoration: underline; }
+        .bo-chip[aria-pressed="true"] { background: #c2d45e; border-color: #c2d45e; color: #243014; }
+        .bo-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; color: #5f6f14; font-size: 13px; cursor: pointer; }
+        .bo-link:hover { color: #4a5a12; text-decoration: underline; }
         td.bo-num .bo-link { font-weight: 600; }
         .bo-bars { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
         .bo-bar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 118px; align-items: center; gap: 10px; font-size: 13px; color: #3c4047; }
@@ -1411,7 +1418,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .bo-legend-row b { color: #1d2127; }
         .bo-legend-row small { color: #64748b; }
         .bo-tog { display: inline-flex; align-items: center; height: 28px; padding: 0 14px; border: 1px solid #cfd4da; background: #fff; font: inherit; font-size: 14px; color: #3c4047; cursor: pointer; }
-        .bo-tog[aria-pressed="true"] { background: #1976d2; border-color: #1976d2; color: #fff; font-weight: 600; }
+        .bo-tog[aria-pressed="true"] { background: #c2d45e; border-color: #c2d45e; color: #243014; font-weight: 600; }
         .bo-tog:first-child { border-radius: 4px 0 0 4px; }
         .bo-tog:last-child { border-radius: 0 4px 4px 0; }
         .bo-tog + .bo-tog { margin-left: -1px; }
@@ -1651,7 +1658,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
                     options={{
                       region: 'IN',
                       resolution: 'provinces',
-                      colorAxis: { colors: ['#e3f2fd', '#1976d2'] },
+                      colorAxis: { colors: ['#f1f6d6', '#9db235'] },
                       backgroundColor: 'transparent',
                       datalessRegionColor: '#f0f4f8',
                       keepAspectRatio: false,

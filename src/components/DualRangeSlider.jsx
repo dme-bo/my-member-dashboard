@@ -91,7 +91,7 @@ export default function DualRangeSlider({
             { value: safeMax, label: `${safeMax}${suffix}` },
           ]}
           sx={{
-            color: "#2563eb",
+            color: "var(--accent-text, #c2d45e)",
             height: 8,
             "& .MuiSlider-rail": {
               opacity: 1,
@@ -99,16 +99,16 @@ export default function DualRangeSlider({
             },
             "& .MuiSlider-track": {
               border: "none",
-              background: "linear-gradient(90deg, #10b981 0%, #2563eb 100%)",
+              background: "linear-gradient(90deg, var(--accent-hover, #10b981) 0%, var(--accent, #c2d45e) 100%)",
             },
             "& .MuiSlider-thumb": {
               height: 20,
               width: 20,
               backgroundColor: "#fff",
-              border: "2px solid #2563eb",
+              border: "2px solid var(--accent, #c2d45e)",
               boxShadow: "0 2px 8px rgba(15, 23, 42, 0.18)",
               "&:focus, &:hover, &.Mui-active": {
-                boxShadow: "0 0 0 8px rgba(37, 99, 235, 0.15)",
+                boxShadow: "0 0 0 8px color-mix(in srgb, var(--accent, #c2d45e) 30%, transparent)",
               },
             },
             "& .MuiSlider-mark": {

@@ -608,8 +608,8 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           font-family: inherit;
         }
         .member-date-range-input:focus {
-          border-color: #2563eb;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+          border-color: #c2d45e;
+          box-shadow: 0 0 0 3px rgba(194, 212, 94, 0.12);
         }
         #member-date-range-portal { position: relative; z-index: 10200; }
         .member-date-range-popper { z-index: 10200; }
@@ -653,7 +653,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           text-align: left;
           cursor: pointer;
         }
-        .group-panel-item:hover { background: #e3f2fd; color: #1565c0; }
+        .group-panel-item:hover { background: #f1f6d6; color: #4a5a12; }
         .group-panel-item span:last-child { font-size: 12px; color: #64748b; flex-shrink: 0; }
         .location-meta-row {
           display: flex;
@@ -692,10 +692,10 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
         }
         .layer-panel legend { padding: 0; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #111827; float: left; width: 100%; }
         .layer-panel label { clear: both; display: flex; align-items: center; gap: 7px; height: 24px; cursor: pointer; white-space: nowrap; }
-        .layer-panel input { margin: 0; accent-color: #1976d2; cursor: pointer; }
+        .layer-panel input { margin: 0; accent-color: #c2d45e; cursor: pointer; }
         .layer-count { margin-left: auto; padding-left: 10px; color: #64748b; font-variant-numeric: tabular-nums; }
         .layer-swatch { width: 10px; height: 10px; flex-shrink: 0; }
-        .layer-swatch.members { border-radius: 50%; background: #1976d2; }
+        .layer-swatch.members { border-radius: 50%; background: #c2d45e; }
         .layer-swatch.centre { transform: rotate(45deg); border-radius: 2px; }
         .loc-centre-icon span {
           display: flex;
@@ -742,18 +742,18 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           width: 44px;
           height: 44px;
           border-radius: 50%;
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           font-weight: 700;
           border: 3px solid rgba(255, 255, 255, 0.9);
-          box-shadow: 0 2px 8px rgba(25, 118, 210, 0.45);
+          box-shadow: 0 2px 8px rgba(194, 212, 94, 0.45);
         }
         .loc-member-icon span {
           display: block;
           width: 18px;
           height: 18px;
           border-radius: 50%;
-          background: #1976d2;
+          background: #c2d45e;
           border: 3px solid #fff;
           box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
         }
@@ -832,10 +832,10 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           flex: 0 0 auto;
         }
         .legend-dot.single {
-          background: linear-gradient(180deg, #38bdf8 0%, #2563eb 100%);
+          background: linear-gradient(180deg, #38bdf8 0%, #c2d45e 100%);
         }
         .legend-dot.cluster {
-          background: linear-gradient(180deg, #60a5fa 0%, #1d4ed8 100%);
+          background: linear-gradient(180deg, #60a5fa 0%, #aabd3f 100%);
         }
         .member-contact-card {
           position: absolute;
@@ -868,15 +868,15 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           width: 44px;
           height: 44px;
           border-radius: 999px;
-          background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
-          color: #fff;
+          background: linear-gradient(135deg, #c2d45e 0%, #38bdf8 100%);
+          color: #243014;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-size: 16px;
           font-weight: 800;
           flex: 0 0 auto;
-          box-shadow: 0 10px 18px rgba(37, 99, 235, 0.22);
+          box-shadow: 0 10px 18px rgba(194, 212, 94, 0.22);
         }
         .member-name-block {
           min-width: 0;
@@ -893,9 +893,9 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           color: #64748b;
         }
         .member-contact-close {
-          border: 1px solid rgba(37, 99, 235, 0.16);
-          background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
-          color: #1d4ed8;
+          border: 1px solid rgba(194, 212, 94, 0.16);
+          background: linear-gradient(135deg, #f1f6d6 0%, #ffffff 100%);
+          color: #4a5a12;
           width: 36px;
           height: 36px;
           border-radius: 999px;
@@ -903,7 +903,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.14);
+          box-shadow: 0 8px 18px rgba(194, 212, 94, 0.14);
         }
         .member-contact-card__body {
           padding: 14px 16px 16px;
@@ -919,7 +919,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           line-height: 1.4;
         }
         .member-contact-row svg {
-          color: #2563eb;
+          color: #5f6f14;
           flex: 0 0 auto;
         }
         .member-contact-actions {
@@ -940,13 +940,13 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           font-weight: 700;
         }
         .member-contact-actions .primary {
-          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-          color: #fff;
-          box-shadow: 0 12px 24px rgba(37, 99, 235, 0.2);
+          background: linear-gradient(135deg, #c2d45e 0%, #aabd3f 100%);
+          color: #243014;
+          box-shadow: 0 12px 24px rgba(194, 212, 94, 0.2);
         }
         .member-contact-actions .secondary {
-          background: #eff6ff;
-          color: #1d4ed8;
+          background: #f1f6d6;
+          color: #4a5a12;
         }
         .cluster-details-card {
           position: absolute;
@@ -983,8 +983,8 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
         }
         .cluster-details-close {
           border: none;
-          background: #eff6ff;
-          color: #1d4ed8;
+          background: #f1f6d6;
+          color: #4a5a12;
           width: 34px;
           height: 34px;
           border-radius: 999px;
@@ -1064,9 +1064,9 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           width: 10px;
           height: 10px;
           border-radius: 999px;
-          background: linear-gradient(180deg, #38bdf8 0%, #2563eb 100%);
+          background: linear-gradient(180deg, #38bdf8 0%, #c2d45e 100%);
           margin-top: 5px;
-          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+          box-shadow: 0 0 0 4px rgba(194, 212, 94, 0.12);
         }
       `}</style>
 

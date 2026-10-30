@@ -348,15 +348,15 @@ export default function PartnerAgentListPage() {
           marginBottom: "20px"
         }}>
           <div style={{
-            backgroundColor: "#dbeafe",
-            color: "#1976d2",
+            backgroundColor: "#e6eeb0",
+            color: "#5f6f14",
             padding: "12px 24px",
             borderRadius: "12px",
             fontSize: "20px",
             fontWeight: "700",
             minWidth: "220px",
             textAlign: "center",
-            border: "3px solid #1976d2",
+            border: "3px solid #c2d45e",
           }}>
             Total Agents: <strong>{loading ? "—" : totalItems}</strong>
           </div>
@@ -494,8 +494,8 @@ export default function PartnerAgentListPage() {
                     onClick={() => setCurrentPage(p => p - 1)}
                     style={{
                       padding: "8px 14px",
-                      background: "#1976d2",
-                      color: "#fff",
+                      background: "#c2d45e",
+                      color: "#243014",
                       border: "none",
                       borderRadius: "4px",
                       opacity: currentPage === 1 ? 0.5 : 1,
@@ -509,8 +509,8 @@ export default function PartnerAgentListPage() {
                     onClick={() => setCurrentPage(p => p + 1)}
                     style={{
                       padding: "8px 14px",
-                      background: "#1976d2",
-                      color: "#fff",
+                      background: "#c2d45e",
+                      color: "#243014",
                       border: "none",
                       borderRadius: "4px",
                       opacity: (currentPage === totalPages || rowsPerPage === Infinity) ? 0.5 : 1,
@@ -588,8 +588,8 @@ export default function PartnerAgentListPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1976d2",
-                  color: "#fff",
+                  backgroundColor: "#c2d45e",
+                  color: "#243014",
                   display: "flex",
                   alignItems: "center",
                   flexShrink: 0,
@@ -622,8 +622,8 @@ export default function PartnerAgentListPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1976d2" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1976d2" : "none",
+                      color: activeTab === tab ? "#c2d45e" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #c2d45e" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -664,8 +664,8 @@ export default function PartnerAgentListPage() {
                           disabled={notesLoading}
                           style={{
                             padding: "10px 20px",
-                            backgroundColor: "#2563eb",
-                            color: "white",
+                            backgroundColor: "#c2d45e",
+                            color: "#243014",
                             border: "none",
                             borderRadius: "6px",
                             fontWeight: "500",
@@ -698,8 +698,8 @@ export default function PartnerAgentListPage() {
                                   <label style={{ fontSize: "13px", color: "#6b7280" }}>Agent Name</label>
                                   <input type="text" value={note.contactPerson} readOnly style={{
                                     width: "100%", padding: "10px", borderRadius: "6px",
-                                    border: "1px solid #3b82f6", backgroundColor: "#eff6ff",
-                                    fontWeight: "500", color: "#1976d2",
+                                    border: "1px solid #c2d45e", backgroundColor: "#f1f6d6",
+                                    fontWeight: "500", color: "#5f6f14",
                                   }} />
                                 </div>
                                 <div style={{ flex: 2 }}>
@@ -772,7 +772,7 @@ export default function PartnerAgentListPage() {
                         <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                             <thead>
-                              <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
+                              <tr style={{ backgroundColor: "#c2d45e", color: "#243014" }}>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Agent Name</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
@@ -805,8 +805,8 @@ export default function PartnerAgentListPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1976d2",
-                    color: "#fff",
+                    background: "#c2d45e",
+                    color: "#243014",
                     border: "none",
                     borderRadius: "6px",
                     fontSize: "16px",
@@ -847,7 +847,7 @@ function AgentCard({ agent, onClick }) {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
         {agent.city && (
-          <span style={{ padding: "3px 10px", borderRadius: "20px", background: "#eff6ff", color: "#1976d2", fontSize: "11.5px", fontWeight: 600 }}>
+          <span style={{ padding: "3px 10px", borderRadius: "20px", background: "#f1f6d6", color: "#5f6f14", fontSize: "11.5px", fontWeight: 600 }}>
             {agent.city}
           </span>
         )}

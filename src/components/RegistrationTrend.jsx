@@ -86,17 +86,17 @@ export default function RegistrationTrend({ members }) {
       {
         label: 'Actual',
         data: rows.map((r) => r.actual),
-        borderColor: '#1976d2',
-        backgroundColor: 'rgba(25, 118, 210, 0.12)',
+        borderColor: '#c2d45e',
+        backgroundColor: 'rgba(194, 212, 94, 0.12)',
         borderWidth: 3,
         tension: 0.3,
         fill: true,
         // a point is solid blue when that period met the target, hollow when it fell short
         pointRadius: 5,
         pointHoverRadius: 7,
-        pointBorderColor: '#1976d2',
+        pointBorderColor: '#c2d45e',
         pointBorderWidth: 2,
-        pointBackgroundColor: rows.map((r) => (r.actual >= target ? '#1976d2' : '#fff')),
+        pointBackgroundColor: rows.map((r) => (r.actual >= target ? '#c2d45e' : '#fff')),
         order: 2,
       },
       {
@@ -185,10 +185,10 @@ export default function RegistrationTrend({ members }) {
         <span className={`bo-kpi ${changeTone}`}><b>{fmtPct(current.change)}</b>vs previous ({previous.actual.toLocaleString()})</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: '#5f6670' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#1976d2', border: '2px solid #1976d2', boxSizing: 'border-box' }} />Met target
+            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#c2d45e', border: '2px solid #c2d45e', boxSizing: 'border-box' }} />Met target
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', border: '2px solid #1976d2', boxSizing: 'border-box' }} />Below target
+            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', border: '2px solid #c2d45e', boxSizing: 'border-box' }} />Below target
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span aria-hidden="true" style={{ width: 14, borderTop: '2px dashed #e53935' }} />Target

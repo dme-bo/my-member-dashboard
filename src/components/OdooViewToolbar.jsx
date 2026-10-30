@@ -177,7 +177,7 @@ function FiltersMenu({ quickFilters, advancedContent, boxed }) {
                     padding: "8px 14px",
                     fontSize: "13px",
                     fontWeight: f.active ? 700 : 500,
-                    color: f.active ? "#1976d2" : "#334155",
+                    color: f.active ? "var(--accent-text, #c2d45e)" : "#334155",
                     cursor: "pointer",
                   }}
                 >
@@ -248,7 +248,7 @@ function GroupByMenu({ groupByOptions, groupBy, onGroupByChange, boxed }) {
                     padding: "8px 14px",
                     fontSize: "13px",
                     fontWeight: active ? 700 : 500,
-                    color: active ? "#1976d2" : "#334155",
+                    color: active ? "var(--accent-text, #c2d45e)" : "#334155",
                     cursor: "pointer",
                   }}
                 >
@@ -272,7 +272,7 @@ function GroupByMenu({ groupByOptions, groupBy, onGroupByChange, boxed }) {
             <button
               type="button"
               onClick={() => { onGroupByChange(customField); setOpen(false); }}
-              style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: "#1976d2", color: "#fff", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}
+              style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: "var(--accent, #c2d45e)", color: "var(--on-accent, #243014)", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}
             >
               Apply
             </button>

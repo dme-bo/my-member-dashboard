@@ -33,7 +33,7 @@ const getFinalStatusColors = (status) => {
   if (!normalized) return { backgroundColor: "#f1f5f9", color: "#475569" };
   if (/(backout|reject|fail|drop)/.test(normalized)) return { backgroundColor: "#fee2e2", color: "#991b1b" };
   if (/(select|offer|join|hire)/.test(normalized)) return { backgroundColor: "#d1fae5", color: "#065f46" };
-  return { backgroundColor: "#dbeafe", color: "#1e40af" };
+  return { backgroundColor: "#e6eeb0", color: "#4a5a12" };
 };
 
 const RATING_TYPES = {
@@ -708,7 +708,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
           subject: `New Interaction Logged for ${fullName}`,
           heading: "New Interaction Logged",
           subheading: fullName,
-          accentColor: "#1976d2",
+          accentColor: "#c2d45e",
           fields: [
             { label: "Member", value: fullName },
             { label: "Notes", value: note.notes.trim() || "-" },
@@ -1277,7 +1277,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                             {appliedJobs.map((app) => {
                               const liveStatus = jobApplicationStatus.byJobId.get(app.id) || jobApplicationStatus.fallback;
                               return (
-                                <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                                <div key={app.id} style={{ padding: "12px 16px", borderRadius: "10px", background: "#f1f6d6", border: "1px solid #d9e49a", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
                                   <div>
                                     <div style={{ fontWeight: 600, color: "#1f2937" }}>{app.title}</div>
                                     <div style={{ fontSize: "12.5px", color: "#0c4a6e" }}>{app.company} · {app.status}</div>
@@ -1373,7 +1373,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                 <div>
                   <strong>Resume:</strong>{" "}
                   {normalizedMember.resume_fileurl ? (
-                    <a href={normalizedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
+                    <a href={normalizedMember.resume_fileurl} target="_blank" rel="noopener noreferrer" style={{ color: "#5f6f14" }}>
                       View Resume
                     </a>
                   ) : "Not Uploaded"}
@@ -1381,7 +1381,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                 <div>
                   <strong>Photo:</strong>{" "}
                   {normalizedMember.photo_url ? (
-                    <a href={normalizedMember.photo_url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
+                    <a href={normalizedMember.photo_url} target="_blank" rel="noopener noreferrer" style={{ color: "#5f6f14" }}>
                       View Photo
                     </a>
                   ) : "Not Uploaded"}
@@ -1406,8 +1406,8 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                         disabled={loading}
                         style={{
                           padding: "10px 20px",
-                          backgroundColor: "#2563eb",
-                          color: "white",
+                          backgroundColor: "#c2d45e",
+                          color: "#243014",
                           border: "none",
                           borderRadius: "6px",
                           fontWeight: "500",
@@ -1450,10 +1450,10 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                                   width: "100%",
                                   padding: "10px",
                                   borderRadius: "6px",
-                                  border: "1px solid #3b82f6",
-                                  backgroundColor: "#eff6ff",
+                                  border: "1px solid #c2d45e",
+                                  backgroundColor: "#f1f6d6",
                                   fontWeight: "500",
-                                  color: "#1976d2",
+                                  color: "#5f6f14",
                                 }}
                               />
                             </div>
@@ -1739,7 +1739,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                     <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                         <thead>
-                          <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
+                          <tr style={{ backgroundColor: "#c2d45e", color: "#243014" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
@@ -1757,7 +1757,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                               <tr
                                 key={note.id}
                                 style={{
-                                  backgroundColor: isEditing ? "#eff6ff" : index % 2 === 0 ? "#f9fafb" : "#ffffff",
+                                  backgroundColor: isEditing ? "#f1f6d6" : index % 2 === 0 ? "#f9fafb" : "#ffffff",
                                 }}
                               >
                                 <td style={{ padding: "12px 16px", verticalAlign: "top", borderBottom: "1px solid #e5e7eb" }}>
@@ -1860,7 +1860,7 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                                     <div style={{ display: "flex", gap: "8px" }}>
                                       <button
                                         onClick={() => startEditNote(note)}
-                                        style={{ padding: "6px 14px", backgroundColor: "#2563eb", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
+                                        style={{ padding: "6px 14px", backgroundColor: "#c2d45e", color: "#243014", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
                                       >
                                         Edit
                                       </button>
@@ -1913,9 +1913,9 @@ export default function MemberDetailModal({ member, onClose, onOpenTag, onOpenPa
                               width: "100%",
                               padding: "11px 12px",
                               borderRadius: "8px",
-                              border: "1px solid #bfdbfe",
-                              backgroundColor: "#eff6ff",
-                              color: "#1d4ed8",
+                              border: "1px solid #d9e49a",
+                              backgroundColor: "#f1f6d6",
+                              color: "#4a5a12",
                               fontWeight: "600",
                             }}
                           />

@@ -535,7 +535,7 @@ export default function CommunityJobsPage() {
           <p style={{ color: "#4b5563", marginBottom: "24px" }}>{error}</p>
           <button
             onClick={fetchJobs}
-            style={{ padding: "12px 32px", backgroundColor: "#1976d2", color: "white", border: "none", borderRadius: "12px", fontWeight: "600", cursor: "pointer", fontSize: "1rem" }}
+            style={{ padding: "12px 32px", backgroundColor: "#c2d45e", color: "#243014", border: "none", borderRadius: "12px", fontWeight: "600", cursor: "pointer", fontSize: "1rem" }}
           >
             Retry
           </button>
@@ -560,7 +560,7 @@ export default function CommunityJobsPage() {
         }
         .date-picker-input:focus {
           outline: none;
-          border-color: #1976d2;
+          border-color: #c2d45e;
         }
         /* Header band + table mirror the Members Master List (MemberListPage). */
         .cj-header { background: #fff; padding: 32px 32px 16px; width: 100%; box-sizing: border-box; }
@@ -577,8 +577,8 @@ export default function CommunityJobsPage() {
         .member-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
         .cj-meta-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-height: 34px; }
         .cj-meta-actions { margin-right: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-        .cj-primary { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #1976d2; background: #1976d2; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 500; color: #fff; cursor: pointer; white-space: nowrap; }
-        .cj-primary:hover { background: #1565c0; }
+        .cj-primary { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #c2d45e; background: #c2d45e; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 500; color: #243014; cursor: pointer; white-space: nowrap; }
+        .cj-primary:hover { background: #aabd3f; }
         .cj-secondary { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; font-weight: 400; color: #334155; cursor: pointer; white-space: nowrap; }
         .cj-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
         .cj-range { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; margin: 0 2px; }
@@ -587,16 +587,16 @@ export default function CommunityJobsPage() {
         .cj-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; cursor: not-allowed; }
         .cj-icon-group:has(.cj-active), .cj-icon-group.cj-view-toggle { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
         .cj-icon-group:has(.cj-active) .cj-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0; color: #64748b; }
-        .cj-icon-btn.cj-active { background: #e3f2fd; color: #1976d2; }
+        .cj-icon-btn.cj-active { background: #f1f6d6; color: #5f6f14; }
         .cj-body { flex: 1; background: #fff; }
         .cj-table-wrap { overflow-x: auto; border-top: 1px solid #dde1e7; }
         .cj-table { width: 100%; min-width: 1040px; border-collapse: collapse; }
-        .cj-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; position: sticky; top: 0; z-index: 2; }
+        .cj-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; position: sticky; top: 0; z-index: 2; }
         .cj-td { height: 49px; padding: 0 10px; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; white-space: nowrap; vertical-align: middle; }
         .cj-row { background: #fff; }
         .cj-row:nth-child(odd) { background: #f8fafc; }
         .cj-group-row td { height: 40px; padding: 0 12px; font-weight: 600; font-size: 13px; color: #334155; background: #f1f5f9; border-bottom: 1px solid #dde1e7; }
-        .cj-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .cj-cb { width: 13px; height: 13px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
         .cj-th .cj-cb { width: 14px; height: 14px; accent-color: #ffffff; }
         .cj-trunc { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
         .cj-status { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 11px; background: #e3f1e3; color: #1f5c26; font-size: 12px; font-weight: 600; }
@@ -604,11 +604,11 @@ export default function CommunityJobsPage() {
         .cj-status-archived { background: #fde8e8; color: #991b1b; }
         .cj-act { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 4px; font: inherit; font-size: 13px; color: #3c4047; cursor: pointer; }
         .cj-act:hover { background: #f2f3f5; }
-        .cj-act-edit { color: #1976d2; }
+        .cj-act-edit { color: #5f6f14; }
         .cj-act-del { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid #efc9c9; background: #fff; border-radius: 4px; color: #b42318; cursor: pointer; padding: 0; }
         .cj-act-del:hover:not(:disabled) { background: #fdf0f0; }
         .cj-act-del:disabled { color: #9ca3af; border-color: #e5e7eb; background: #f3f4f6; cursor: not-allowed; }
-        .cj-notice { display: flex; align-items: center; gap: 10px; background: #eff6ff; color: #1e40af; padding: 10px 32px; font-size: 13px; font-weight: 600; }
+        .cj-notice { display: flex; align-items: center; gap: 10px; background: #f1f6d6; color: #4a5a12; padding: 10px 32px; font-size: 13px; font-weight: 600; }
         .cj-empty { text-align: center; padding: 80px 20px; color: #666; background: #fff; }
         .cj-kanban { padding: 20px 32px; }
         @media (max-width: 720px) {
@@ -734,7 +734,7 @@ export default function CommunityJobsPage() {
           <button
             type="button"
             onClick={() => setPostedOnFilter("")}
-            style={{ background: "none", border: "none", color: "#1e40af", textDecoration: "underline", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}
+            style={{ background: "none", border: "none", color: "#4a5a12", textDecoration: "underline", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}
           >
             Clear
           </button>
@@ -844,7 +844,7 @@ export default function CommunityJobsPage() {
                 <>
                   <button
                     onClick={() => setFormMode("edit")}
-                    style={{ padding: "12px 24px", backgroundColor: "#1976d2", color: "white", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer" }}
+                    style={{ padding: "12px 24px", backgroundColor: "#c2d45e", color: "#243014", borderRadius: "30px", border: "none", fontWeight: "600", cursor: "pointer" }}
                   >
                     Edit
                   </button>
@@ -867,14 +867,14 @@ export default function CommunityJobsPage() {
                   <button
                     onClick={() => handleSave(true)}
                     disabled={saving}
-                    style={{ padding: "12px 24px", backgroundColor: "#fff", color: "#1976d2", border: "2px solid #1976d2", borderRadius: "30px", fontWeight: "600", cursor: saving ? "not-allowed" : "pointer" }}
+                    style={{ padding: "12px 24px", backgroundColor: "#fff", color: "#5f6f14", border: "2px solid #c2d45e", borderRadius: "30px", fontWeight: "600", cursor: saving ? "not-allowed" : "pointer" }}
                   >
                     Save as Draft
                   </button>
                   <button
                     onClick={() => handleSave(false)}
                     disabled={saving}
-                    style={{ padding: "12px 24px", backgroundColor: "#1976d2", color: "white", border: "none", borderRadius: "30px", fontWeight: "600", cursor: saving ? "not-allowed" : "pointer" }}
+                    style={{ padding: "12px 24px", backgroundColor: "#c2d45e", color: "#243014", border: "none", borderRadius: "30px", fontWeight: "600", cursor: saving ? "not-allowed" : "pointer" }}
                   >
                     {saving ? "Saving…" : "Publish"}
                   </button>
@@ -959,7 +959,7 @@ export default function CommunityJobsPage() {
               <button
                 onClick={handleAnalyzePhotos}
                 disabled={uploadFiles.length === 0 || parsing}
-                style={{ padding: "12px 24px", backgroundColor: "#1976d2", color: "white", borderRadius: "30px", border: "none", fontWeight: "600", cursor: uploadFiles.length === 0 || parsing ? "not-allowed" : "pointer", opacity: uploadFiles.length === 0 || parsing ? 0.6 : 1 }}
+                style={{ padding: "12px 24px", backgroundColor: "#c2d45e", color: "#243014", borderRadius: "30px", border: "none", fontWeight: "600", cursor: uploadFiles.length === 0 || parsing ? "not-allowed" : "pointer", opacity: uploadFiles.length === 0 || parsing ? 0.6 : 1 }}
               >
                 {parsing ? "Analyzing…" : "Analyze Photos"}
               </button>
@@ -1028,7 +1028,7 @@ function CommunityJobFields({ form, updateField, readOnly }) {
             <div style={{ fontSize: "12px", fontWeight: "700", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
               Link to Apply
             </div>
-            <a href={form.job_apply_link} target="_blank" rel="noreferrer" style={{ fontSize: "14px", color: "#1976d2", wordBreak: "break-all" }}>
+            <a href={form.job_apply_link} target="_blank" rel="noreferrer" style={{ fontSize: "14px", color: "#5f6f14", wordBreak: "break-all" }}>
               {form.job_apply_link}
             </a>
           </div>
@@ -1229,7 +1229,7 @@ function JobCard({ job, onView, onEdit, onArchive }) {
         <button
           onClick={onEdit}
           title="Edit"
-          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "7px 10px", borderRadius: "8px", border: "1.5px solid #1976d2", background: "#eff6ff", cursor: "pointer", fontSize: "12.5px", fontWeight: "600", color: "#1976d2" }}
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "7px 10px", borderRadius: "8px", border: "1.5px solid #c2d45e", background: "#f1f6d6", cursor: "pointer", fontSize: "12.5px", fontWeight: "600", color: "#5f6f14" }}
         >
           <FaEdit /> Edit
         </button>

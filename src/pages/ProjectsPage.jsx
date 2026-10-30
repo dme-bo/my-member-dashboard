@@ -283,7 +283,7 @@ export default function ProjectsPage() {
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
         <button
           onClick={clearFilters}
-          style={{ padding: "6px 14px", background: "#1976d2", color: "white", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
+          style={{ padding: "6px 14px", background: "#c2d45e", color: "#243014", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
         >
           Clear All
         </button>
@@ -528,7 +528,7 @@ export default function ProjectsPage() {
         .pj-icon-btn:first-child { border-radius: 6px 0 0 6px; }
         .pj-icon-btn:last-child { border-radius: 0 6px 6px 0; }
         .pj-icon-btn:disabled { color: #b8bec7; cursor: not-allowed; }
-        .pj-icon-btn.is-active { background: #e8f1fb; color: #1976D2; }
+        .pj-icon-btn.is-active { background: #f1f6d6; color: #5f6f14; }
         .pj-table-wrap { background: #fff; }
         .pj-table-scroll { overflow: auto; max-height: 70vh; min-height: 300px; }
         .pj-table { width: 100%; min-width: 820px; border-collapse: collapse; }
@@ -538,7 +538,7 @@ export default function ProjectsPage() {
         .pj-row { cursor: pointer; }
         .pj-row:nth-child(odd) { background: #f7f8fb; }
         .pj-row:hover { background: #eef4fb; }
-        .pj-cb { width: 16px; height: 16px; margin: 0; accent-color: #1976D2; cursor: pointer; vertical-align: middle; }
+        .pj-cb { width: 16px; height: 16px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
         .pj-group-row td { padding: 8px 12px; font-weight: 600; font-size: 14px; cursor: pointer; background: #f4f5f0; border-top: 1px solid #dee2e6; }
         .pj-pill { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: #e3f1e3; color: #1f5c26; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
         .pj-empty { text-align: center; padding: 60px 20px; color: #6b7280; font-size: 15px; }
@@ -556,9 +556,9 @@ export default function ProjectsPage() {
         .pj-meta-right > div { gap: 6px; }
         .pj-meta-right > div:has(.is-active) { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
         .pj-meta-right > div:has(.is-active) .pj-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0 !important; color: #64748b; }
-        .pj-icon-btn.is-active { background: #e3f2fd; color: #1976d2; }
+        .pj-icon-btn.is-active { background: #f1f6d6; color: #5f6f14; }
         .pj-table-scroll { border-top: 1px solid #dde1e7; }
-        .pj-th { height: 45px; padding: 0 10px; font-size: 13px; color: #fff; background: #1976d2; border-bottom: none; }
+        .pj-th { height: 45px; padding: 0 10px; font-size: 13px; color: #243014; background: #c2d45e; border-bottom: none; }
         .pj-td { height: 49px; padding: 0 10px; border-top: none; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; }
         .pj-td:nth-child(2) { font-weight: 500; color: #111827; }
         .pj-row { background: #fff; }
@@ -567,7 +567,7 @@ export default function ProjectsPage() {
         .pj-cb { width: 13px; height: 13px; }
         .pj-th .pj-cb { width: 14px; height: 14px; accent-color: #ffffff; }
         .pj-group-row td { height: 40px; padding: 0 12px; font-size: 13px; color: #334155; background: #f1f5f9; border-top: none; border-bottom: 1px solid #dde1e7; }
-        .pj-pill { background: #e3f2fd; color: #1565c0; }
+        .pj-pill { background: #f1f6d6; color: #4a5a12; }
       `}</style>
 
       <div className="pj-header page-header-band">
@@ -804,8 +804,8 @@ export default function ProjectsPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1e40af",
-                  color: "#fff",
+                  backgroundColor: "#aabd3f",
+                  color: "#243014",
                   display: "flex",
                   alignItems: "center",
                   flexShrink: 0,
@@ -838,8 +838,8 @@ export default function ProjectsPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1e40af" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1e40af" : "none",
+                      color: activeTab === tab ? "#aabd3f" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #aabd3f" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -887,8 +887,8 @@ export default function ProjectsPage() {
                           disabled={notesLoading}
                           style={{
                             padding: "10px 20px",
-                            backgroundColor: "#2563eb",
-                            color: "white",
+                            backgroundColor: "#c2d45e",
+                            color: "#243014",
                             border: "none",
                             borderRadius: "6px",
                             fontWeight: "500",
@@ -930,10 +930,10 @@ export default function ProjectsPage() {
                                       width: "100%",
                                       padding: "10px",
                                       borderRadius: "6px",
-                                      border: "1px solid #3b82f6",
-                                      backgroundColor: "#eff6ff",
+                                      border: "1px solid #c2d45e",
+                                      backgroundColor: "#f1f6d6",
                                       fontWeight: "500",
-                                      color: "#1e40af",
+                                      color: "#4a5a12",
                                     }}
                                   />
                                 </div>
@@ -1052,7 +1052,7 @@ export default function ProjectsPage() {
                         <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                             <thead>
-                              <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
+                              <tr style={{ backgroundColor: "#c2d45e", color: "#243014" }}>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
@@ -1100,8 +1100,8 @@ export default function ProjectsPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1e40af",
-                    color: "#fff",
+                    background: "#aabd3f",
+                    color: "#243014",
                     border: "none",
                     borderRadius: "6px",
                     fontSize: "16px",

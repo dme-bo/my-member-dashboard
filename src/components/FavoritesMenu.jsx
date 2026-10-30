@@ -98,7 +98,7 @@ export default function FavoritesMenu({ favorites, onApply, onDelete, onSave }) 
             <button
               type="button"
               onClick={submitSave}
-              style={{ padding: "6px 12px", borderRadius: "6px", border: "none", background: "#1976d2", color: "#fff", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}
+              style={{ padding: "6px 12px", borderRadius: "6px", border: "none", background: "var(--accent, #c2d45e)", color: "var(--on-accent, #243014)", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}
             >
               Save
             </button>

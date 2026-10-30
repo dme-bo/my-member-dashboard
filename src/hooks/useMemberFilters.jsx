@@ -840,8 +840,8 @@ export default function useMemberFilters(members) {
           onClick={clearFilters}
           style={{
             padding: "6px 14px",
-            background: "#1976d2",
-            color: "white",
+            background: "var(--accent, #c2d45e)",
+            color: "var(--on-accent, #243014)",
             border: "none",
             borderRadius: "8px",
             fontSize: "12px",

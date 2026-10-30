@@ -152,7 +152,7 @@ const VirtualRow = React.memo(({ index, style, data }) => {
         gridTemplateColumns: GRID_TEMPLATE,
         borderBottom: "1px solid #dde1e7",
         cursor: "pointer",
-        backgroundColor: selectedIds?.has(member.id) ? "#e3f2fd" : index % 2 === 0 ? "#f8fafc" : "#fff",
+        backgroundColor: selectedIds?.has(member.id) ? "#f1f6d6" : index % 2 === 0 ? "#f8fafc" : "#fff",
         alignItems: "center",
         boxSizing: "border-box",
       }}
@@ -164,7 +164,7 @@ const VirtualRow = React.memo(({ index, style, data }) => {
           aria-label={`Select ${member.__name || "member"}`}
           checked={!!selectedIds?.has(member.id)}
           onChange={() => onToggleSelect(member.id)}
-          style={{ width: "13px", height: "13px", cursor: "pointer", accentColor: "#1976d2" }}
+          style={{ width: "13px", height: "13px", cursor: "pointer", accentColor: "#c2d45e" }}
         />
       </div>
       <div style={{ ...cellStyle, fontWeight: 500, color: "#111827" }}>
@@ -181,7 +181,7 @@ const VirtualRow = React.memo(({ index, style, data }) => {
 });
 
 const kanbanChipStyle = { padding: "2px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontSize: "10.5px", fontWeight: 600 };
-const kanbanSmallBtnStyle = { padding: "3px 8px", borderRadius: "999px", border: "1px solid #1976d2", background: "#e3f2fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" };
+const kanbanSmallBtnStyle = { padding: "3px 8px", borderRadius: "999px", border: "1px solid #c2d45e", background: "#f1f6d6", color: "#4a5a12", fontWeight: 700, cursor: "pointer", fontSize: "10.5px", whiteSpace: "nowrap" };
 
 const partnerKanbanStyle = (member) =>
   member.is_regional_partner
@@ -224,7 +224,7 @@ const MemberCard = React.memo(({ member, onMemberClick, openTagModal, openPartne
         {[member.city, member.state].filter(Boolean).join(", ") || "—"}
       </div>
       {memberSkills.length > 0 && (
-        <div style={{ fontSize: "11px", color: "#1976d2", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: "11px", color: "#5f6f14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           🏷 {memberSkills.join(", ")}
         </div>
       )}
@@ -266,9 +266,9 @@ const viewButtonStyle = (active) => ({
   justifyContent: "center",
   width: "36px",
   height: "34px",
-  background: active ? "#e3f2fd" : "#fff",
+  background: active ? "#f1f6d6" : "#fff",
   border: "none",
-  color: active ? "#1976d2" : "#64748b",
+  color: active ? "#c2d45e" : "#64748b",
   cursor: "pointer",
 });
 
@@ -859,8 +859,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         font-family: inherit;
       }
       .member-date-range-input:focus {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        border-color: #c2d45e;
+        box-shadow: 0 0 0 3px rgba(194, 212, 94, 0.12);
       }
       #member-date-range-portal {
         position: relative;
@@ -992,7 +992,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         <div className="page-fill-mid" style={{ width: "100%", margin: "0", padding: "0" }} ref={kanbanContainerRef}>
           <div className="page-fill-mid" style={{ borderTop: "1px solid #dde1e7", background: "#fff", overflowX: viewMode === "list" ? "auto" : "hidden", overflowY: "hidden" }}>
             {isMembersLoaded && viewMode === "list" && (
-              <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, minWidth: LIST_MIN_WIDTH, flex: "0 0 auto", background: "#1976d2", position: "sticky", top: 0, zIndex: 1, alignItems: "center", height: "45px", boxSizing: "border-box" }}>
+              <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, minWidth: LIST_MIN_WIDTH, flex: "0 0 auto", background: "#c2d45e", position: "sticky", top: 0, zIndex: 1, alignItems: "center", height: "45px", boxSizing: "border-box" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <input
                     type="checkbox"
@@ -1207,7 +1207,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                                   padding: "10px 12px",
                                   cursor: "pointer",
                                   borderBottom: "1px solid #f1f5f9",
-                                  background: checked ? "#eff6ff" : "#fff",
+                                  background: checked ? "#f1f6d6" : "#fff",
                                 }}
                               >
                                 <input
@@ -1267,8 +1267,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                     padding: "10px 16px",
                     borderRadius: "8px",
                     border: "none",
-                    background: tagModalSaving ? "#90caf9" : "#1976d2",
-                    color: "#fff",
+                    background: tagModalSaving ? "#d9e49a" : "#c2d45e",
+                    color: "#243014",
                     cursor: tagModalSaving ? "not-allowed" : "pointer",
                     fontWeight: "700",
                     fontSize: "13px",
@@ -1493,8 +1493,8 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                     padding: "10px 16px",
                     borderRadius: "8px",
                     border: "none",
-                    background: partnerModalSaving ? "#90caf9" : "#1976d2",
-                    color: "#fff",
+                    background: partnerModalSaving ? "#d9e49a" : "#c2d45e",
+                    color: "#243014",
                     cursor: partnerModalSaving ? "not-allowed" : "pointer",
                     fontWeight: "700",
                     fontSize: "13px",
@@ -1556,7 +1556,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
               openTagModal(tagsPopover.member);
               setTagsPopover(null);
             }}
-            style={{ marginTop: "10px", width: "100%", padding: "6px 8px", borderRadius: "8px", border: "1px solid #1976d2", background: "#e3f2fd", color: "#1565c0", fontWeight: 700, cursor: "pointer", fontSize: "12px" }}
+            style={{ marginTop: "10px", width: "100%", padding: "6px 8px", borderRadius: "8px", border: "1px solid #c2d45e", background: "#f1f6d6", color: "#4a5a12", fontWeight: 700, cursor: "pointer", fontSize: "12px" }}
           >
             + Manage Tags
           </button>

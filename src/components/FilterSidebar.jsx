@@ -7,7 +7,7 @@ export default function FilterSidebar({ filterData, filterKeys, pageKey }) {
   return (
     <div className="filter-sidebar" style={{ width: "320px", padding: "20px", background: "#f8fafc", borderLeft: "1px solid #eee", height: "fit-content" }}>
       <div style={{ marginBottom: "24px" }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: "18px", color: "#1976d2" }}>Filters</h3>
+        <h3 style={{ margin: "0 0 16px", fontSize: "18px", color: "#5f6f14" }}>Filters</h3>
         <button
           onClick={clearFilters}
           style={{
@@ -150,12 +150,12 @@ function SearchableSelect({ label, value, options, onChange }) {
                       style={{
                         padding: "12px 16px",
                         cursor: "pointer",
-                        background: option === value ? "#eff6ff" : "transparent",
+                        background: option === value ? "#f1f6d6" : "transparent",
                         fontWeight: option === value ? "600" : "normal",
-                        color: option === value ? "#2563eb" : "#374151",
+                        color: option === value ? "#c2d45e" : "#374151",
                       }}
                       onMouseOver={(e) => (e.target.style.background = "#f3f4f6")}
-                      onMouseOut={(e) => (e.target.style.background = option === value ? "#eff6ff" : "transparent")}
+                      onMouseOut={(e) => (e.target.style.background = option === value ? "#f1f6d6" : "transparent")}
                     >
                       {option}
                     </div>

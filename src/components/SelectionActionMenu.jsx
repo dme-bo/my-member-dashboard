@@ -23,7 +23,7 @@ export default function SelectionActionMenu({ count, onExport, onClear }) {
 
   return (
     <div className="selection-action-center">
-      <span style={{ fontSize: "14px", color: "#1976d2", fontWeight: 500, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: "14px", color: "#5f6f14", fontWeight: 500, whiteSpace: "nowrap" }}>
         {count.toLocaleString()} selected
       </span>
       <div ref={ref} style={{ position: "relative" }}>

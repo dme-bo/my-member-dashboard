@@ -368,29 +368,29 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
         .fin-insights .stats-grid { margin-bottom: 24px; }
         .fin-card-name { margin: 6px 0 0; font-size: 0.85rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .fin-chart-card { background: #fff; border-radius: 10px; border: 1px solid #f1f5f9; box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05); padding: 18px 20px; display: flex; flex-direction: column; }
-        .fin-chart-card h3 { margin: 0 0 14px; font-size: 1rem; font-weight: 700; text-align: center; color: #1a2332; padding-bottom: 12px; border-bottom: 2px solid #e3f2fd; }
+        .fin-chart-card h3 { margin: 0 0 14px; font-size: 1rem; font-weight: 700; text-align: center; color: #1a2332; padding-bottom: 12px; border-bottom: 2px solid #f1f6d6; }
         .fin-chart-box { position: relative; height: 300px; }
 
         .fin-table-wrap { overflow-x: auto; background: #fff; border-top: 1px solid #dde1e7; }
         .fin-table { min-width: 1000px; }
         .fin-head, .fin-row { display: grid; align-items: center; padding: 0 12px; box-sizing: border-box; }
-        .fin-head { height: 45px; background: #1976d2; color: #fff; font-size: 13px; font-weight: 600; }
+        .fin-head { height: 45px; background: #c2d45e; color: #243014; font-size: 13px; font-weight: 600; }
         .fin-head > div { padding: 0 10px; }
         .fin-head-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-align: left; padding: 0; }
         .fin-head-btn.right { text-align: right; width: 100%; }
         .fin-row { font-size: 13px; color: #64748b; border-bottom: 1px solid #dde1e7; background: #fff; }
         .fin-row.alt { background: #f8fafc; }
         .fin-row.clickable { cursor: pointer; }
-        .fin-row.clickable:hover { background: #e3f2fd; }
+        .fin-row.clickable:hover { background: #f1f6d6; }
         .fin-row > div { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .fin-name { font-weight: 500; color: #111827; }
         .fin-num { text-align: right; font-variant-numeric: tabular-nums; }
         .fin-num.dim { color: #cbd5e1; }
         .fin-total { font-weight: 700; color: #111827; }
         .fin-muted { color: #94a3b8; }
-        .fin-group-row { background: #e3f2fd; color: #0f172a; font-weight: 700; border-bottom: 1px solid #bcd6f2; }
+        .fin-group-row { background: #f1f6d6; color: #0f172a; font-weight: 700; border-bottom: 1px solid #d9e49a; }
         .fin-group-count { font-weight: 500; color: #64748b; }
-        .fin-group-total { color: #1565c0; }
+        .fin-group-total { color: #5f6f14; }
         .fin-footer { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 16px; background: #f8fafc; border-top: 1px solid #dde1e7; font-size: 11px; color: #64748b; }
         .fin-empty { padding: 48px 20px; text-align: center; color: #94a3b8; font-size: 14px; background: #fff; }
 
@@ -474,7 +474,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
             <Bar
               data={{
                 labels: monthly.map((m) => monthLabel(m.month)),
-                datasets: [{ data: monthly.map((m) => m.total), backgroundColor: monthly.map((m) => (selectedSet.has(m.month) ? '#1976d2' : '#bbdefb')), borderRadius: 4 }],
+                datasets: [{ data: monthly.map((m) => m.total), backgroundColor: monthly.map((m) => (selectedSet.has(m.month) ? '#c2d45e' : '#e6eeb0')), borderRadius: 4 }],
               }}
               options={MONTH_BAR_OPTIONS}
             />

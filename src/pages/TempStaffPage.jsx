@@ -551,7 +551,7 @@ export default function TempStaffPage() {
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
         <button
           onClick={clearFilters}
-          style={{ padding: "6px 14px", background: "#1976d2", color: "white", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
+          style={{ padding: "6px 14px", background: "#c2d45e", color: "#243014", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
         >
           Clear All
         </button>
@@ -668,18 +668,18 @@ export default function TempStaffPage() {
         .tcs-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; cursor: not-allowed; }
         .tcs-joined.tcs-view-toggle { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
         .tcs-view-toggle .tcs-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0; color: #64748b; }
-        .tcs-view-toggle .tcs-icon-btn[aria-pressed="true"] { background: #e3f2fd; color: #1976d2; }
+        .tcs-view-toggle .tcs-icon-btn[aria-pressed="true"] { background: #f1f6d6; color: #5f6f14; }
         .tcs-table-wrap { background: #fff; border-top: 1px solid #dde1e7; overflow-x: auto; }
         .tcs-table { width: 100%; min-width: 820px; border-collapse: collapse; }
-        .tcs-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; position: sticky; top: 0; z-index: 2; }
+        .tcs-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; position: sticky; top: 0; z-index: 2; }
         .tcs-td { height: 49px; padding: 0 10px; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; white-space: nowrap; vertical-align: middle; }
         .tcs-td:nth-child(2) { font-weight: 500; color: #111827; }
         .tcs-num { text-align: right; }
         .tcs-row { cursor: pointer; background: #fff; }
         .tcs-row:nth-child(odd) { background: #f8fafc; }
-        .tcs-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .tcs-cb { width: 13px; height: 13px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
         .tcs-th .tcs-cb { width: 14px; height: 14px; accent-color: #ffffff; }
-        .tcs-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; margin-left: 6px; }
+        .tcs-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #f1f6d6; color: #4a5a12; font-size: 12px; font-weight: 600; margin-left: 6px; }
         .tcs-group-row td { height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600; cursor: pointer; background: #f1f5f9; color: #334155; border-bottom: 1px solid #dde1e7; }
         .tcs-page .content-with-sidebar { margin-top: 0; gap: 0; }
         .tcs-page .table-container { border: none; border-radius: 0; box-shadow: none; }
@@ -946,8 +946,8 @@ export default function TempStaffPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1976d2",
-                  color: "#fff",
+                  backgroundColor: "#c2d45e",
+                  color: "#243014",
                   display: "flex",
                   alignItems: "center",
                   flexShrink: 0,
@@ -985,8 +985,8 @@ export default function TempStaffPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1976d2" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1976d2" : "none",
+                      color: activeTab === tab ? "#c2d45e" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #c2d45e" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -1120,8 +1120,8 @@ export default function TempStaffPage() {
                           disabled={notesLoading}
                           style={{
                             padding: "10px 20px",
-                            backgroundColor: "#2563eb",
-                            color: "white",
+                            backgroundColor: "#c2d45e",
+                            color: "#243014",
                             border: "none",
                             borderRadius: "6px",
                             fontWeight: "500",
@@ -1163,10 +1163,10 @@ export default function TempStaffPage() {
                                       width: "100%",
                                       padding: "10px",
                                       borderRadius: "6px",
-                                      border: "1px solid #3b82f6",
-                                      backgroundColor: "#eff6ff",
+                                      border: "1px solid #c2d45e",
+                                      backgroundColor: "#f1f6d6",
                                       fontWeight: "500",
-                                      color: "#1976d2",
+                                      color: "#5f6f14",
                                     }}
                                   />
                                 </div>
@@ -1271,7 +1271,7 @@ export default function TempStaffPage() {
                         <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                             <thead>
-                              <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
+                              <tr style={{ backgroundColor: "#c2d45e", color: "#243014" }}>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Member Name</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
@@ -1319,8 +1319,8 @@ export default function TempStaffPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1976d2",
-                    color: "#fff",
+                    background: "#c2d45e",
+                    color: "#243014",
                     border: "none",
                     borderRadius: "6px",
                     fontSize: "16px",

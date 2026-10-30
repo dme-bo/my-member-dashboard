@@ -4,7 +4,7 @@
 // across any page that wires its filters through OdooViewToolbar.
 import React from "react";
 
-const CHIP_COLORS = ["#1976d2", "#7c3aed", "#0d9488", "#c2410c", "#be185d", "#4d7c0f", "#0369a1"];
+const CHIP_COLORS = ["#c2d45e", "#7c3aed", "#0d9488", "#c2410c", "#be185d", "#4d7c0f", "#0369a1"];
 
 const getChipColor = (index) => CHIP_COLORS[index % CHIP_COLORS.length];
 

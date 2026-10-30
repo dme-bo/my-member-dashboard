@@ -201,7 +201,7 @@ export default function WorkshopDetailModal({ session, completed, members, regis
         .wsd-close { margin-left: auto; border: none; background: none; cursor: pointer; color: #64748b; font-size: 18px; padding: 4px; }
         .wsd-tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid #e5eaf1; background: #f8fafc; }
         .wsd-tab { border: none; background: none; padding: 12px 16px; font-size: 14px; font-weight: 600; color: #475569; cursor: pointer; border-bottom: 3px solid transparent; }
-        .wsd-tab.active { color: #1976d2; border-bottom-color: #1976d2; }
+        .wsd-tab.active { color: #5f6f14; border-bottom-color: #c2d45e; }
         .wsd-body { flex: 1; overflow-y: auto; padding: 22px 24px; }
         .wsd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 24px; }
         .wsd-field label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -210,7 +210,7 @@ export default function WorkshopDetailModal({ session, completed, members, regis
         .wsd-card h4 { margin: 0 0 4px; font-size: 15px; color: #0f172a; }
         .wsd-card p { margin: 0 0 12px; font-size: 13px; color: #64748b; }
         .wsd-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight: 600; font-size: 13px; cursor: pointer; }
-        .wsd-btn.primary { background: #1976d2; border-color: #1976d2; color: #fff; }
+        .wsd-btn.primary { background: #c2d45e; border-color: #c2d45e; color: #243014; }
         .wsd-btn.success { background: #15803d; border-color: #15803d; color: #fff; }
         .wsd-btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .wsd-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
@@ -218,7 +218,7 @@ export default function WorkshopDetailModal({ session, completed, members, regis
         .wsd-stat { padding: 8px 14px; border-radius: 8px; background: #f1f5f9; font-size: 13px; color: #334155; }
         .wsd-stat b { font-size: 16px; margin-right: 5px; color: #0f172a; }
         .wsd-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .wsd-table th { background: #1976d2; color: #fff; text-align: left; padding: 9px 12px; font-weight: 600; white-space: nowrap; }
+        .wsd-table th { background: #c2d45e; color: #243014; text-align: left; padding: 9px 12px; font-weight: 600; white-space: nowrap; }
         .wsd-table td { padding: 9px 12px; border-bottom: 1px solid #eef1f5; color: #334155; vertical-align: middle; }
         .wsd-seg { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 7px; overflow: hidden; }
         .wsd-seg button { border: none; background: #fff; padding: 5px 12px; font-size: 12px; font-weight: 700; color: #475569; cursor: pointer; }
@@ -230,10 +230,10 @@ export default function WorkshopDetailModal({ session, completed, members, regis
         .wsd-search input, .wsd-textarea { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 13px; }
         .wsd-results { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 8px 20px rgba(15,23,42,0.12); z-index: 5; max-height: 260px; overflow-y: auto; }
         .wsd-results button { display: block; width: 100%; text-align: left; border: none; background: #fff; padding: 9px 12px; font-size: 13px; cursor: pointer; }
-        .wsd-results button:hover { background: #e3f2fd; }
+        .wsd-results button:hover { background: #f1f6d6; }
         .wsd-toggle { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #eef1f5; }
         .wsd-toggle:first-of-type { border-top: none; }
-        .wsd-toggle input { width: 16px; height: 16px; accent-color: #1976d2; }
+        .wsd-toggle input { width: 16px; height: 16px; accent-color: #c2d45e; }
         .wsd-toggle .when { margin-left: auto; font-size: 12px; color: #64748b; }
         .wsd-note { font-size: 12px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; }
         .wsd-stars button { border: none; background: none; font-size: 24px; cursor: pointer; color: #cbd5e1; padding: 0 2px; }

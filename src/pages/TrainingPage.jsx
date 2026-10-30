@@ -1106,7 +1106,7 @@ Please don't miss it — we look forward to your participation!`;
           <td>{session.date ? formatDateDisplay(session.date) : "-"}</td>
           <td>{session.time || "-"}</td>
           <td style={{ cursor: "pointer" }} onClick={() => handlePickWorkshop(workshop)} title="Open to schedule this workshop">
-            <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic || "-"}</div>
+            <div style={{ color: "#5f6f14", fontWeight: 700 }}>{session.topic || "-"}</div>
             {(session.workshopOrganizer || session.workshopLocation) && (
               <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
                 {[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
@@ -1134,7 +1134,7 @@ Please don't miss it — we look forward to your participation!`;
         <td>{formatDateDisplay(session.date)}</td>
         <td>{session.time || "-"}</td>
         <td style={{ cursor: "pointer" }} onClick={() => setDetailSessionId(session.id)} title="Open workshop">
-          <div style={{ color: "#1976d2", fontWeight: 700 }}>{session.topic}</div>
+          <div style={{ color: "#5f6f14", fontWeight: 700 }}>{session.topic}</div>
           {(session.workshopOrganizer || session.workshopLocation) && (
             <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
               {[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
@@ -1244,8 +1244,8 @@ Please don't miss it — we look forward to your participation!`;
           cursor: pointer;
         }
         .training-btn-primary {
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
         }
         .training-btn-secondary {
           background: #f0fdfa;
@@ -1323,7 +1323,7 @@ Please don't miss it — we look forward to your participation!`;
           color: white;
           font-size: 1.4rem;
         }
-        .card-icon.blue { background: #1976d2; }
+        .card-icon.blue { background: #c2d45e; color: #243014; }
         .card-icon.orange { background: #fb8c00; }
         .card-icon.new { background: #43a047; }
         .card-icon.purple { background: #7c3aed; }
@@ -1357,8 +1357,8 @@ Please don't miss it — we look forward to your participation!`;
           min-width: 1100px;
         }
         .training-table th {
-          background: #2563eb;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           text-align: left;
           padding: 12px 14px;
           font-weight: 600;
@@ -1380,8 +1380,8 @@ Please don't miss it — we look forward to your participation!`;
           font-weight: 700;
         }
         .training-status-badge.upcoming {
-          background: #dbeafe;
-          color: #1d4ed8;
+          background: #e6eeb0;
+          color: #4a5a12;
         }
         .training-status-badge.completed {
           background: #dcfce7;
@@ -1391,7 +1391,7 @@ Please don't miss it — we look forward to your participation!`;
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          color: #1976d2;
+          color: #5f6f14;
           font-weight: 600;
           text-decoration: none;
         }
@@ -1493,8 +1493,8 @@ Please don't miss it — we look forward to your participation!`;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: linear-gradient(135deg, #0f766e, #1976d2);
-          color: #fff;
+          background: linear-gradient(135deg, #0f766e, #c2d45e);
+          color: #243014;
           border-top-left-radius: 16px;
           border-top-right-radius: 16px;
           position: sticky;
@@ -1613,7 +1613,7 @@ Please don't miss it — we look forward to your participation!`;
           font-family: inherit;
         }
         .training-add-member-input:focus {
-          border-color: #1976d2;
+          border-color: #c2d45e;
         }
         .training-add-member-results {
           position: absolute;
@@ -1661,8 +1661,8 @@ Please don't miss it — we look forward to your participation!`;
           padding: 10px 12px;
         }
         .training-message-preview.active {
-          border-color: #1976d2;
-          background: #eff6ff;
+          border-color: #c2d45e;
+          background: #f1f6d6;
         }
         .training-message-preview-label {
           font-size: 11px;
@@ -1673,7 +1673,7 @@ Please don't miss it — we look forward to your participation!`;
           margin-bottom: 6px;
         }
         .training-message-preview.active .training-message-preview-label {
-          color: #1976d2;
+          color: #5f6f14;
         }
         .training-message-preview pre {
           margin: 0;
@@ -1696,15 +1696,15 @@ Please don't miss it — we look forward to your participation!`;
           outline: none;
         }
         .training-message-preview-textarea:focus {
-          border-color: #1976d2;
+          border-color: #c2d45e;
         }
         .training-message-save-btn {
           margin-top: 8px;
           padding: 6px 14px;
           border-radius: 8px;
           border: none;
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
@@ -1748,8 +1748,8 @@ Please don't miss it — we look forward to your participation!`;
           gap: 6px;
         }
         .training-view-tab.active {
-          color: #1976d2;
-          border-bottom-color: #1976d2;
+          color: #5f6f14;
+          border-bottom-color: #c2d45e;
         }
         .training-material-type-select {
           width: 100%;
@@ -1803,7 +1803,7 @@ Please don't miss it — we look forward to your participation!`;
           flex: 0 0 auto;
         }
         .training-material-open-link {
-          color: #1976d2;
+          color: #5f6f14;
           display: inline-flex;
         }
         .training-material-add-form {
@@ -1876,7 +1876,7 @@ Please don't miss it — we look forward to your participation!`;
           background: #f8fafc;
         }
         .training-member-row.selected {
-          background: #eff6ff;
+          background: #f1f6d6;
         }
         .training-member-name {
           font-weight: 600;
@@ -1898,15 +1898,15 @@ Please don't miss it — we look forward to your participation!`;
           gap: 6px;
           padding: 4px 10px;
           border-radius: 999px;
-          background: #eff6ff;
-          color: #1d4ed8;
+          background: #f1f6d6;
+          color: #4a5a12;
           font-size: 12px;
           font-weight: 600;
         }
         .training-chip button {
           border: none;
           background: none;
-          color: #1d4ed8;
+          color: #4a5a12;
           cursor: pointer;
           display: inline-flex;
         }
@@ -2274,7 +2274,7 @@ Please don't miss it — we look forward to your participation!`;
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                           {session.documents.map((m) => (
-                            <a key={m.id} href={m.link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>
+                            <a key={m.id} href={m.link} target="_blank" rel="noopener noreferrer" style={{ color: "#5f6f14" }}>
                               [{m.type}] {m.title}
                             </a>
                           ))}

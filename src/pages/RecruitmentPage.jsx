@@ -92,7 +92,7 @@ const getFinalStatusColors = (status) => {
   if (!normalized) return { backgroundColor: "#f1f5f9", color: "#475569" };
   if (/(backout|reject|fail|drop)/.test(normalized)) return { backgroundColor: "#fee2e2", color: "#991b1b" };
   if (/(select|offer|join|hire)/.test(normalized)) return { backgroundColor: "#d1fae5", color: "#065f46" };
-  return { backgroundColor: "#dbeafe", color: "#1e40af" };
+  return { backgroundColor: "#e6eeb0", color: "#4a5a12" };
 };
 
 // Shared table cell for the Stage / Status column — stage and final status
@@ -510,7 +510,7 @@ export default function RecruitmentPage() {
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
         <button
           onClick={() => setFilters({ city: [], client: [], profile: [], source: [], status: [] })}
-          style={{ padding: "6px 14px", background: "#1976d2", color: "white", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
+          style={{ padding: "6px 14px", background: "#c2d45e", color: "#243014", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "700" }}
         >
           Clear All
         </button>
@@ -722,7 +722,7 @@ export default function RecruitmentPage() {
         .rec-icon-btn:not(:disabled):hover { background: #f6f8fa; }
         .rec-icon-btn.is-first { border-radius: 6px 0 0 6px; }
         .rec-icon-btn.is-last { border-radius: 0 6px 6px 0; margin-left: -1px; }
-        .rec-icon-btn.is-active { background: #e8f1fb; color: #1976D2; }
+        .rec-icon-btn.is-active { background: #f1f6d6; color: #5f6f14; }
         .rec-body { flex: 1; background: #fff; }
         .rec-table-scroll { overflow: auto; max-height: 70vh; min-height: 400px; }
         .rec-table { width: 100%; min-width: 980px; border-collapse: collapse; }
@@ -732,7 +732,7 @@ export default function RecruitmentPage() {
         .rec-row { cursor: pointer; }
         .rec-row:nth-child(odd) { background: #f7f8fb; }
         .rec-row:hover { background: #eef4fb; }
-        .rec-cb { width: 16px; height: 16px; margin: 0; accent-color: #1976D2; cursor: pointer; vertical-align: middle; }
+        .rec-cb { width: 16px; height: 16px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
         .rec-group-row { background: #eef2f7; }
         .rec-group-row td { padding: 8px 12px; font-weight: 600; cursor: pointer; font-size: 14px; }
         /* Match the Members Master List: outline buttons, blue table header, 49px rows. */
@@ -748,9 +748,9 @@ export default function RecruitmentPage() {
         .rec-meta-right > div { gap: 6px; }
         .rec-meta-right > div:has(.is-active) { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
         .rec-meta-right > div:has(.is-active) .rec-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0 !important; color: #64748b; }
-        .rec-icon-btn.is-active { background: #e3f2fd; color: #1976d2; }
+        .rec-icon-btn.is-active { background: #f1f6d6; color: #5f6f14; }
         .rec-table-scroll { border-top: 1px solid #dde1e7; }
-        .rec-th { height: 45px; padding: 0 10px; font-size: 13px; color: #fff; background: #1976d2; border-bottom: none; }
+        .rec-th { height: 45px; padding: 0 10px; font-size: 13px; color: #243014; background: #c2d45e; border-bottom: none; }
         .rec-td { height: 49px; padding: 0 10px; border-top: none; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; }
         .rec-td:nth-child(2) { font-weight: 500; color: #111827; }
         .rec-row { background: #fff; }
@@ -759,7 +759,7 @@ export default function RecruitmentPage() {
         .rec-cb { width: 13px; height: 13px; }
         .rec-th .rec-cb { width: 14px; height: 14px; accent-color: #ffffff; }
         .rec-group-row td { height: 40px; padding: 0 12px; font-size: 13px; color: #334155; background: #f1f5f9; border-top: none; border-bottom: 1px solid #dde1e7; }
-        .rec-pill { background: #e3f2fd; color: #1565c0; }
+        .rec-pill { background: #f1f6d6; color: #4a5a12; }
         .rec-count-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 11px; background: #e3f1e3; color: #1f5c26; font-size: 12px; font-weight: 600; margin-left: 6px; }
         .rec-empty { text-align: center; padding: 80px; color: #666; font-size: 16px; }
         .rec-kanban { min-height: 400px; max-height: 70vh; overflow-y: auto; background: #fff; padding: 12px 32px; }
@@ -992,8 +992,8 @@ export default function RecruitmentPage() {
                 style={{
                   padding: "24px",
                   borderBottom: "1px solid #eee",
-                  backgroundColor: "#1976d2",
-                  color: "#fff",
+                  backgroundColor: "#c2d45e",
+                  color: "#243014",
                   display: "flex",
                   alignItems: "center",
                   flexShrink: 0,
@@ -1026,8 +1026,8 @@ export default function RecruitmentPage() {
                       border: "none",
                       background: "none",
                       fontWeight: activeTab === tab ? "600" : "400",
-                      color: activeTab === tab ? "#1976d2" : "#666",
-                      borderBottom: activeTab === tab ? "3px solid #1976d2" : "none",
+                      color: activeTab === tab ? "#c2d45e" : "#666",
+                      borderBottom: activeTab === tab ? "3px solid #c2d45e" : "none",
                       cursor: "pointer",
                     }}
                   >
@@ -1086,8 +1086,8 @@ export default function RecruitmentPage() {
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Client</td><td>{selectedCandidate.client || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Job Location</td><td>{selectedCandidate.job_location || "-"}</td></tr>
                       <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>Details / Remarks</td><td>{selectedCandidate.details || selectedCandidate.remarks || "-"}</td></tr>
-                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>CV Link</td><td>{selectedCandidate.cv_link ? <a href={selectedCandidate.cv_link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>Open CV</a> : "-"}</td></tr>
-                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>ERP Link</td><td>{selectedCandidate.erp_link ? <a href={selectedCandidate.erp_link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2" }}>Open ERP</a> : "-"}</td></tr>
+                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>CV Link</td><td>{selectedCandidate.cv_link ? <a href={selectedCandidate.cv_link} target="_blank" rel="noopener noreferrer" style={{ color: "#5f6f14" }}>Open CV</a> : "-"}</td></tr>
+                      <tr><td style={{ padding: "10px 0", fontWeight: "600" }}>ERP Link</td><td>{selectedCandidate.erp_link ? <a href={selectedCandidate.erp_link} target="_blank" rel="noopener noreferrer" style={{ color: "#5f6f14" }}>Open ERP</a> : "-"}</td></tr>
                     </tbody>
                   </table>
                 )}
@@ -1136,8 +1136,8 @@ export default function RecruitmentPage() {
                         <h3 style={{ margin: 0, color: "#1f2937", fontSize: "18px" }}>Add New Interaction Notes</h3>
                         <button onClick={addNewNote} disabled={notesLoading} style={{
                           padding: "10px 20px",
-                          backgroundColor: "#2563eb",
-                          color: "white",
+                          backgroundColor: "#c2d45e",
+                          color: "#243014",
                           border: "none",
                           borderRadius: "6px",
                           fontWeight: "500",
@@ -1168,8 +1168,8 @@ export default function RecruitmentPage() {
                                 <div style={{ flex: 1 }}>
                                   <label style={{ fontSize: "13px", color: "#6b7280" }}>Candidate Name</label>
                                   <input type="text" value={note.contactPerson} readOnly style={{
-                                    width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #3b82f6",
-                                    backgroundColor: "#eff6ff", fontWeight: "500", color: "#1976d2",
+                                    width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #c2d45e",
+                                    backgroundColor: "#f1f6d6", fontWeight: "500", color: "#5f6f14",
                                   }} />
                                 </div>
                                 <div style={{ flex: 2 }}>
@@ -1243,7 +1243,7 @@ export default function RecruitmentPage() {
                         <div style={{ overflowX: "auto", borderRadius: "8px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                             <thead>
-                              <tr style={{ backgroundColor: "#2563eb", color: "white" }}>
+                              <tr style={{ backgroundColor: "#c2d45e", color: "#243014" }}>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Date</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Candidate Name</th>
                                 <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: "600" }}>Notes</th>
@@ -1276,8 +1276,8 @@ export default function RecruitmentPage() {
                   onClick={closeModal}
                   style={{
                     padding: "10px 24px",
-                    background: "#1976d2",
-                    color: "#fff",
+                    background: "#c2d45e",
+                    color: "#243014",
                     border: "none",
                     borderRadius: "6px",
                     fontSize: "16px",

@@ -53,8 +53,8 @@ const getTypeBadgeColors = (type) =>
     ? { bg: "#e9d5ff", color: "#6b21a8" }
     : type === "tempstaffing"
     ? { bg: "#fed7aa", color: "#9a3412" }
-    : { bg: "#dbeafe", color: "#0c4a6e" };
-const getTypeSolidColor = (type) => (type === "project" ? "#9333ea" : type === "tempstaffing" ? "#ea580c" : "#2563eb");
+    : { bg: "#e6eeb0", color: "#0c4a6e" };
+const getTypeSolidColor = (type) => (type === "project" ? "#9333ea" : type === "tempstaffing" ? "#ea580c" : "#c2d45e");
 
 // Short summary for table cells: first 3 cities + how many more, instead of
 // dumping the full (sometimes 60+ city) list inline. Full list is still
@@ -139,10 +139,10 @@ function RequirementCard({ req, allocatedCount, applicantCount, onViewDetails, o
           onClick={(e) => { e.stopPropagation(); onViewApplicants(); }}
           title={applicantCount > 0 ? `View ${applicantCount} applicant${applicantCount !== 1 ? "s" : ""}` : "No applicants yet"}
           style={{
-            background: applicantCount > 0 ? "#eff6ff" : "transparent",
-            border: applicantCount > 0 ? "1.5px solid #1976d2" : "1.5px solid #e2e8f0",
+            background: applicantCount > 0 ? "#f1f6d6" : "transparent",
+            border: applicantCount > 0 ? "1.5px solid #c2d45e" : "1.5px solid #e2e8f0",
             borderRadius: "20px",
-            color: applicantCount > 0 ? "#1976d2" : "#94a3b8",
+            color: applicantCount > 0 ? "#c2d45e" : "#94a3b8",
             fontWeight: 700,
             fontSize: "13px",
             padding: "2px 12px",
@@ -155,7 +155,7 @@ function RequirementCard({ req, allocatedCount, applicantCount, onViewDetails, o
       <button
         type="button"
         onClick={onViewDetails}
-        style={{ marginTop: "4px", padding: "8px", backgroundColor: "#1976d2", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}
+        style={{ marginTop: "4px", padding: "8px", backgroundColor: "#c2d45e", color: "#243014", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}
       >
         View Details
       </button>
@@ -964,8 +964,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             onClick={() => window.location.reload()}
             style={{
               padding: "12px 32px",
-              backgroundColor: "#1976d2",
-              color: "white",
+              backgroundColor: "#c2d45e",
+              color: "#243014",
               border: "none",
               borderRadius: "12px",
               fontWeight: "600",
@@ -1018,7 +1018,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         .req-stat-total { background: #eef2e6; border-color: #cfd9c0; color: #2f4a22; }
         .req-stat-active { background: #e3f1e3; border-color: #b7dbb9; color: #1f5c26; }
         .req-stat-completed { background: #fde8e8; border-color: #f5c2c2; color: #9b1c1c; }
-        .req-stat-allocated { background: #e3f2fd; border-color: #b6d7f5; color: #1565c0; }
+        .req-stat-allocated { background: #f1f6d6; border-color: #b6d7f5; color: #4a5a12; }
         .req-outline-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; background: #fff; border: 1px solid #dde1e7; border-radius: 6px; color: #334155; font-size: 13px; cursor: pointer; white-space: nowrap; }
         .req-outline-btn:hover { background: #f6f8fa; }
         .req-controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -1048,23 +1048,23 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         .req-table th:nth-child(9) { width: 84px; }
         .req-table th:nth-child(10) { width: 116px; }
         .req-td { overflow: hidden; text-overflow: ellipsis; }
-        .req-th { height: 42px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; background: #1976d2; border-bottom: 1px solid #1565c0; position: sticky; top: 0; z-index: 1; }
+        .req-th { height: 42px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; border-bottom: 1px solid #aabd3f; position: sticky; top: 0; z-index: 1; }
         .req-sortable { cursor: pointer; user-select: none; }
         .req-td { height: 46px; padding: 0 10px; border-bottom: 1px solid #edf0f3; font-size: 13px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
         .req-num { text-align: right; font-variant-numeric: tabular-nums; }
         .req-row { background: #fff; }
         .req-row:nth-child(odd) { background: #f7f8fb; }
-        .req-row.is-selected { background: #e3f2fd; }
-        .req-cb { width: 13px; height: 13px; margin: 0; accent-color: #1976d2; cursor: pointer; vertical-align: middle; }
+        .req-row.is-selected { background: #f1f6d6; }
+        .req-cb { width: 13px; height: 13px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
         .req-th .req-cb { width: 14px; height: 14px; accent-color: #fff; }
-        .req-th svg { color: #fff; vertical-align: -1px; margin-left: 2px; }
+        .req-th svg { color: #243014; vertical-align: -1px; margin-left: 2px; }
         .req-trunc { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .req-type, .req-open, .req-closed, .req-count-pill { display: inline-flex; align-items: center; justify-content: center; height: 22px; padding: 0 10px; border-radius: 11px; font-size: 12px; font-weight: 600; }
         .req-type { background: #eef1f5; color: #3c4047; }
         .req-open, .req-count-pill { background: #e3f1e3; color: #1f5c26; }
         .req-closed { background: #fbe9e9; color: #9b1c1c; }
         .req-count-pill { border: 0; min-width: 28px; cursor: pointer; background: none !important; color: #3c4047 !important; font-size: 13px; font-weight: 400; padding: 0 4px; justify-content: flex-end; }
-        .req-count-pill:hover { color: #1976d2 !important; text-decoration: underline; }
+        .req-count-pill:hover { color: #5f6f14 !important; text-decoration: underline; }
         .req-act { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 4px; font: inherit; font-size: 13px; color: #3c4047; cursor: pointer; }
         .req-act:hover { background: #f2f3f5; }
         @keyframes slideIn {
@@ -1210,7 +1210,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   aria-label="List view"
                   aria-pressed={kanbanView === "list"}
                   onClick={() => setKanbanView("list")}
-                  style={{ borderRadius: "6px 0 0 6px", ...(kanbanView === "list" ? { background: "#e8f1fb", color: "#1976D2" } : {}) }}
+                  style={{ borderRadius: "6px 0 0 6px", ...(kanbanView === "list" ? { background: "#f1f6d6", color: "#5f6f14" } : {}) }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
@@ -1220,7 +1220,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   aria-label="Kanban view"
                   aria-pressed={kanbanView === "kanban"}
                   onClick={() => setKanbanView("kanban")}
-                  style={{ borderRadius: "0 6px 6px 0", marginLeft: "-1px", ...(kanbanView === "kanban" ? { background: "#e8f1fb", color: "#1976D2" } : {}) }}
+                  style={{ borderRadius: "0 6px 6px 0", marginLeft: "-1px", ...(kanbanView === "kanban" ? { background: "#f1f6d6", color: "#5f6f14" } : {}) }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="10" /><rect x="16" y="4" width="4" height="13" /></svg>
                 </button>
@@ -1441,8 +1441,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   }}
                   style={{
                     padding: "12px 24px",
-                    backgroundColor: "#1976d2",
-                    color: "white",
+                    backgroundColor: "#c2d45e",
+                    color: "#243014",
                     borderRadius: "30px",
                     border: "none",
                     fontWeight: "600",
@@ -1456,8 +1456,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 onClick={() => setShowAllocatedMembersModal(true)}
                 style={{
                   padding: "12px 24px",
-                  backgroundColor: "#1976d2",
-                  color: "white",
+                  backgroundColor: "#c2d45e",
+                  color: "#243014",
                   borderRadius: "30px",
                   border: "none",
                   fontWeight: "600",
@@ -1535,8 +1535,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 }}
                 style={{
                   padding: "12px 24px",
-                  backgroundColor: pickedCity ? "#1976d2" : "#d1d5db",
-                  color: "white",
+                  backgroundColor: pickedCity ? "#c2d45e" : "#d1d5db",
+                  color: "#243014",
                   borderRadius: "30px",
                   border: "none",
                   fontWeight: "600",
@@ -1591,7 +1591,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             {allocationCity && (
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
                 <span
-                  style={{ padding: "8px 16px", borderRadius: "20px", backgroundColor: "#eff6ff", color: "#1976d2", fontWeight: "700", fontSize: "14px" }}
+                  style={{ padding: "8px 16px", borderRadius: "20px", backgroundColor: "#f1f6d6", color: "#5f6f14", fontWeight: "700", fontSize: "14px" }}
                 >
                   Allocating for: {allocationCity}
                 </span>
@@ -1602,7 +1602,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     setPickedCity(allocationCity);
                     setShowCityPickerModal(true);
                   }}
-                  style={{ background: "none", border: "none", color: "#1976d2", fontWeight: "600", fontSize: "13px", cursor: "pointer", textDecoration: "underline" }}
+                  style={{ background: "none", border: "none", color: "#5f6f14", fontWeight: "600", fontSize: "13px", cursor: "pointer", textDecoration: "underline" }}
                 >
                   Change city
                 </button>
@@ -1665,7 +1665,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                           cursor: "pointer",
                           borderRadius: "12px",
                           margin: "6px 0",
-                          backgroundColor: selectedMemberIds.includes(member.id) ? "#eff6ff" : "transparent",
+                          backgroundColor: selectedMemberIds.includes(member.id) ? "#f1f6d6" : "transparent",
                           transition: "background-color 0.3s",
                         }}
                         onMouseEnter={(e) => {
@@ -1687,7 +1687,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                               }
                             }}
                             disabled={selectedReq.status !== "active"}
-                            style={{ transform: "scale(1.5)", accentColor: "#1976d2" }}
+                            style={{ transform: "scale(1.5)", accentColor: "#c2d45e" }}
                           />
                           <div>
                             <strong style={{ fontSize: "18px", color: "#1f2937" }}>{member.name}</strong>
@@ -1705,8 +1705,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                             setShowMemberDetailModal(true);
                           }}
                           style={{
-                            background: "#1976d2",
-                            color: "white",
+                            background: "#c2d45e",
+                            color: "#243014",
                             border: "none",
                             padding: "10px 20px",
                             borderRadius: "20px",
@@ -1749,8 +1749,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                         style={{
                           padding: "10px 20px",
                           borderRadius: "12px",
-                          background: currentPage === 1 ? "#e5e7eb" : "#1976d2",
-                          color: "white",
+                          background: currentPage === 1 ? "#e5e7eb" : "#c2d45e",
+                          color: "#243014",
                           border: "none",
                           fontWeight: "600",
                         }}
@@ -1766,8 +1766,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                         style={{
                           padding: "10px 20px",
                           borderRadius: "12px",
-                          background: currentPage === totalPages ? "#e5e7eb" : "#1976d2",
-                          color: "white",
+                          background: currentPage === totalPages ? "#e5e7eb" : "#c2d45e",
+                          color: "#243014",
                           border: "none",
                           fontWeight: "600",
                         }}
@@ -1989,7 +1989,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   backgroundColor:
                     selectedReq.status !== "active" || selectedMemberIds.length === 0 || (selectedReq.locationList?.length > 1 && !allocationCity)
                       ? "#d1d5db"
-                      : "#1976d2",
+                      : "#c2d45e",
                   color: "white",
                   borderRadius: "30px",
                   border: "none",
@@ -2139,8 +2139,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                             setShowMemberDetailModal(true);
                           }}
                           style={{
-                            background: "#1976d2",
-                            color: "white",
+                            background: "#c2d45e",
+                            color: "#243014",
                             border: "none",
                             padding: "12px 24px",
                             borderRadius: "20px",
@@ -2459,8 +2459,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                                       setShowMemberDetailModal(true);
                                     }}
                                     style={{
-                                      background: "#1976d2",
-                                      color: "white",
+                                      background: "#c2d45e",
+                                      color: "#243014",
                                       border: "none",
                                       padding: "8px 16px",
                                       borderRadius: "20px",
@@ -2557,46 +2557,46 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px" }}>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Name:</strong> {selectedMember.name}
+                <strong style={{ color: "#5f6f14" }}>Name:</strong> {selectedMember.name}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Email:</strong> {selectedMember.email || "—"}
+                <strong style={{ color: "#5f6f14" }}>Email:</strong> {selectedMember.email || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Phone:</strong> {selectedMember.phone || "—"}
+                <strong style={{ color: "#5f6f14" }}>Phone:</strong> {selectedMember.phone || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Designation:</strong> {selectedMember.designation || "—"}
+                <strong style={{ color: "#5f6f14" }}>Designation:</strong> {selectedMember.designation || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Gender:</strong> {selectedMember.gender || "—"}
+                <strong style={{ color: "#5f6f14" }}>Gender:</strong> {selectedMember.gender || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>City:</strong> {selectedMember.city || "—"}
+                <strong style={{ color: "#5f6f14" }}>City:</strong> {selectedMember.city || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>State:</strong> {selectedMember.state || "—"}
+                <strong style={{ color: "#5f6f14" }}>State:</strong> {selectedMember.state || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Category:</strong> {getMemberCategory(selectedMember) || "—"}
+                <strong style={{ color: "#5f6f14" }}>Category:</strong> {getMemberCategory(selectedMember) || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Service:</strong> {selectedMember.service || "—"}
+                <strong style={{ color: "#5f6f14" }}>Service:</strong> {selectedMember.service || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Rank:</strong> {selectedMember.rank || "—"}
+                <strong style={{ color: "#5f6f14" }}>Rank:</strong> {selectedMember.rank || "—"}
               </div>
               <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                <strong style={{ color: "#1976d2" }}>Level:</strong> {selectedMember.level || "—"}
+                <strong style={{ color: "#5f6f14" }}>Level:</strong> {selectedMember.level || "—"}
               </div>
               {selectedMember.resume_fileurl && (
                 <div style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "12px" }}>
-                  <strong style={{ color: "#1976d2" }}>Resume:</strong>{" "}
+                  <strong style={{ color: "#5f6f14" }}>Resume:</strong>{" "}
                   <a
                     href={selectedMember.resume_fileurl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: "#1976d2", textDecoration: "underline" }}
+                    style={{ color: "#5f6f14", textDecoration: "underline" }}
                   >
                     View Resume
                   </a>
@@ -2733,15 +2733,15 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div style={{ background: "#1976d2", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexShrink: 0 }}>
+            <div style={{ background: "#c2d45e", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexShrink: 0 }}>
               <div>
-                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>
+                <div style={{ fontSize: "11px", color: "rgba(36,48,20,0.75)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>
                   {getTypeLabel(applicantsReq?.type)} Applicants
                 </div>
-                <h2 style={{ margin: 0, color: "#fff", fontSize: "18px", fontWeight: 700 }}>
+                <h2 style={{ margin: 0, color: "#243014", fontSize: "18px", fontWeight: 700 }}>
                   {applicantsReq?.title}
                   {!applicantsLoading && (
-                    <span style={{ marginLeft: "10px", fontSize: "14px", background: "rgba(255,255,255,0.2)", padding: "2px 10px", borderRadius: "20px" }}>
+                    <span style={{ marginLeft: "10px", fontSize: "14px", background: "rgba(36,48,20,0.12)", padding: "2px 10px", borderRadius: "20px" }}>
                       {applicants.length} applicant{applicants.length !== 1 ? "s" : ""}
                     </span>
                   )}
@@ -2753,10 +2753,10 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     onClick={exportApplicantsToXLSX}
                     title="Export Sr No, Name, Email, Mobile, Location & Category of all applicants"
                     style={{
-                      background: "rgba(255,255,255,0.18)",
+                      background: "rgba(36,48,20,0.12)",
                       border: "none",
                       borderRadius: "20px",
-                      color: "#fff",
+                      color: "#243014",
                       fontSize: "13px",
                       fontWeight: 700,
                       padding: "8px 16px",
@@ -2770,7 +2770,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   </button>
                 )}
                 <button onClick={() => { setShowApplicantsModal(false); setSelectedApplicant(null); }}
-                  style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: "50%", width: "36px", height: "36px", color: "#fff", fontSize: "20px", cursor: "pointer", flexShrink: 0 }}>
+                  style={{ background: "rgba(36,48,20,0.12)", border: "none", borderRadius: "50%", width: "36px", height: "36px", color: "#243014", fontSize: "20px", cursor: "pointer", flexShrink: 0 }}>
                   ×
                 </button>
               </div>
@@ -2812,8 +2812,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                           padding: "14px 18px",
                           borderBottom: "1px solid #e9ecef",
                           cursor: "pointer",
-                          background: isSelected ? "#eff6ff" : "#fff",
-                          borderLeft: isSelected ? "3px solid #1976d2" : "3px solid transparent",
+                          background: isSelected ? "#f1f6d6" : "#fff",
+                          borderLeft: isSelected ? "3px solid #c2d45e" : "3px solid transparent",
                           transition: "background 0.15s",
                         }}
                       >
@@ -2824,7 +2824,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                           {exp && <span style={{ fontSize: "11px", background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "999px", fontWeight: 600 }}>{exp}</span>}
                           <span style={{ fontSize: "11px", color: "#9ca3af", marginLeft: "auto" }}>Applied {appliedAt}</span>
                         </div>
-                        {role && <div style={{ fontSize: "11.5px", color: "#1976d2", marginTop: "4px", fontWeight: 600 }}>{role}</div>}
+                        {role && <div style={{ fontSize: "11.5px", color: "#5f6f14", marginTop: "4px", fontWeight: 600 }}>{role}</div>}
                         {app.applied_city && (
                           <div style={{ fontSize: "11.5px", color: "#334155", marginTop: "4px" }}>
                             Applied for city: <strong>{app.applied_city}</strong>
@@ -2849,7 +2849,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
 
                 const Section = ({ title, children }) => (
                   <div style={{ marginBottom: "20px" }}>
-                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#1976d2", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", borderBottom: "1.5px solid #e3f2fd", paddingBottom: "4px" }}>{title}</div>
+                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#5f6f14", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", borderBottom: "1.5px solid #f1f6d6", paddingBottom: "4px" }}>{title}</div>
                     {children}
                   </div>
                 );
@@ -2865,7 +2865,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 return (
                   <div style={{ flex: 1, overflowY: "auto", padding: "22px 24px" }}>
                     {/* Profile header */}
-                    <div style={{ background: "linear-gradient(135deg,#1976d2,#1565c0)", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px", color: "#fff" }}>
+                    <div style={{ background: "linear-gradient(135deg,#c2d45e,#aabd3f)", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px", color: "#243014" }}>
                       <div style={{ fontSize: "20px", fontWeight: 700, marginBottom: "4px" }}>{pi.fullName || "—"}</div>
                       <div style={{ fontSize: "13px", opacity: 0.9, marginBottom: "8px" }}>{pi.location || ""}</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", fontSize: "12.5px" }}>
@@ -2904,7 +2904,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                     {exp.length > 0 && (
                       <Section title="Experience">
                         {exp.map((e, i) => (
-                          <div key={i} style={{ marginBottom: "12px", paddingLeft: "12px", borderLeft: "2px solid #e3f2fd" }}>
+                          <div key={i} style={{ marginBottom: "12px", paddingLeft: "12px", borderLeft: "2px solid #f1f6d6" }}>
                             <div style={{ fontWeight: 700, fontSize: "13.5px", color: "#1a2332" }}>{e.jobTitle} <span style={{ fontWeight: 400, color: "#6b7280" }}>@ {e.company}</span></div>
                             <div style={{ fontSize: "12px", color: "#9ca3af", margin: "2px 0 4px" }}>{e.startDate} – {e.endDate || "Present"} · {e.location || ""}</div>
                             {e.achievements?.length > 0 && (

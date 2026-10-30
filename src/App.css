@@ -2,10 +2,12 @@
    DESIGN TOKENS
    ============================================================ */
 :root {
-  --primary:        #1976d2;
-  --primary-dark:   #1565c0;
-  --primary-light:  #e3f2fd;
-  --primary-muted:  rgba(25, 118, 210, 0.08);
+  --primary:        #c2d45e;
+  --primary-dark:   #aabd3f;
+  --primary-light:  #f1f6d6;
+  --primary-muted:  rgba(194, 212, 94, 0.08);
+  --primary-text:   #5f6f14; /* green used as text/links on white */
+  --on-primary:     #243014; /* text on a green fill */
   --white:          #ffffff;
   --bg:             #f5f7fa;
   --text:           #1a2332;
@@ -69,16 +71,16 @@ body {
   gap: 10px;
   border-bottom: none;
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
 }
 
 .logo-mark {
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  background: rgba(255,255,255,0.2);
-  border: 1px solid rgba(255,255,255,0.4);
-  color: #fff;
+  background: rgba(36,48,20,0.12);
+  border: 1px solid rgba(36,48,20,0.3);
+  color: var(--on-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,7 +92,7 @@ body {
   font-size: 17px;
   font-weight: 700;
   margin: 0;
-  color: var(--white);
+  color: var(--on-primary);
   letter-spacing: -0.01em;
 }
 
@@ -130,13 +132,13 @@ body {
 .menu-item:hover,
 .sidebar-menu a:hover {
   background: var(--primary-light);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .menu-item.active,
 .sidebar-menu a.active {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   font-weight: 600;
 }
 
@@ -199,7 +201,7 @@ body {
 .submenu-item.active,
 .submenu a.active {
   background: var(--primary);
-  color: var(--white) !important;
+  color: var(--on-primary) !important;
 }
 
 .submenu-icon { font-size: 13px; }
@@ -268,7 +270,7 @@ body {
   font-size: 20px;
 }
 
-.card-icon.blue   { background: var(--primary); }
+.card-icon.blue   { background: var(--primary); color: #243014; }
 .card-icon.red    { background: #e53935; }
 .card-icon.new    { background: #43a047; }
 .card-icon.quarter{ background: #fb8c00; }
@@ -293,7 +295,7 @@ body {
 }
 
 /* Color helpers */
-.blue   { color: var(--primary); }
+.blue   { color: var(--primary-text); }
 .green  { color: #43a047; }
 .purple { color: #7e57c2; }
 .orange { color: #fb8c00; }
@@ -367,7 +369,7 @@ table {
 
 th {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   padding: 12px 14px;
   text-align: left;
   font-size: 12.5px;
@@ -407,7 +409,7 @@ tr:hover { background: var(--primary-muted); }
 .page-header h1, .page-headers h1 {
   font-size: 22px;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .member-row {
@@ -421,7 +423,7 @@ tr:hover { background: var(--primary-muted); }
 
 .member-name {
   font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 13px;
 }
 
@@ -442,7 +444,7 @@ th.sticky-name {
 /* Total count badge */
 .total-count-badge {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   padding: 8px 20px;
   border-radius: 20px;
   font-weight: 600;
@@ -520,7 +522,7 @@ th.sticky-name {
 
 .nav-btn:hover:not(:disabled) {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   border-color: var(--primary);
 }
 
@@ -547,7 +549,7 @@ th.sticky-name {
 
 .btn.primary {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
 }
 .btn.primary:hover { background: var(--primary-dark); }
 
@@ -560,7 +562,7 @@ th.sticky-name {
 
 .btn-view {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   border: none;
   padding: 5px 13px;
   border-radius: var(--radius-sm);
@@ -573,7 +575,7 @@ th.sticky-name {
 
 .btn-outline {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   border: none;
   padding: 9px 18px;
   border-radius: var(--radius-sm);
@@ -585,7 +587,7 @@ th.sticky-name {
 .btn-outline:hover { background: var(--primary-dark); }
 
 /* Legacy modal footer buttons */
-.btn-primary { background: var(--primary); color: var(--white); border: none; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
+.btn-primary { background: var(--primary); color: var(--on-primary); border: none; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
 .btn-success { background: #43a047; color: var(--white); border: none; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
 .btn-danger  { background: #e53935; color: var(--white); border: none; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
 
@@ -618,7 +620,7 @@ th.sticky-name {
 .modal-header {
   padding: 18px 22px;
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   display: flex;
   justify-content: space-between;
@@ -629,13 +631,13 @@ th.sticky-name {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: var(--white);
+  color: var(--on-primary);
 }
 
 .close-btn {
   background: none;
   border: none;
-  color: var(--white);
+  color: var(--on-primary);
   font-size: 26px;
   cursor: pointer;
   line-height: 1;
@@ -680,7 +682,7 @@ th.sticky-name {
 
 .tab.active {
   border-bottom-color: var(--primary);
-  color: var(--primary);
+  color: var(--primary-text);
   font-weight: 700;
 }
 
@@ -703,7 +705,7 @@ th.sticky-name {
 
 .status.placed { background: #dcfce7; color: #166534; }
 .status.active { background: #fef9c3; color: #854d0e; }
-.status.new    { background: #dbeafe; color: #1e40af; }
+.status.new    { background: #e6eeb0; color: #4a5a12; }
 .status.open   { background: #cffafe; color: #0e7490; }
 .status.in-progress { background: #fef3c7; color: #92400e; }
 
@@ -745,7 +747,7 @@ th.sticky-name {
 .filter-header h3 {
   font-size: 15px;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .clear-all {
@@ -807,7 +809,7 @@ th.sticky-name {
 
 .filter-chip {
   background: var(--primary-light);
-  color: var(--primary);
+  color: var(--primary-text);
   padding: 5px 11px;
   border-radius: 20px;
   font-size: 12.5px;
@@ -820,8 +822,8 @@ th.sticky-name {
 .filter-chip button {
   width: 17px;
   height: 17px;
-  background: rgba(25,118,210,0.2);
-  color: var(--primary);
+  background: rgba(194, 212, 94,0.2);
+  color: var(--primary-text);
   border: none;
   border-radius: 50%;
   font-size: 13px;
@@ -837,7 +839,7 @@ th.sticky-name {
 
 .filter-chip button:hover {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
 }
 
 /* Filter options (checkbox list) */
@@ -871,7 +873,7 @@ th.sticky-name {
 .filter-btn.active,
 .filter-btn:hover {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   border-color: var(--primary);
 }
 
@@ -941,7 +943,7 @@ th.sticky-name {
 
 .temp-staff-table.clean th {
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   padding: 13px 14px;
   font-weight: 600;
 }
@@ -956,7 +958,7 @@ th.sticky-name {
 
 .temp-role-badge {
   background: var(--primary-light);
-  color: var(--primary);
+  color: var(--primary-text);
   padding: 3px 10px;
   border-radius: 20px;
   font-size: 12px;
@@ -1001,7 +1003,7 @@ th.sticky-name {
 .search-input:focus, .big-search-input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
+  box-shadow: 0 0 0 3px rgba(194, 212, 94,0.1);
 }
 
 /* ============================================================
@@ -1038,11 +1040,12 @@ th.sticky-name {
   justify-content: center;
   flex-shrink: 0;
 }
-.bg-blue   { background: var(--primary); }
+.bg-blue   { background: var(--primary); color: #243014; }
 .bg-green  { background: #43a047; }
 .bg-cyan   { background: #00897b; }
 .bg-purple { background: #7e57c2; }
 .icon-wrapper svg { color: var(--white); }
+.bg-blue svg { color: var(--on-primary); }
 
 .stat-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
 .stat-value { font-size: 26px; font-weight: 700; color: var(--text); }
@@ -1094,7 +1097,7 @@ th.sticky-name {
 /* Tables section */
 .tables-section { display: grid; grid-template-columns: 2fr 1fr; gap: 22px; margin-bottom: 28px; }
 .table-container h3 {
-  color: var(--primary);
+  color: var(--primary-text);
   margin-bottom: 14px;
   padding-bottom: 10px;
   border-bottom: 2px solid var(--primary-light);

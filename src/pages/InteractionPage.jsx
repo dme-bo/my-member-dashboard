@@ -326,8 +326,8 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           padding: 11px 20px;
           border-radius: 10px;
           border: none;
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           font-weight: 700;
           font-size: 14px;
           cursor: pointer;
@@ -360,7 +360,7 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           color: white;
           font-size: 1.4rem;
         }
-        .card-icon.blue { background: #1976d2; }
+        .card-icon.blue { background: #c2d45e; color: #243014; }
         .card-icon.red { background: #dc2626; }
         .card-icon.new { background: #43a047; }
         .card-icon.neutral { background: #64748b; }
@@ -394,8 +394,8 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           min-width: 900px;
         }
         .escalation-table th {
-          background: #2563eb;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           text-align: left;
           padding: 12px 14px;
           font-weight: 600;
@@ -445,8 +445,8 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: linear-gradient(135deg, #0f766e, #1976d2);
-          color: #fff;
+          background: linear-gradient(135deg, #0f766e, #c2d45e);
+          color: #243014;
           border-top-left-radius: 16px;
           border-top-right-radius: 16px;
         }
@@ -534,7 +534,7 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           border-bottom: 1px solid #f1f5f9;
         }
         .interaction-member-result-item:hover {
-          background: #eff6ff;
+          background: #f1f6d6;
         }
         .interaction-member-result-item strong {
           display: block;
@@ -550,8 +550,8 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
-          background: #eff6ff;
-          border: 1px solid #bfdbfe;
+          background: #f1f6d6;
+          border: 1px solid #d9e49a;
           border-radius: 12px;
           padding: 14px 16px;
         }
@@ -568,7 +568,7 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
         .interaction-clear-btn {
           border: none;
           background: #fff;
-          color: #1976d2;
+          color: #5f6f14;
           width: 32px;
           height: 32px;
           border-radius: 999px;
@@ -603,14 +603,14 @@ export default function InteractionPage({ memberRecords = [], membersLoading = f
           padding: 11px 20px;
           border-radius: 10px;
           border: none;
-          background: #1976d2;
-          color: #fff;
+          background: #c2d45e;
+          color: #243014;
           font-weight: 700;
           font-size: 14px;
           cursor: pointer;
         }
         .interaction-submit-btn:disabled {
-          background: #90caf9;
+          background: #d9e49a;
           cursor: not-allowed;
         }
         .interaction-toast {

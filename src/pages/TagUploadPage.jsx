@@ -196,8 +196,8 @@ export default function TagUploadPage({ memberRecords = [], membersLoading = fal
             style={{
               display: "inline-flex", alignItems: "center", gap: 8,
               padding: "11px 20px", borderRadius: 10, border: "none",
-              background: membersLoading || parsing ? "#90caf9" : "#1976d2",
-              color: "#fff", fontWeight: 700, fontSize: 14,
+              background: membersLoading || parsing ? "#d9e49a" : "#c2d45e",
+              color: "#243014", fontWeight: 700, fontSize: 14,
               cursor: membersLoading || parsing ? "not-allowed" : "pointer",
             }}
           >
@@ -240,7 +240,7 @@ export default function TagUploadPage({ memberRecords = [], membersLoading = fal
                 disabled={applying || updatable.length === 0}
                 style={{
                   padding: "11px 22px", borderRadius: 10, border: "none",
-                  background: applying || updatable.length === 0 ? "#90caf9" : "#16a34a",
+                  background: applying || updatable.length === 0 ? "#d9e49a" : "#16a34a",
                   color: "#fff", fontWeight: 700, fontSize: 14,
                   cursor: applying || updatable.length === 0 ? "not-allowed" : "pointer",
                 }}

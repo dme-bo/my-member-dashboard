@@ -160,8 +160,8 @@ export default function MultiSelectDropdown({
         }
 
         .msd-trigger:focus {
-          border-color: #1976d2;
-          box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.12);
+          border-color: #c2d45e;
+          box-shadow: 0 0 0 3px rgba(194, 212, 94, 0.12);
         }
 
         .msd-trigger-text {
@@ -228,7 +228,7 @@ export default function MultiSelectDropdown({
         }
 
         .msd-option input[type="checkbox"] {
-          accent-color: #1976d2;
+          accent-color: #c2d45e;
           width: 15px;
           height: 15px;
           flex-shrink: 0;
