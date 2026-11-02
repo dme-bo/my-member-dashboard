@@ -75,17 +75,23 @@ body {
 }
 
 .logo-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  background: rgba(36,48,20,0.12);
-  border: 1px solid rgba(36,48,20,0.3);
-  color: var(--on-primary);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #fff; /* the logo is the same green as the header, so it sits on white */
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  padding: 3px;
+  box-sizing: border-box;
   flex-shrink: 0;
+}
+
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .sidebar-header h3 {

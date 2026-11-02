@@ -1000,14 +1000,14 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                     checked={allVisibleSelected}
                     ref={(el) => { if (el) el.indeterminate = someVisibleSelected; }}
                     onChange={toggleSelectAllVisible}
-                    style={{ width: "14px", height: "14px", cursor: "pointer", accentColor: "#ffffff" }}
+                    style={{ width: "14px", height: "14px", cursor: "pointer", accentColor: "#000000" }}
                   />
                 </div>
                 {COL_HEADERS.map((col) => {
                   const sortKey = COL_SORT_KEYS[col];
                   const headerProps = sortHeaderProps(sortKey, sort, toggleSort);
                   return (
-                    <div key={col} {...headerProps} style={{ padding: "0 10px", color: "#fff", fontWeight: 600, fontSize: "13px", textAlign: col === "Mobile" ? "right" : "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...headerProps.style }}>
+                    <div key={col} {...headerProps} style={{ padding: "0 10px", color: "#000000", fontWeight: 600, fontSize: "13px", textAlign: col === "Mobile" ? "right" : "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...headerProps.style }}>
                       {col}
                       <SortArrow active={sort.key === sortKey} dir={sort.dir} />
                     </div>
