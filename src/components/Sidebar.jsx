@@ -57,8 +57,7 @@ function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="logo-mark"><img src="/logo.png" alt="Brisk Olive" /></div>
-        <h3>Brisk Olive</h3>
+        <div className="brand-logo"><img src="/brisk-olive-logo.png" alt="Brisk Olive" /></div>
       </div>
 
       <nav className="sidebar-menu">

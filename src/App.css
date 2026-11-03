@@ -65,12 +65,12 @@ body {
 .sidebar-header {
   height: 56px;
   flex-shrink: 0;
-  padding: 0 20px;
+  padding: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   border-bottom: none;
-  background: var(--primary);
+  background: #fff;
   color: var(--on-primary);
 }
 
@@ -85,6 +85,28 @@ body {
   padding: 3px;
   box-sizing: border-box;
   flex-shrink: 0;
+}
+
+/* The wordmark fills the whole header strip (white, because its olive icon is the
+   same green as the sidebar). */
+.brand-logo {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  padding: 5px 14px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.brand-logo img {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .logo-mark img {
