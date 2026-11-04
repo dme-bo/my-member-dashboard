@@ -674,7 +674,7 @@ export default function TempStaffPage() {
         .tcs-th { height: 45px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; position: sticky; top: 0; z-index: 2; }
         .tcs-td { height: 49px; padding: 0 10px; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; white-space: nowrap; vertical-align: middle; }
         .tcs-td:nth-child(2) { font-weight: 500; color: #111827; }
-        .tcs-num { text-align: right; }
+        .tcs-num { text-align: left; }
         .tcs-row { cursor: pointer; background: #fff; }
         .tcs-row:nth-child(odd) { background: #f8fafc; }
         .tcs-cb { width: 13px; height: 13px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }

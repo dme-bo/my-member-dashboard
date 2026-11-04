@@ -45,6 +45,21 @@ const GRID_TEMPLATE = "36px minmax(130px, 1.6fr) minmax(124px, 1fr) minmax(88px,
 // horizontally instead of clipping the Tags / Regional Partner columns.
 const LIST_MIN_WIDTH = 730;
 const ROW_HEIGHT = 49;
+
+// The rows scroll vertically and their scrollbar takes space from the row grid, while
+// the header sits outside it — so with fr-based columns the header cells ended up a few
+// pixels off the data. The list always reserves the scrollbar gutter and the header
+// pads by the same amount, which keeps every header cell exactly over its column.
+const measureScrollbarWidth = () => {
+  if (typeof document === "undefined") return 0;
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden";
+  document.body.appendChild(probe);
+  const width = probe.offsetWidth - probe.clientWidth;
+  document.body.removeChild(probe);
+  return width;
+};
+const SCROLLBAR_WIDTH = measureScrollbarWidth();
 const COL_HEADERS = ["Name", "Mobile", "Category", "Service", "Rank", "State", "City"];
 
 // Sort key + value accessor per column heading. Default order (from
@@ -170,7 +185,7 @@ const VirtualRow = React.memo(({ index, style, data }) => {
       <div style={{ ...cellStyle, fontWeight: 500, color: "#111827" }}>
         {member.__name || "—"}
       </div>
-      <div style={{ ...cellStyle, justifyContent: "flex-end" }}>{member.phone_number || "—"}</div>
+      <div style={cellStyle}>{member.phone_number || "—"}</div>
       <div style={cellStyle}>{member.category || "—"}</div>
       <div style={cellStyle}>{member.service || "—"}</div>
       <div style={cellStyle}>{member.rank || "—"}</div>
@@ -619,10 +634,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     setRemoveTagTarget({ member, tag });
   }, []);
 
-  const openTagsPopover = useCallback((member, anchorRect) => {
-    setTagsPopover({ member, anchorRect });
-  }, []);
-
   const openPartnerModal = useCallback((member) => {
     setPartnerModalMember(member);
     setPartnerCriteria({ ...emptyPartnerCriteria(), ...(member.regional_partner_criteria || {}) });
@@ -992,7 +1003,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
         <div className="page-fill-mid" style={{ width: "100%", margin: "0", padding: "0" }} ref={kanbanContainerRef}>
           <div className="page-fill-mid" style={{ borderTop: "1px solid #dde1e7", background: "#fff", overflowX: viewMode === "list" ? "auto" : "hidden", overflowY: "hidden" }}>
             {isMembersLoaded && viewMode === "list" && (
-              <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, minWidth: LIST_MIN_WIDTH, flex: "0 0 auto", background: "#c2d45e", position: "sticky", top: 0, zIndex: 1, alignItems: "center", height: "45px", boxSizing: "border-box" }}>
+              <div style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE, minWidth: LIST_MIN_WIDTH, flex: "0 0 auto", paddingRight: SCROLLBAR_WIDTH, background: "#c2d45e", position: "sticky", top: 0, zIndex: 1, alignItems: "center", height: "45px", boxSizing: "border-box" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <input
                     type="checkbox"
@@ -1007,7 +1018,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                   const sortKey = COL_SORT_KEYS[col];
                   const headerProps = sortHeaderProps(sortKey, sort, toggleSort);
                   return (
-                    <div key={col} {...headerProps} style={{ padding: "0 10px", color: "#000000", fontWeight: 600, fontSize: "13px", textAlign: col === "Mobile" ? "right" : "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...headerProps.style }}>
+                    <div key={col} {...headerProps} style={{ padding: "0 10px", color: "#000000", fontWeight: 600, fontSize: "13px", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...headerProps.style }}>
                       {col}
                       <SortArrow active={sort.key === sortKey} dir={sort.dir} />
                     </div>
@@ -1042,6 +1053,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
                 itemSize={ROW_HEIGHT}
                 itemData={virtualRowItemData}
                 overscanCount={6}
+                style={{ overflowY: "scroll" }}
               >
                 {VirtualRow}
               </List>

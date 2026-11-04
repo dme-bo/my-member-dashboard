@@ -534,7 +534,7 @@ export default function ProjectsPage() {
         .pj-table { width: 100%; min-width: 820px; border-collapse: collapse; }
         .pj-th { padding: 11px 12px; text-align: left; font-weight: 600; font-size: 14px; color: #212529; border-bottom: 2px solid #dee2e6; white-space: nowrap; background: #f4f5f0; position: sticky; top: 0; z-index: 2; }
         .pj-td { padding: 9px 12px; border-top: 1px solid #e9ecef; font-size: 14px; color: #3c4047; vertical-align: middle; }
-        .pj-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .pj-num { text-align: left; font-variant-numeric: tabular-nums; }
         .pj-row { cursor: pointer; }
         .pj-row:nth-child(odd) { background: #f7f8fb; }
         .pj-row:hover { background: #eef4fb; }

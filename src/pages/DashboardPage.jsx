@@ -1196,12 +1196,12 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         .state-table-wrap { max-height: 480px; overflow-y: auto; border: 1px solid #e5eaf1; border-radius: 8px; }
         .state-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .state-table th { position: sticky; top: 0; z-index: 3; background: #c2d45e; color: #243014; text-align: left; font-weight: 600; padding: 9px 12px; }
-        .state-table th:nth-child(n+2), .state-table td.num { text-align: right; }
+        .state-table th:nth-child(n+2), .state-table td.num { text-align: left; }
         .state-table td { padding: 7px 12px; border-bottom: 1px solid #eef1f5; color: #334155; }
         .state-table td.num { font-variant-numeric: tabular-nums; font-weight: 600; color: #0f172a; }
         .state-table td.pct { position: relative; z-index: 0; min-width: 110px; }
         .state-table .pct-bar { position: absolute; left: 12px; top: 50%; height: 16px; transform: translateY(-50%); background: #e6eeb0; border-radius: 3px; max-width: calc(100% - 24px); }
-        .state-table .pct-text { position: relative; display: block; text-align: right; font-variant-numeric: tabular-nums; }
+        .state-table .pct-text { position: relative; display: block; text-align: left; font-variant-numeric: tabular-nums; }
         .state-table tfoot td { position: sticky; bottom: 0; z-index: 3; background: #f1f5f9; font-weight: 700; border-top: 1px solid #cbd5e1; }
         @media (max-width: 900px) { .state-split { grid-template-columns: 1fr; } }
         .charts-grid > .chart-card { min-width: 0; display: flex; flex-direction: column; }
@@ -1393,7 +1393,7 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
         @media (max-width: 900px) { .bo-grid-2 { grid-template-columns: 1fr; } }
         .bo-th { padding: 9px 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; }
         .bo-td { padding: 8px 10px; border-top: 1px solid #e9ecef; font-size: 13px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
-        .bo-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .bo-num { text-align: left; font-variant-numeric: tabular-nums; }
         .bo-row:nth-child(odd) { background: #f7f8fb; }
         .bo-trunc { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
         .bo-type { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }

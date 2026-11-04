@@ -728,7 +728,7 @@ export default function RecruitmentPage() {
         .rec-table { width: 100%; min-width: 980px; border-collapse: collapse; }
         .rec-th { padding: 11px 12px; text-align: left; font-weight: 600; font-size: 14px; color: #212529; border-bottom: 2px solid #dee2e6; white-space: nowrap; background: #f4f5f0; position: sticky; top: 0; z-index: 2; }
         .rec-td { padding: 9px 12px; border-top: 1px solid #e9ecef; font-size: 14px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
-        .rec-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .rec-num { text-align: left; font-variant-numeric: tabular-nums; }
         .rec-row { cursor: pointer; }
         .rec-row:nth-child(odd) { background: #f7f8fb; }
         .rec-row:hover { background: #eef4fb; }

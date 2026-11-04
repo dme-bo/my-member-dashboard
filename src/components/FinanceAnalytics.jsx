@@ -377,14 +377,14 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
         .fin-head { height: 45px; background: #c2d45e; color: #243014; font-size: 13px; font-weight: 600; }
         .fin-head > div { padding: 0 10px; }
         .fin-head-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-align: left; padding: 0; }
-        .fin-head-btn.right { text-align: right; width: 100%; }
+        .fin-head-btn.right { text-align: left; width: 100%; }
         .fin-row { font-size: 13px; color: #64748b; border-bottom: 1px solid #dde1e7; background: #fff; }
         .fin-row.alt { background: #f8fafc; }
         .fin-row.clickable { cursor: pointer; }
         .fin-row.clickable:hover { background: #f1f6d6; }
         .fin-row > div { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .fin-name { font-weight: 500; color: #111827; }
-        .fin-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .fin-num { text-align: left; font-variant-numeric: tabular-nums; }
         .fin-num.dim { color: #cbd5e1; }
         .fin-total { font-weight: 700; color: #111827; }
         .fin-muted { color: #94a3b8; }

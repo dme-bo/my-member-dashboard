@@ -717,7 +717,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
           vertical-align: middle;
         }
         .regimental-table td:nth-child(2) { font-weight: 500; color: #111827; }
-        .regimental-table .regimental-num { text-align: right; }
+        .regimental-table .regimental-num { text-align: left; }
         .regimental-table .regimental-cb-col { width: 36px; padding: 0; text-align: center; }
         .regimental-table tbody tr { cursor: pointer; background: #fff; }
         .regimental-table tbody tr:nth-child(odd) { background: #f8fafc; }

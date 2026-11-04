@@ -1051,7 +1051,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         .req-th { height: 42px; padding: 0 10px; text-align: left; font-weight: 600; font-size: 13px; color: #243014; white-space: nowrap; background: #c2d45e; border-bottom: 1px solid #aabd3f; position: sticky; top: 0; z-index: 1; }
         .req-sortable { cursor: pointer; user-select: none; }
         .req-td { height: 46px; padding: 0 10px; border-bottom: 1px solid #edf0f3; font-size: 13px; color: #3c4047; white-space: nowrap; vertical-align: middle; }
-        .req-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .req-num { text-align: left; font-variant-numeric: tabular-nums; }
         .req-row { background: #fff; }
         .req-row:nth-child(odd) { background: #f7f8fb; }
         .req-row.is-selected { background: #f1f6d6; }
@@ -1063,7 +1063,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         .req-type { background: #eef1f5; color: #3c4047; }
         .req-open, .req-count-pill { background: #e3f1e3; color: #1f5c26; }
         .req-closed { background: #fbe9e9; color: #9b1c1c; }
-        .req-count-pill { border: 0; min-width: 28px; cursor: pointer; background: none !important; color: #3c4047 !important; font-size: 13px; font-weight: 400; padding: 0 4px; justify-content: flex-end; }
+        .req-count-pill { border: 0; min-width: 28px; cursor: pointer; background: none !important; color: #3c4047 !important; font-size: 13px; font-weight: 400; padding: 0 4px; justify-content: flex-start; }
         .req-count-pill:hover { color: #5f6f14 !important; text-decoration: underline; }
         .req-act { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #d0d5dd; background: #fff; border-radius: 4px; font: inherit; font-size: 13px; color: #3c4047; cursor: pointer; }
         .req-act:hover { background: #f2f3f5; }
