@@ -61,7 +61,6 @@ function Sidebar({ expandedMenu, onMenuClick, onMemberListHover }) {
       </div>
 
       <nav className="sidebar-menu">
-        <div className="sidebar-section-label">Members</div>
         <NavLink to="/" className={`menu-item ${isDashboardActive ? "active" : ""}`} end onClick={() => onMenuClick?.(null)}>
           <LuLayoutDashboard className="menu-icon" />
           <span>Dashboard</span>
