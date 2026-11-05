@@ -352,6 +352,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
   const [focusBounds, setFocusBounds] = useState(null);
   const [recenterKey, setRecenterKey] = useState(0);
   const bodyRef = useRef(null);
+  const pageRef = useRef(null);
 
   // Centres from the four training-establishment collections, and which map
   // layers are switched on ("members" plus each CENTRE_LAYERS key).
@@ -481,7 +482,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
   };
 
   const toggleFullscreen = () => {
-    const node = bodyRef.current;
+    const node = pageRef.current;
     if (!node) return;
     if (document.fullscreenElement) document.exitFullscreen?.();
     else node.requestFullscreen?.();
@@ -617,7 +618,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           position: absolute;
           left: 16px;
           top: 16px;
-          z-index: 5;
+          z-index: 1000;
           width: 260px;
           max-height: calc(100% - 32px);
           display: flex;
@@ -665,6 +666,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
         }
         .location-status { font-size: 12px; color: #64748b; }
         .location-count { font-size: 13px; font-weight: 600; color: #111827; }
+        .location-page:fullscreen { background: #fff; height: 100vh; }
         .location-body {
           flex: 1;
           min-height: 520px;
@@ -774,7 +776,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           text-align: center;
           padding: 24px;
           color: #475569;
-          z-index: 6;
+          z-index: 1000;
           background: rgba(248, 250, 252, 0.9);
           backdrop-filter: blur(4px);
         }
@@ -841,7 +843,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           position: absolute;
           right: 16px;
           bottom: 16px;
-          z-index: 6;
+          z-index: 1000;
           width: min(360px, calc(100% - 32px));
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(12px);
@@ -953,7 +955,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           left: 16px;
           right: 16px;
           bottom: 16px;
-          z-index: 6;
+          z-index: 1000;
           max-width: 520px;
           margin-left: auto;
           background: rgba(255, 255, 255, 0.96);
@@ -1022,7 +1024,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
         .empty-results-card {
           position: absolute;
           inset: 16px;
-          z-index: 6;
+          z-index: 1000;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1070,7 +1072,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
         }
       `}</style>
 
-      <div className="location-page">
+      <div className="location-page" ref={pageRef}>
         <div className="location-header page-header-band">
           {/* Row 1: title + count, Reset Filters */}
           <div className="location-title-row">
