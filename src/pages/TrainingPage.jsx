@@ -17,6 +17,7 @@ import {
 import { collection, db, addDoc, doc, getDocs, updateDoc, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import FavoritesMenu from "../components/FavoritesMenu";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import WorkshopDetailModal from "../components/WorkshopDetailModal";
@@ -2235,7 +2236,7 @@ Please don't miss it — we look forward to your participation!`;
       {activeView === "sessions" && (
         <div className="ws-table-wrap">
           {loading || workshopsLoading ? (
-            <SkeletonLoader rows={5} label="Loading workshops…" />
+            <TableLoadingSpinner label="Loading workshops…" />
           ) : viewMode === "kanban" ? (
             <div style={{ padding: "12px 32px" }}>
               {sections.map((section) => (
@@ -2367,7 +2368,7 @@ Please don't miss it — we look forward to your participation!`;
         <h3>Documents Library ({filtereddocuments.length})</h3>
 
         {loading ? (
-          <SkeletonLoader rows={5} label="Loading documents…" />
+          <TableLoadingSpinner label="Loading documents…" />
         ) : alldocuments.length === 0 ? (
           <div className="training-empty">No documents added to any training yet.</div>
         ) : filtereddocuments.length === 0 ? (
