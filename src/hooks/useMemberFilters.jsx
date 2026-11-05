@@ -655,8 +655,8 @@ export default function useMemberFilters(members) {
           const wantsInactive = values.includes("inactive");
           const isActivePartner = !!member.is_regional_partner && member.regional_partner_status !== "Inactive";
           const isInactivePartner = !!member.is_regional_partner && member.regional_partner_status === "Inactive";
-          if (wantsActive && !wantsInactive && !isActivePartner) { matchesSidebar = false; break; }
-          if (wantsInactive && !wantsActive && !isInactivePartner) { matchesSidebar = false; break; }
+          if ((wantsActive && isActivePartner) || (wantsInactive && isInactivePartner)) continue;
+          if (wantsActive || wantsInactive) { matchesSidebar = false; break; }
           continue;
         }
 

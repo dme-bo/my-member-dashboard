@@ -5,23 +5,20 @@ import OdooViewToolbar from "../components/OdooViewToolbar";
 import {
   FaPlus,
   FaTimes,
-  FaTrashAlt,
   FaChalkboardTeacher,
-  FaCalendarCheck,
-  FaCheckCircle,
-  FaUsers,
   FaLink,
   FaUserFriends,
   FaFolderOpen,
   FaExternalLinkAlt,
   FaEnvelope,
-  FaHistory,
   FaSearch,
   FaWhatsapp,
 } from "react-icons/fa";
 import { collection, db, addDoc, doc, getDocs, updateDoc, serverTimestamp } from "../firestoreClient";
 import { getMemberName, getMemberPhone, getMemberEmail } from "../utils/memberFields";
 import SkeletonLoader from "../components/SkeletonLoader";
+import FavoritesMenu from "../components/FavoritesMenu";
+import SelectionActionMenu from "../components/SelectionActionMenu";
 import WorkshopDetailModal from "../components/WorkshopDetailModal";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 
@@ -30,7 +27,8 @@ const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
 const WORKSHOP_APPLICANTS_SUBCOLLECTION = "workshop_users_applied";
 // workshopsmaster/{workshopId}/attendance/{userId}: a document per member marked present.
 const WORKSHOP_ATTENDANCE_SUBCOLLECTION = "attendance";
-const MATERIAL_TYPES = ["Feedback Form", "Members Training Update", "Training Video"];
+const WORKSHOP_FAVORITES_KEY = "workshopsPageFavorites";
+const MATERIAL_TYPES = ["Members Training Update", "Training Video"];
 
 const WORKSHOP_MONTHS = {
   Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
@@ -124,6 +122,19 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [statusFilters, setStatusFilters] = useState([]);
   const [topicSearch, setTopicSearch] = useState("");
   const [sessionsGroupBy, setSessionsGroupBy] = useState(null);
+  const [viewMode, setViewMode] = useState("list");
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(WORKSHOP_FAVORITES_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [activeView, setActiveView] = useState("sessions");
   const [documentsSession, setdocumentsSession] = useState(null);
@@ -136,8 +147,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [libraryTypeFilter, setLibraryTypeFilter] = useState("All");
   const [libraryTrainingFilter, setLibraryTrainingFilter] = useState("All");
   const [librarySearch, setLibrarySearch] = useState("");
-
-  const [historySearch, setHistorySearch] = useState("");
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -288,6 +297,8 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const clearFilters = () => {
     setStatusFilters([]);
     setTopicSearch("");
+    setSessionsGroupBy(null);
+    setCurrentPage(1);
   };
   const toggleStatusFilter = (value) => {
     setStatusFilters((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
@@ -325,6 +336,82 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
     () => filteredSessions.filter((session) => getSessionStatus(session) === "Completed").reverse(),
     [filteredSessions]
   );
+
+  const orderedSessions = sessionsGroupBy
+    ? groupSessions(filteredSessions).flatMap(([, items]) => items)
+    : [...upcomingSessions, ...completedSessions];
+  const totalItems = orderedSessions.length;
+  const pageSize = rowsPerPage === Infinity ? Math.max(totalItems, 1) : rowsPerPage;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageRows = orderedSessions.slice((activePage - 1) * pageSize, activePage * pageSize);
+  const rangeStart = totalItems ? (activePage - 1) * pageSize + 1 : 0;
+  const rangeEnd = Math.min(activePage * pageSize, totalItems);
+
+  const sections = sessionsGroupBy
+    ? groupSessions(pageRows).map(([label, items]) => ({ key: label, label, items, total: items.length, empty: "" }))
+    : [
+        { key: "Upcoming Workshops", label: "Upcoming Workshops", items: pageRows.filter((s) => getSessionStatus(s) === "Upcoming"), total: upcomingSessions.length, empty: "No upcoming workshops." },
+        { key: "Completed Workshops", label: "Completed Workshops", items: pageRows.filter((s) => getSessionStatus(s) === "Completed"), total: completedSessions.length, empty: "No completed workshops yet." },
+      ].filter((section) => !statusFilters.length || section.total > 0);
+
+  const allRowsSelected = pageRows.length > 0 && pageRows.every((s) => selectedIds.has(s.id));
+  const someRowsSelected = !allRowsSelected && pageRows.some((s) => selectedIds.has(s.id));
+  const toggleSelectAll = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      pageRows.forEach((s) => (allRowsSelected ? next.delete(s.id) : next.add(s.id)));
+      return next;
+    });
+  const toggleSelect = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleGroupCollapsed = (key) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const handleExportSelected = () => {
+    const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = orderedSessions
+      .filter((s) => selectedIds.has(s.id))
+      .map((s) => [
+        s.date || "", s.time || "", s.topic || "", s.workshopOrganizer || "", s.workshopLocation || "",
+        s.workshopFee ?? "", s.__workshop ? s.__workshop.applicantCount : getTraineeCount(s), s.meetingLink || "", getSessionStatus(s),
+      ]);
+    const header = ["Date", "Time", "Workshop", "Organizer", "Location", "Fee", "Trainees", "Meeting Link", "Status"];
+    const csv = [header, ...rows].map((row) => row.map(quote).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    link.download = "workshops.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const persistFavorites = (next) => {
+    setFavorites(next);
+    try {
+      localStorage.setItem(WORKSHOP_FAVORITES_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.error("Error saving favorites:", error);
+    }
+  };
+  const saveCurrentAsFavorite = (name) =>
+    persistFavorites([...favorites, { id: Date.now().toString(36), name, topicSearch, statusFilters, groupBy: sessionsGroupBy }]);
+  const applyFavorite = (fav) => {
+    setTopicSearch(fav.topicSearch || "");
+    setStatusFilters(fav.statusFilters || []);
+    setSessionsGroupBy(fav.groupBy || null);
+    setCurrentPage(1);
+  };
+  const deleteFavorite = (id) => persistFavorites(favorites.filter((f) => f.id !== id));
 
   const uploadPickerSessions = useMemo(() => {
     const term = uploadPickerSearch.trim().toLowerCase();
@@ -536,12 +623,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
     } finally {
       setSavingTrainees(false);
     }
-  };
-
-  const openWorkshopPicker = () => {
-    setWorkshopPickerSearch("");
-    setShowWorkshopPicker(true);
-    void ensureWorkshopsLoaded();
   };
 
   const closeWorkshopPicker = () => {
@@ -993,12 +1074,10 @@ Please don't miss it — we look forward to your participation!`;
 
     const documents = documentsSession.documents || [];
     const findLink = (type) => documents.find((m) => m.type === type)?.link;
-    const feedbackLink = findLink("Feedback Form");
     const updateLink = findLink("Members Training Update");
     const videoLink = findLink("Training Video");
 
     const missing = [
-      !feedbackLink && "Feedback Form",
       !updateLink && "Members Training Update",
       !videoLink && "Training Video",
     ].filter(Boolean);
@@ -1014,15 +1093,10 @@ Please don't miss it — we look forward to your participation!`;
       "Dear All,",
       `I am pleased to inform you that the training session on "${documentsSession.topic}" was successfully conducted on ${dateTime}. The session went well, and participants were actively engaged throughout.`,
       "",
-      "A feedback form has been shared with all attendees to gather their insights and suggestions:",
-      `Feedback Form Link: ${feedbackLink}`,
-      "",
       "Additionally, you can track the training progress and updates here:",
       `Members Training Update Link: ${updateLink}`,
       "",
       `Training Video Link: ${videoLink}`,
-      "",
-      "We will review the feedback received and incorporate improvements in upcoming sessions.",
       "",
       "Regards,",
       "Training Team",
@@ -1080,22 +1154,39 @@ Please don't miss it — we look forward to your participation!`;
     });
   }, [alldocuments, libraryTypeFilter, libraryTrainingFilter, librarySearch]);
 
-  const historyRows = useMemo(
-    () => [...sessions].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
-    [sessions]
+  const selectCell = (session) => (
+    <td style={{ width: 36 }}>
+      <input
+        type="checkbox"
+        className="ws-cb"
+        aria-label={`Select ${session.topic || "workshop"}`}
+        checked={selectedIds.has(session.id)}
+        onChange={() => toggleSelect(session.id)}
+      />
+    </td>
   );
 
-  const filteredHistoryRows = useMemo(() => {
-    const term = historySearch.trim().toLowerCase();
-    if (!term) return historyRows;
-    return historyRows.filter((session) => {
-      const traineeNames = (session.attendees || []).map(getTraineeName).join(" ").toLowerCase();
-      return (
-        String(session.topic || "").toLowerCase().includes(term) ||
-        traineeNames.includes(term)
-      );
-    });
-  }, [historyRows, historySearch]);
+  const renderSessionCard = (session) => {
+    const status = getSessionStatus(session);
+    const trainees = session.__workshop ? session.__workshop.applicantCount : getTraineeCount(session);
+    const open = () => (session.__workshop ? handlePickWorkshop(session.__workshop) : setDetailSessionId(session.id));
+    return (
+      <div key={session.id} className="ws-card" onClick={open}>
+        <div className="ws-card-top">
+          <span className="ws-card-title">{session.topic || "-"}</span>
+          <span className={`training-status-badge ${status.toLowerCase()}`}>{status}</span>
+        </div>
+        <div className="ws-card-meta">{session.date ? formatDateDisplay(session.date) : "No date"}{session.time ? ` · ${session.time}` : ""}</div>
+        {(session.workshopOrganizer || session.workshopLocation) && (
+          <div className="ws-card-meta">{[session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}</div>
+        )}
+        <div className="ws-card-foot">
+          <span><FaUserFriends size={11} /> {trainees} trainees</span>
+          <span>{session.workshopFee || session.workshopFee === 0 ? `₹${session.workshopFee}` : "Free / -"}</span>
+        </div>
+      </div>
+    );
+  };
 
   const renderSessionRow = (session) => {
     const status = getSessionStatus(session);
@@ -1103,6 +1194,7 @@ Please don't miss it — we look forward to your participation!`;
       const workshop = session.__workshop;
       return (
         <tr key={session.id}>
+          {selectCell(session)}
           <td>{session.date ? formatDateDisplay(session.date) : "-"}</td>
           <td>{session.time || "-"}</td>
           <td style={{ cursor: "pointer" }} onClick={() => handlePickWorkshop(workshop)} title="Open to schedule this workshop">
@@ -1131,6 +1223,7 @@ Please don't miss it — we look forward to your participation!`;
     }
     return (
       <tr key={session.id}>
+        {selectCell(session)}
         <td>{formatDateDisplay(session.date)}</td>
         <td>{session.time || "-"}</td>
         <td style={{ cursor: "pointer" }} onClick={() => setDetailSessionId(session.id)} title="Open workshop">
@@ -1201,7 +1294,7 @@ Please don't miss it — we look forward to your participation!`;
   };
 
   return (
-    <div className="training-page">
+    <div className="member-list-page ws-page page-fill">
       <style>{`
         .training-page {
           padding: 20px;
@@ -1955,6 +2048,61 @@ Please don't miss it — we look forward to your participation!`;
           color: #64748b;
           font-weight: 700;
         }
+        .ws-page { padding: 0 !important; background: #fff; color: #212529; min-height: calc(100vh - 64px); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .ws-header { background: #fff; padding: 20px 32px 16px; display: flex; flex-direction: column; gap: 12px; }
+        .ws-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+        .ws-title-row { justify-content: space-between; }
+        .ws-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .ws-kpis { display: flex; flex-wrap: wrap; gap: 6px; }
+        .ws-kpi { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px 0 10px; border-radius: 14px; border: 1px solid transparent; font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; }
+        .ws-kpi::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .ws-kpi b { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+        button.ws-kpi { cursor: pointer; transition: box-shadow .15s; }
+        button.ws-kpi:hover { box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+        button.ws-kpi[aria-pressed="true"] { box-shadow: inset 0 0 0 2px currentColor; font-weight: 600; }
+        .ws-kpi.green { background: #e8f1d4; border-color: #d3e2a8; color: #3f5a14; }
+        .ws-kpi.amber { background: #fdf3e1; border-color: #f3dcae; color: #8a5300; }
+        .ws-kpi.blue { background: #e8f1fb; border-color: #c9dcf3; color: #0d5aa7; }
+        .ws-outline-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border: 1px solid #dde1e7; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; white-space: nowrap; }
+        .ws-outline-btn:hover { background: #f6f8fa; }
+        .ws-toolbar-group { border: 1px solid #dde1e7; border-left: none; border-radius: 6px; background: #fff; display: flex; align-items: stretch; margin-left: auto; }
+        .ws-toolbar-group > div:first-child { gap: 0 !important; }
+        .ws-toolbar-group button { border: none !important; border-left: 1px solid #dde1e7 !important; border-radius: 0 !important; height: 32px !important; }
+        .ws-toolbar-group > div:first-child > div:first-child button { border-radius: 6px 0 0 6px !important; }
+        .ws-toolbar-group > div:last-child button { border-radius: 0 6px 6px 0 !important; }
+        .ws-meta-row { justify-content: space-between; gap: 10px; }
+        .ws-meta-left, .ws-meta-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .ws-meta-right { flex-wrap: nowrap; gap: 6px; }
+        .ws-select { height: 30px; padding: 0 6px; border: 1px solid #dde1e7; border-radius: 6px; font: inherit; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+        .ws-range { margin: 0 2px; font-size: 13px; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .ws-joined { display: flex; gap: 6px; }
+        .ws-joined:has(.is-active) { gap: 0; background: #dde1e7; border: 1px solid #dde1e7; border-radius: 6px; overflow: hidden; margin-left: 2px; }
+        .ws-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #dde1e7; background: #fff; color: #475569; cursor: pointer; padding: 0; border-radius: 6px; }
+        .ws-icon-btn:disabled { background: #f8fafc; color: #cbd5e1; cursor: not-allowed; }
+        .ws-joined:has(.is-active) .ws-icon-btn { width: 36px; height: 34px; border: none; border-radius: 0; color: #64748b; }
+        .ws-icon-btn.is-active { background: #f1f6d6; color: #5f6f14; }
+        .ws-table-wrap { background: #fff; }
+        .ws-table-scroll { overflow: auto; max-height: 70vh; min-height: 200px; border-top: 1px solid #dde1e7; }
+        .ws-table { width: 100%; min-width: 980px; border-collapse: collapse; margin: 0; }
+        .ws-table th { height: 45px; padding: 0 10px; text-align: left; font-size: 13px; font-weight: 600; color: #243014; background: #c2d45e; border-bottom: none; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+        .ws-table td { min-height: 49px; padding: 8px 10px; border-top: none; border-bottom: 1px solid #dde1e7; font-size: 13px; color: #64748b; vertical-align: middle; }
+        .ws-table tbody tr:nth-child(even) td { background: #fff; }
+        .ws-table tbody tr:nth-child(odd) td { background: #f8fafc; }
+        .ws-table tbody tr.ws-group-row td { height: 40px; padding: 0 12px; background: #f1f5f9; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .ws-table td.ws-empty { text-align: center; padding: 14px; color: #94a3b8; font-style: italic; font-size: 12px; background: #fff; }
+        .ws-count { color: #64748b; font-weight: 500; }
+        .ws-cb { width: 13px; height: 13px; margin: 0; accent-color: #c2d45e; cursor: pointer; vertical-align: middle; }
+        .ws-table th .ws-cb { width: 14px; height: 14px; accent-color: #000000; }
+        .ws-kanban-group { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f1f5f9; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; color: #334155; }
+        .ws-empty { text-align: center; padding: 14px; color: #94a3b8; font-style: italic; font-size: 12px; }
+        .ws-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 10px; }
+        .ws-card { background: #fff; border: 1px solid #dde1e7; border-radius: 8px; padding: 12px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+        .ws-card:hover { border-color: #c2d45e; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .ws-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+        .ws-card-title { font-weight: 700; color: #5f6f14; font-size: 13.5px; }
+        .ws-card-meta { font-size: 12px; color: #64748b; }
+        .ws-card-foot { display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-top: 4px; }
+        @media (max-width: 767px) { .ws-header { padding: 12px 16px 10px; } }
       `}</style>
 
       {toast.show && (
@@ -1963,172 +2111,204 @@ Please don't miss it — we look forward to your participation!`;
         </div>
       )}
 
-      <div className="training-header">
-        <div>
-          <h2>Workshop</h2>
-          <p>Schedule workshops and upload documents.</p>
-        </div>
-        <div className="training-header-actions">
-          <button type="button" className="training-btn training-btn-secondary" onClick={openUploadPicker}>
-            <FaFolderOpen size={12} />
-            Upload Documents
-          </button>
-          {activeView === "sessions" && (
-            <button type="button" className="training-btn training-btn-primary" onClick={openWorkshopPicker}>
-              <FaPlus size={12} />
-              Schedule Workshop
+      <div className="ws-header page-header-band">
+        <div className="ws-row ws-title-row">
+          <div className="ws-title">
+            <h1>{activeView === "library" ? "Documents Library" : "Workshops"}</h1>
+            {activeView === "sessions" && (
+              <div className="ws-kpis" role="group" aria-label="Quick filters">
+                <button type="button" className="ws-kpi green" aria-pressed="false" onClick={() => { setStatusFilters([]); setCurrentPage(1); }}><b>{counts.total.toLocaleString()}</b>Total workshops</button>
+                <button type="button" className="ws-kpi amber" aria-pressed={statusFilters.includes("Upcoming")} onClick={() => { toggleStatusFilter("Upcoming"); setCurrentPage(1); }}><b>{counts.upcoming.toLocaleString()}</b>Upcoming</button>
+                <button type="button" className="ws-kpi green" aria-pressed={statusFilters.includes("Completed")} onClick={() => { toggleStatusFilter("Completed"); setCurrentPage(1); }}><b>{counts.completed.toLocaleString()}</b>Completed</button>
+                <span className="ws-kpi blue"><b>{counts.totalAttendance.toLocaleString()}</b>Trainee slots</span>
+              </div>
+            )}
+          </div>
+          {activeView === "sessions" ? (
+            <button type="button" className="ws-outline-btn" onClick={clearFilters}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+              Reset Filters
             </button>
-          )}
-        </div>
-      </div>
-
-      <div className="training-view-tabs">
-        <button
-          type="button"
-          className={`training-view-tab ${activeView === "sessions" ? "active" : ""}`}
-          onClick={() => setActiveView("sessions")}
-        >
-          <FaChalkboardTeacher size={13} />
-          Workshops
-        </button>
-        <button
-          type="button"
-          className={`training-view-tab ${activeView === "library" ? "active" : ""}`}
-          onClick={() => setActiveView("library")}
-        >
-          <FaFolderOpen size={13} />
-          Documents Library
-        </button>
-        <button
-          type="button"
-          className={`training-view-tab ${activeView === "history" ? "active" : ""}`}
-          onClick={() => setActiveView("history")}
-        >
-          <FaHistory size={13} />
-          History
-        </button>
-      </div>
-
-      {activeView === "sessions" && (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: "14px 0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1", minWidth: "320px", maxWidth: "620px" }}>
-            <OdooSearchBar
-              value={topicSearch}
-              onChange={(e) => setTopicSearch(e.target.value)}
-              placeholder="Search by topic..."
-              chips={[
-                ...statusFilters.map((v) => ({ key: `status-${v}`, label: v, onRemove: () => toggleStatusFilter(v) })),
-                ...(sessionsGroupBy ? [{ key: "groupBy", label: `Group: ${SESSIONS_GROUP_BY_OPTIONS.find((o) => o.key === sessionsGroupBy)?.label || sessionsGroupBy}`, onRemove: () => setSessionsGroupBy(null) }] : []),
-              ]}
-            />
-            <OdooViewToolbar
-              quickFilters={[
-                { key: "status-Upcoming", label: "Upcoming", active: statusFilters.includes("Upcoming"), onToggle: () => toggleStatusFilter("Upcoming") },
-                { key: "status-Completed", label: "Completed", active: statusFilters.includes("Completed"), onToggle: () => toggleStatusFilter("Completed") },
-              ]}
-              groupByOptions={SESSIONS_GROUP_BY_OPTIONS}
-              groupBy={sessionsGroupBy}
-              onGroupByChange={setSessionsGroupBy}
-              showViewToggle={false}
-            />
-          </div>
-          {hasActiveFilters && (
-            <button type="button" className="training-clear-filters-btn" onClick={clearFilters}>
-              <FaTimes size={11} />
-              Clear All
-            </button>
-          )}
-        </div>
-      )}
-
-      {activeView === "sessions" && (
-      <>
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="card-icon blue">
-            <FaChalkboardTeacher size={24} />
-          </div>
-          <div className="card-label">Total Workshops</div>
-          <div className="card-value">{counts.total.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="card-icon orange">
-            <FaCalendarCheck size={24} />
-          </div>
-          <div className="card-label">Upcoming</div>
-          <div className="card-value">{counts.upcoming.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="card-icon new">
-            <FaCheckCircle size={24} />
-          </div>
-          <div className="card-label">Completed</div>
-          <div className="card-value">{counts.completed.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="card-icon purple">
-            <FaUsers size={24} />
-          </div>
-          <div className="card-label">Total Trainee Slots</div>
-          <div className="card-value">{counts.totalAttendance.toLocaleString()}</div>
-        </div>
-      </div>
-
-      {[
-        { key: 'upcoming', title: 'Upcoming Workshops', list: upcomingSessions, empty: 'No upcoming workshops.' },
-        { key: 'completed', title: 'Completed Workshops', list: completedSessions, empty: 'No completed workshops yet.' },
-      ]
-        // A status filter leaves one section empty; hide it instead of showing a blank card.
-        .filter((section) => !statusFilters.length || section.list.length > 0)
-        .map((section, index) => {
-          const grouped = groupSessions(section.list);
-          return (
-            <div className="training-table-card" key={section.key} style={index > 0 ? { marginTop: '24px' } : undefined}>
-              <h3>{section.title} ({section.list.length})</h3>
-
-              {loading || workshopsLoading ? (
-                <SkeletonLoader rows={5} label="Loading workshops…" />
-              ) : section.list.length === 0 ? (
-                <div className="training-empty">{hasActiveFilters ? 'No workshops match these filters.' : section.empty}</div>
-              ) : (
-                <table className="training-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Time</th>
-                      <th>Workshop</th>
-                      <th>Fee</th>
-                      <th>Trainees</th>
-                      <th>Meeting Link</th>
-                      <th>Documents</th>
-                      <th>Reminders</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {grouped
-                      ? grouped.map(([label, items]) => (
-                          <Fragment key={label}>
-                            <tr>
-                              <td colSpan={9} style={{ padding: '10px 16px', fontWeight: 700, fontSize: '13px', color: '#334155', background: '#f1f5f9' }}>
-                                {label} <span style={{ fontWeight: 500, color: '#64748b' }}>({items.length})</span>
-                              </td>
-                            </tr>
-                            {items.map(renderSessionRow)}
-                          </Fragment>
-                        ))
-                      : section.list.map(renderSessionRow)}
-                  </tbody>
-                </table>
-              )}
+          ) : (
+            <div className="ws-row" style={{ gap: 8 }}>
+              <button type="button" className="ws-outline-btn" onClick={openUploadPicker}>
+                <FaFolderOpen size={12} />
+                Upload Documents
+              </button>
+              <button type="button" className="ws-outline-btn" onClick={() => setActiveView("sessions")}>
+                <FaChalkboardTeacher size={12} />
+                Back to Workshops
+              </button>
             </div>
-          );
-        })}
-      </>
+          )}
+        </div>
+
+        {activeView === "sessions" && (
+          <>
+            <div className="ws-row" style={{ gap: 8 }}>
+              <OdooSearchBar
+                variant="boxed"
+                value={topicSearch}
+                onChange={(e) => {
+                  setTopicSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search by topic..."
+                chips={[
+                  ...statusFilters.map((v) => ({ key: `status-${v}`, label: v, onRemove: () => toggleStatusFilter(v) })),
+                  ...(sessionsGroupBy ? [{ key: "groupBy", label: `Group: ${SESSIONS_GROUP_BY_OPTIONS.find((o) => o.key === sessionsGroupBy)?.label || sessionsGroupBy}`, onRemove: () => setSessionsGroupBy(null) }] : []),
+                ]}
+              />
+              <div className="ws-toolbar-group">
+                <OdooViewToolbar
+                  variant="boxed"
+                  quickFilters={[
+                    { key: "status-Upcoming", label: "Upcoming", active: statusFilters.includes("Upcoming"), onToggle: () => toggleStatusFilter("Upcoming") },
+                    { key: "status-Completed", label: "Completed", active: statusFilters.includes("Completed"), onToggle: () => toggleStatusFilter("Completed") },
+                  ]}
+                  groupByOptions={SESSIONS_GROUP_BY_OPTIONS}
+                  groupBy={sessionsGroupBy}
+                  onGroupByChange={(value) => {
+                    setSessionsGroupBy(value);
+                    setCurrentPage(1);
+                  }}
+                  showViewToggle={false}
+                />
+                <FavoritesMenu
+                  favorites={favorites}
+                  onApply={applyFavorite}
+                  onDelete={deleteFavorite}
+                  onSave={saveCurrentAsFavorite}
+                />
+              </div>
+            </div>
+
+            <div className="ws-row ws-meta-row">
+              <div className="ws-meta-left">
+                <SelectionActionMenu count={selectedIds.size} onExport={handleExportSelected} onClear={() => setSelectedIds(new Set())} />
+                <button type="button" className="ws-outline-btn" onClick={openUploadPicker}>
+                  <FaFolderOpen size={12} />
+                  Upload Documents
+                </button>
+                <button type="button" className="ws-outline-btn" onClick={() => setActiveView("library")}>
+                  <FaLink size={12} />
+                  Documents Library
+                </button>
+              </div>
+              <div className="ws-meta-right">
+                <select
+                  className="ws-select"
+                  aria-label="Records per page"
+                  value={rowsPerPage === Infinity ? "all" : rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(e.target.value === "all" ? Infinity : Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="all">All</option>
+                  <option value={100}>100</option>
+                  <option value={500}>500</option>
+                </select>
+                <span className="ws-range">{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} / {totalItems.toLocaleString()}</span>
+                <div className="ws-joined">
+                  <button type="button" className="ws-icon-btn" aria-label="Previous page" disabled={activePage <= 1} onClick={() => setCurrentPage(activePage - 1)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+                  </button>
+                  <button type="button" className="ws-icon-btn" aria-label="Next page" disabled={activePage >= totalPages} onClick={() => setCurrentPage(activePage + 1)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                  </button>
+                </div>
+                <div className="ws-joined">
+                  <button type="button" className={`ws-icon-btn${viewMode === "list" ? " is-active" : ""}`} aria-label="List view" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                  </button>
+                  <button type="button" className={`ws-icon-btn${viewMode === "kanban" ? " is-active" : ""}`} aria-label="Kanban view" aria-pressed={viewMode === "kanban"} onClick={() => setViewMode("kanban")}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="4" width="4" height="10"/><rect x="16" y="4" width="4" height="13"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {activeView === "sessions" && (
+        <div className="ws-table-wrap">
+          {loading || workshopsLoading ? (
+            <SkeletonLoader rows={5} label="Loading workshops…" />
+          ) : viewMode === "kanban" ? (
+            <div style={{ padding: "12px 32px" }}>
+              {sections.map((section) => (
+                <div key={section.key} style={{ marginBottom: 12 }}>
+                  <div className="ws-kanban-group" onClick={() => toggleGroupCollapsed(section.key)}>
+                    <span style={{ display: "inline-block", transform: collapsedGroups.has(section.key) ? "rotate(-90deg)" : "none" }}>▾</span>
+                    {section.label} <span className="ws-count">({section.total})</span>
+                  </div>
+                  {!collapsedGroups.has(section.key) && (
+                    section.items.length === 0 ? (
+                      <div className="ws-empty">{hasActiveFilters ? "No workshops match these filters." : section.empty}</div>
+                    ) : (
+                      <div className="ws-card-grid">{section.items.map(renderSessionCard)}</div>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="ws-table-scroll">
+              <table className="training-table ws-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 36 }}>
+                      <input
+                        type="checkbox"
+                        className="ws-cb"
+                        aria-label="Select all workshops"
+                        checked={allRowsSelected}
+                        ref={(el) => { if (el) el.indeterminate = someRowsSelected; }}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Workshop</th>
+                    <th>Fee</th>
+                    <th>Trainees</th>
+                    <th>Meeting Link</th>
+                    <th>Documents</th>
+                    <th>Reminders</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sections.map((section) => (
+                    <Fragment key={section.key}>
+                      <tr className="ws-group-row">
+                        <td colSpan={10} onClick={() => toggleGroupCollapsed(section.key)}>
+                          <span style={{ display: "inline-block", marginRight: 8, transform: collapsedGroups.has(section.key) ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {section.label} <span className="ws-count">({section.total})</span>
+                        </td>
+                      </tr>
+                      {!collapsedGroups.has(section.key) && (
+                        section.items.length === 0 ? (
+                          <tr>
+                            <td colSpan={10} className="ws-empty">{hasActiveFilters ? "No workshops match these filters." : section.empty}</td>
+                          </tr>
+                        ) : (
+                          section.items.map(renderSessionRow)
+                        )
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {activeView === "library" && (
-      <>
+      <div style={{ padding: "12px 32px 24px" }}>
       <div className="training-filter-row">
         <input
           type="text"
@@ -2226,67 +2406,7 @@ Please don't miss it — we look forward to your participation!`;
           </table>
         )}
       </div>
-      </>
-      )}
-
-      {activeView === "history" && (
-        <div className="training-table-card">
-          <div className="training-filter-row" style={{ marginBottom: "16px" }}>
-            <input
-              type="text"
-              value={historySearch}
-              onChange={(e) => setHistorySearch(e.target.value)}
-              placeholder="Search by training topic or trainee name..."
-              style={{ minWidth: "280px" }}
-            />
-          </div>
-          <h3>Training History ({filteredHistoryRows.length})</h3>
-
-          {loading ? (
-            <SkeletonLoader rows={5} label="Loading history…" />
-          ) : filteredHistoryRows.length === 0 ? (
-            <div className="training-empty">No training history yet.</div>
-          ) : (
-            <table className="training-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Training</th>
-                  <th>Trainer</th>
-                  <th>Trainees</th>
-                  <th>Documents Uploaded</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredHistoryRows.map((session) => (
-                  <tr key={session.id}>
-                    <td>{formatDateDisplay(session.date)}</td>
-                    <td>{session.topic}</td>
-                    <td>{session.trainer || "-"}</td>
-                    <td>
-                      {(session.attendees || []).length === 0
-                        ? "-"
-                        : (session.attendees || []).map(getTraineeName).join(", ")}
-                    </td>
-                    <td>
-                      {(session.documents || []).length === 0 ? (
-                        "-"
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                          {session.documents.map((m) => (
-                            <a key={m.id} href={m.link} target="_blank" rel="noopener noreferrer" style={{ color: "#5f6f14" }}>
-                              [{m.type}] {m.title}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+      </div>
       )}
 
       {showScheduleModal && (
