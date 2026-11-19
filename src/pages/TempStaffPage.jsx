@@ -21,6 +21,7 @@ import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 // Default order (and the "third click" state): Full Name A→Z.
 const DEFAULT_SORT = { key: "full_name", dir: "asc" };
@@ -375,7 +376,7 @@ export default function TempStaffPage() {
 
     const groups = new Map();
     for (const item of currentRows) {
-      for (const label of getGroupLabels(item, groupBy)) {
+      for (const label of multiGroupLabels(item, groupBy, getGroupLabels)) {
         if (!groups.has(label)) groups.set(label, []);
         groups.get(label).push(item);
       }
@@ -543,7 +544,7 @@ export default function TempStaffPage() {
     });
   });
   if (groupBy) {
-    filterChips.push({ key: "groupby", label: `Group: ${filterLabels[groupBy]}`, onRemove: () => setGroupBy(null) });
+    filterChips.push({ key: "groupby", label: `Group: ${groupByLabel(groupByOptions, groupBy)}`, onRemove: () => setGroupBy(null) });
   }
 
   const advancedFiltersPanel = (

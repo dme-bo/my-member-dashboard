@@ -25,6 +25,7 @@ import useMemberFilters, { MEMBER_GROUP_BY_OPTIONS, getGroupLabels, SUPPORTING_D
 import FavoritesMenu from "../components/FavoritesMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 
 // ─── Module-level cache for this page's supporting fetches ───────────────────
@@ -494,7 +495,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     const experienceBuckets = filterOptions.Experience || [];
     const groups = new Map();
     for (const member of sortedMembers) {
-      const labels = getGroupLabels(member, groupBy, experienceBuckets);
+      const labels = multiGroupLabels(member, groupBy, (m, k) => getGroupLabels(m, k, experienceBuckets));
       for (const label of labels) {
         if (!groups.has(label)) groups.set(label, []);
         groups.get(label).push(member);
@@ -935,7 +936,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
             <SelectionActionMenu count={selectedVisibleCount} onExport={handleExportXLSX} onClear={() => setSelectedMemberIds(new Set())} />
             {groupBy && selectedVisibleCount === 0 && (
               <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 400 }}>
-                Grouped by {MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}
+                Grouped by {groupByLabel(MEMBER_GROUP_BY_OPTIONS, groupBy)}
               </span>
             )}
           </div>

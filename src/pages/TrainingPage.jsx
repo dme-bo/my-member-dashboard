@@ -22,6 +22,7 @@ import FavoritesMenu from "../components/FavoritesMenu";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import WorkshopDetailModal from "../components/WorkshopDetailModal";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 const COLLECTION_NAME = "trainingsessions";
 const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
@@ -313,17 +314,18 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
 
   const groupSessions = (list) => {
     if (!sessionsGroupBy) return null;
-    const getLabel = (session) => {
-      if (sessionsGroupBy === "status") return getSessionStatus(session);
-      if (sessionsGroupBy === "trainer") return session.trainer && session.trainer.trim() ? session.trainer.trim() : "Unspecified";
-      if (sessionsGroupBy === "organizer") return session.workshopOrganizer && session.workshopOrganizer.trim() ? session.workshopOrganizer.trim() : "Unspecified";
+    const getLabel = (session, key) => {
+      if (key === "status") return getSessionStatus(session);
+      if (key === "trainer") return session.trainer && session.trainer.trim() ? session.trainer.trim() : "Unspecified";
+      if (key === "organizer") return session.workshopOrganizer && session.workshopOrganizer.trim() ? session.workshopOrganizer.trim() : "Unspecified";
       return "Unspecified";
     };
     const groups = new Map();
     for (const session of list) {
-      const label = getLabel(session);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(session);
+      for (const label of multiGroupLabels(session, sessionsGroupBy, getLabel)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(session);
+      }
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   };
@@ -2157,7 +2159,7 @@ Please don't miss it — we look forward to your participation!`;
                 placeholder="Search by topic..."
                 chips={[
                   ...statusFilters.map((v) => ({ key: `status-${v}`, label: v, onRemove: () => toggleStatusFilter(v) })),
-                  ...(sessionsGroupBy ? [{ key: "groupBy", label: `Group: ${SESSIONS_GROUP_BY_OPTIONS.find((o) => o.key === sessionsGroupBy)?.label || sessionsGroupBy}`, onRemove: () => setSessionsGroupBy(null) }] : []),
+                  ...(sessionsGroupBy ? [{ key: "groupBy", label: `Group: ${groupByLabel(SESSIONS_GROUP_BY_OPTIONS, sessionsGroupBy)}`, onRemove: () => setSessionsGroupBy(null) }] : []),
                 ]}
               />
               <div className="ws-toolbar-group">

@@ -57,6 +57,7 @@ const ProjectsPage        = lazyWithReloadOnStaleChunk(() => import("./pages/Pro
 const RequirementsPage    = lazyWithReloadOnStaleChunk(() => import("./pages/RequirementsPage"));
 const CommunityJobsPage   = lazyWithReloadOnStaleChunk(() => import("./pages/CommunityJobsPage"));
 const InteractionPage     = lazyWithReloadOnStaleChunk(() => import("./pages/InteractionPage"));
+const FinanceUploadPage   = lazyWithReloadOnStaleChunk(() => import("./pages/FinanceUploadPage"));
 const RegimentalCenterPage = lazyWithReloadOnStaleChunk(() => import("./pages/RegimentalCenterPage"));
 const TrainingPage        = lazyWithReloadOnStaleChunk(() => import("./pages/TrainingPage"));
 const ConfigurationPage   = lazyWithReloadOnStaleChunk(() => import("./pages/ConfigurationPage"));
@@ -339,6 +340,7 @@ function Layout() {
               }
             />
             <Route path="/configuration" element={<ErrorBoundary><ConfigurationPage /></ErrorBoundary>} />
+            <Route path="/finance-upload" element={<ErrorBoundary><FinanceUploadPage /></ErrorBoundary>} />
             <Route path="/newsletter"    element={<ErrorBoundary><NewsLetterPage /></ErrorBoundary>} />
             <Route path="/partneragent"  element={<ErrorBoundary><PartnerAgentList /></ErrorBoundary>} />
             <Route

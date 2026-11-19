@@ -12,6 +12,8 @@ import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
 import LocationAutocompleteInput from "../components/LocationAutocompleteInput";
+import { multiGroupLabels, groupByLabel, splitGroupBy, joinGroupBy } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const REGIMENTAL_CENTRES_SEED = [
   { center: "Grenadiers Regimental Centre", city: "Jabalpur, Madhya Pradesh", regiment: "The Grenadiers" },
@@ -194,6 +196,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
   // Filters menu: tagged / untagged; Group By; saved Favorites (per browser).
   const [tagFilter, setTagFilter] = useState(null); // null | "tagged" | "untagged"
   const [groupBy, setGroupBy] = useState(null);
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
   const [viewMode, setViewMode] = useState("list"); // "list" | "kanban"
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []; } catch { return []; }
@@ -292,7 +295,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
     ...(activeCategory.columns.some((c) => c.key === "state") ? [{ key: "state", label: "State" }] : []),
     { key: "__tagged", label: "Tagged Status" },
   ];
-  const activeGroupBy = groupByOptions.some((o) => o.key === groupBy) ? groupBy : null;
+  const activeGroupBy = joinGroupBy(splitGroupBy(groupBy).filter((k) => groupByOptions.some((o) => o.key === k)));
 
   const quickFilters = [
     ...CATEGORIES.map((cat, i) => ({ key: cat.key, label: cat.label, active: cat.key === activeCategoryKey, isDefault: i === 0, onToggle: () => selectCategory(cat.key) })),
@@ -303,7 +306,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
   const filterChips = [
     ...(activeCategoryKey !== CATEGORIES[0].key ? [{ key: "cat", label: activeCategory.label, onRemove: () => selectCategory(CATEGORIES[0].key) }] : []),
     ...(tagFilter ? [{ key: "tag", label: tagFilter === "tagged" ? "Has tagged members" : "No tagged members", onRemove: () => setTagFilter(null) }] : []),
-    ...(activeGroupBy ? [{ key: "group", label: `Group: ${groupByOptions.find((o) => o.key === activeGroupBy).label}`, onRemove: () => setGroupBy(null) }] : []),
+    ...(activeGroupBy ? [{ key: "group", label: `Group: ${groupByLabel(groupByOptions, activeGroupBy)}`, onRemove: () => setGroupBy(null) }] : []),
   ];
 
   const applyFavorite = (fav) => {
@@ -325,11 +328,13 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
     if (!activeGroupBy) return null;
     const groups = new Map();
     pagedItems.forEach((row) => {
-      const label = activeGroupBy === "__tagged"
-        ? ((row.taggedMemberIds || []).length ? "Tagged" : "Not tagged")
-        : String(row[activeGroupBy] || "").trim() || "Not specified";
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(row);
+      const labelFor = (r, key) => (key === "__tagged"
+        ? ((r.taggedMemberIds || []).length ? "Tagged" : "Not tagged")
+        : String(r[key] || "").trim() || "Not specified");
+      for (const label of multiGroupLabels(row, activeGroupBy, labelFor)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(row);
+      }
     });
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [pagedItems, activeGroupBy]);
@@ -968,11 +973,11 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                 {(groupedPagedItems || [[null, pagedItems]]).map(([label, rows]) => (
                   <section key={label ?? "all"} className="regimental-kanban-section">
                     {label !== null && (
-                      <h3 className="regimental-kanban-heading">
-                        {label} <span className="regimental-group-count">{rows.length}</span>
+                      <h3 className="regimental-kanban-heading" onClick={() => toggleGroupCollapsed(label)} style={{ cursor: "pointer", userSelect: "none" }}>
+                        <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span className="regimental-group-count">{rows.length}</span>
                       </h3>
                     )}
-                    <div className="regimental-kanban-grid">
+                    <div className="regimental-kanban-grid" style={label !== null && collapsedGroups.has(label) ? { display: "none" } : undefined}>
                       {rows.map((row) => {
                         const selected = selectedRowIds.includes(row.id);
                         const [nameCol, ...detailCols] = activeCategory.columns;
@@ -1052,12 +1057,12 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                     <Fragment key={label ?? "all"}>
                   {label !== null && (
                     <tr className="regimental-group-row">
-                      <td colSpan={activeCategory.columns.length + 3}>
-                        {label} <span className="regimental-group-count">{rows.length}</span>
+                      <td colSpan={activeCategory.columns.length + 3} onClick={() => toggleGroupCollapsed(label)} style={{ cursor: "pointer", userSelect: "none" }}>
+                        <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span className="regimental-group-count">{rows.length}</span>
                       </td>
                     </tr>
                   )}
-                  {rows.map((row) => (
+                  {!(label !== null && collapsedGroups.has(label)) && rows.map((row) => (
                     <tr key={row.id} className={selectedRowIds.includes(row.id) ? "is-selected" : undefined} onClick={() => openTagModal(row)} title="Click to tag members">
                       <td className="regimental-cb-col" onClick={(e) => e.stopPropagation()}>
                         <input

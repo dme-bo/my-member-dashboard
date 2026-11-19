@@ -20,6 +20,7 @@ import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 // Sort values mirror what each table cell displays.
 const RECRUITMENT_SORT_ACCESSORS = {
@@ -474,7 +475,7 @@ export default function RecruitmentPage() {
     if (!groupBy) return null;
     const groups = new Map();
     for (const c of currentRows) {
-      for (const label of getGroupLabels(c, groupBy)) {
+      for (const label of multiGroupLabels(c, groupBy, getGroupLabels)) {
         if (!groups.has(label)) groups.set(label, []);
         groups.get(label).push(c);
       }
@@ -502,7 +503,7 @@ export default function RecruitmentPage() {
     });
   });
   if (groupBy) {
-    filterChips.push({ key: "groupby", label: `Group: ${filterLabels[groupBy]}`, onRemove: () => setGroupBy(null) });
+    filterChips.push({ key: "groupby", label: `Group: ${groupByLabel(RECRUITMENT_GROUP_BY_OPTIONS, groupBy)}`, onRemove: () => setGroupBy(null) });
   }
 
   const advancedFiltersPanel = (

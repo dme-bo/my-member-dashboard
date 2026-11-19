@@ -31,6 +31,9 @@ import SkeletonLoader from "../components/SkeletonLoader";
 import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
+import FilterAccordionList from "../components/FilterAccordionList";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 // Projects run by TCS are shown/filtered as "Temp Staffing" instead of
 // "Project" in this dashboard — they still live in `projectsmaster`, only
@@ -181,6 +184,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const [requirementsSearchTerm, setRequirementsSearchTerm] = useState("");
   const { sort: reqSort, toggleSort: toggleReqSort } = useTableSort({ key: "postedOn", dir: "desc" });
   const [groupBy, setGroupBy] = useState(null);
+  const [titleFilter, setTitleFilter] = useState([]);
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
   const [kanbanView, setKanbanView] = useState("list");
 
   // Modals state
@@ -500,8 +505,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   }, [memberSearchTerm, genderFilter, stateFilter, cityFilter, categoryFilter, serviceFilter, rankFilter, levelFilter, members]);
 
   /* FILTERED REQUIREMENTS (for table) */
+  const titleOptions = useMemo(
+    () => Array.from(new Set(requirementsData.map((r) => r.title).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [requirementsData]
+  );
+
   const filteredRequirements = useMemo(() => {
-    const list = requirementsData;
+    let list = requirementsData;
+    if (titleFilter.length) list = list.filter((r) => titleFilter.includes(r.title));
     if (activeFilter === "All") return list;
     if (activeFilter === "Open") return list.filter((r) => r.status === "active");
     if (activeFilter === "Closed") return list.filter((r) => r.status === "completed");
@@ -509,7 +520,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     if (activeFilter === "Recruitment") return list.filter((r) => r.type === "job");
     if (activeFilter === "Temp Staffing") return list.filter((r) => r.type === "tempstaffing");
     return list;
-  }, [requirementsData, activeFilter]);
+  }, [requirementsData, activeFilter, titleFilter]);
 
   /* FILTERED REQUIREMENTS FOR STATS (same logic) */
   const filteredStatsRequirements = filteredRequirements;
@@ -603,7 +614,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   // matching the same pattern used on Recruitment/Projects/TempStaff pages.
   const groupedRequirements = useMemo(() => {
     if (!groupBy) return null;
-    const getLabel = (req) => {
+    const getLabel = (req, groupBy) => {
       if (groupBy === "type") return getTypeLabel(req.type);
       if (groupBy === "status") return req.status === "active" ? "Open" : "Closed";
       if (groupBy === "company") return req.company && req.company.trim() ? req.company.trim() : "Unspecified";
@@ -611,9 +622,10 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
     };
     const groups = new Map();
     for (const req of displayedRequirements) {
-      const label = getLabel(req);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(req);
+      for (const label of multiGroupLabels(req, groupBy, getLabel)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(req);
+      }
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupBy, displayedRequirements]);
@@ -1101,6 +1113,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               onClick={() => {
                 setActiveFilter("All");
                 setRequirementsSearchTerm("");
+                setTitleFilter([]);
                 setGroupBy(null);
                 setRequirementsCurrentPage(1);
               }}
@@ -1119,7 +1132,8 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               placeholder="Search by title, company, location..."
               chips={[
                 ...(activeFilter !== "All" ? [{ key: "filter", label: `Filter: ${activeFilter}`, onRemove: () => setActiveFilter("All") }] : []),
-                ...(groupBy ? [{ key: "groupBy", label: `Group: ${REQUIREMENTS_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
+                ...titleFilter.map((t) => ({ key: `title-${t}`, label: `Title: ${t}`, onRemove: () => { setTitleFilter((prev) => prev.filter((x) => x !== t)); setRequirementsCurrentPage(1); } })),
+                ...(groupBy ? [{ key: "groupBy", label: `Group: ${groupByLabel(REQUIREMENTS_GROUP_BY_OPTIONS, groupBy)}`, onRemove: () => setGroupBy(null) }] : []),
               ]}
             />
             <div className="member-toolbar-group">
@@ -1131,6 +1145,17 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   active: activeFilter === f,
                   onToggle: () => setActiveFilter(activeFilter === f ? "All" : f),
                 }))}
+                advancedContent={
+                  <FilterAccordionList
+                    sections={[{
+                      key: "title",
+                      label: "Title",
+                      options: titleOptions,
+                      selected: titleFilter,
+                      onChange: (next) => { setTitleFilter(next); setRequirementsCurrentPage(1); },
+                    }]}
+                  />
+                }
                 groupByOptions={REQUIREMENTS_GROUP_BY_OPTIONS}
                 groupBy={groupBy}
                 onGroupByChange={setGroupBy}
@@ -1141,6 +1166,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 onApply={(fav) => {
                   setActiveFilter(REQUIREMENTS_FILTERS.includes(fav.activeFilter) ? fav.activeFilter : "All");
                   setGroupBy(fav.groupBy || null);
+                  setTitleFilter(fav.titleFilter || []);
                   setRequirementsSearchTerm(fav.search || "");
                   setRequirementsCurrentPage(1);
                 }}
@@ -1148,7 +1174,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                 onSave={(name) =>
                   setReqFavorites((prev) => [
                     ...prev,
-                    { id: `${Date.now()}`, name, activeFilter, groupBy, search: requirementsSearchTerm },
+                    { id: `${Date.now()}`, name, activeFilter, groupBy, titleFilter, search: requirementsSearchTerm },
                   ])
                 }
               />
@@ -1242,10 +1268,10 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
             {groupedRequirements
               ? groupedRequirements.map(([label, items]) => (
                   <div key={label} style={{ marginBottom: "20px" }}>
-                    <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
-                      {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                    <div onClick={() => toggleGroupCollapsed(label)} style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px", cursor: "pointer", userSelect: "none" }}>
+                      <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
+                    <div style={{ display: collapsedGroups.has(label) ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
                       {items.map((req) => (
                         <RequirementCard
                           key={req.id}
@@ -1317,11 +1343,11 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
                   ? groupedRequirements.map(([label, items]) => (
                       <Fragment key={label}>
                         <tr>
-                          <td colSpan={10} style={{ height: "40px", padding: "0 12px", fontWeight: 600, fontSize: "13px", color: "#334155", background: "#f1f5f9", borderBottom: "1px solid #dde1e7" }}>
-                            {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                          <td colSpan={10} onClick={() => toggleGroupCollapsed(label)} style={{ height: "40px", padding: "0 12px", fontWeight: 600, fontSize: "13px", color: "#334155", background: "#f1f5f9", borderBottom: "1px solid #dde1e7", cursor: "pointer", userSelect: "none" }}>
+                            <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
                           </td>
                         </tr>
-                        {items.map(renderRequirementRow)}
+                        {!collapsedGroups.has(label) && items.map(renderRequirementRow)}
                       </Fragment>
                     ))
                   : displayedRequirements.map(renderRequirementRow)}

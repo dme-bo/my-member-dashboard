@@ -4,9 +4,25 @@
 // across any page that wires its filters through OdooViewToolbar.
 import React from "react";
 
-const CHIP_COLORS = ["#c2d45e", "#7c3aed", "#0d9488", "#c2410c", "#be185d", "#4d7c0f", "#0369a1"];
+// Filter facets are blue with a funnel; group-by facets are purple with a lines icon.
+const CHIP_STYLES = {
+  filter: { color: "#1565c0", background: "#e3f0fc" },
+  group: { color: "#5b34b0", background: "#ece6fa" },
+};
 
-const getChipColor = (index) => CHIP_COLORS[index % CHIP_COLORS.length];
+const isGroupChip = (chip) => /^group/i.test(String(chip.key));
+
+const FunnelIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
+const GroupLinesIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <path d="M4 6h16M4 12h12M4 18h8" />
+  </svg>
+);
 
 export default function OdooSearchBar({ value, onChange, placeholder = "Search...", chips = [], variant = "default" }) {
   // "boxed": the compact fixed-height field used on the Members list.
@@ -32,8 +48,10 @@ export default function OdooSearchBar({ value, onChange, placeholder = "Search..
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
       </svg>
-      {chips.map((chip, i) => {
-        const color = getChipColor(i);
+      {chips.map((chip) => {
+        const group = isGroupChip(chip);
+        const { color, background } = CHIP_STYLES[group ? "group" : "filter"];
+        const label = group ? String(chip.label).replace(/^Group:\s*/i, "") : chip.label;
         return (
           <span
             key={chip.key}
@@ -41,16 +59,17 @@ export default function OdooSearchBar({ value, onChange, placeholder = "Search..
               display: "inline-flex",
               alignItems: "center",
               gap: "4px",
-              padding: "2px 4px 2px 8px",
-              borderRadius: "4px",
-              background: `${color}1a`,
+              padding: "3px 6px 3px 9px",
+              borderRadius: "999px",
+              background,
               color,
               fontSize: "12.5px",
               fontWeight: 600,
               whiteSpace: "nowrap",
             }}
           >
-            {chip.label}
+            {group ? <GroupLinesIcon /> : <FunnelIcon />}
+            {label}
             <button
               type="button"
               onClick={chip.onRemove}

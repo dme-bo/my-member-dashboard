@@ -20,6 +20,7 @@ import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 const PROJECTS_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -247,7 +248,7 @@ export default function ProjectsPage() {
     if (!groupBy) return null;
     const groups = new Map();
     for (const app of currentRows) {
-      for (const label of getGroupLabels(app, groupBy)) {
+      for (const label of multiGroupLabels(app, groupBy, getGroupLabels)) {
         if (!groups.has(label)) groups.set(label, []);
         groups.get(label).push(app);
       }
@@ -275,7 +276,7 @@ export default function ProjectsPage() {
     });
   });
   if (groupBy) {
-    filterChips.push({ key: "groupby", label: `Group: ${filterLabels[groupBy]}`, onRemove: () => setGroupBy(null) });
+    filterChips.push({ key: "groupby", label: `Group: ${groupByLabel(PROJECTS_GROUP_BY_OPTIONS, groupBy)}`, onRemove: () => setGroupBy(null) });
   }
 
   const advancedFiltersPanel = (
@@ -619,7 +620,7 @@ export default function ProjectsPage() {
           <SelectionActionMenu count={selectedIds.size} onExport={handleExportSelected} onClear={() => setSelectedIds(new Set())} />
           <div className="pj-meta-left">
             {groupBy && (
-              <span style={{ fontSize: 13, color: "#5f6670" }}>Grouped by {filterLabels[groupBy]}</span>
+              <span style={{ fontSize: 13, color: "#5f6670" }}>Grouped by {groupByLabel(PROJECTS_GROUP_BY_OPTIONS, groupBy)}</span>
             )}
           </div>
           <div className="pj-meta-right">

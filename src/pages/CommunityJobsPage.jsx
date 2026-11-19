@@ -21,6 +21,8 @@ import { formatDateText } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const COLLECTION_NAME = "communityjobs";
 const MAX_UPLOAD_PHOTOS = 6;
@@ -126,6 +128,7 @@ export default function CommunityJobsPage() {
   );
   const [filters, setFilters] = useState({ orgType: [], status: [] });
   const [groupBy, setGroupBy] = useState(null);
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
   const [kanbanView, setKanbanView] = useState("list");
 
   const [pageSize, setPageSize] = useState(500);
@@ -299,7 +302,7 @@ export default function CommunityJobsPage() {
   // Grouping is applied within the current page of the filtered list.
   const groupedJobs = useMemo(() => {
     if (!groupBy) return null;
-    const getLabel = (job) => {
+    const getLabel = (job, groupBy) => {
       if (groupBy === "orgType") return job.job_org_type === "Government" ? "Government" : "Company";
       if (groupBy === "status") return getDisplayStatus(job);
       if (groupBy === "company") return job.job_company && job.job_company.trim() ? job.job_company.trim() : "Unspecified";
@@ -307,9 +310,10 @@ export default function CommunityJobsPage() {
     };
     const groups = new Map();
     for (const job of pagedJobs) {
-      const label = getLabel(job);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(job);
+      for (const label of multiGroupLabels(job, groupBy, getLabel)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(job);
+      }
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupBy, pagedJobs]);
@@ -658,7 +662,7 @@ export default function CommunityJobsPage() {
             chips={[
               ...filters.orgType.map((v) => ({ key: `orgType-${v}`, label: v, onRemove: () => toggleFilter("orgType", v) })),
               ...filters.status.map((v) => ({ key: `status-${v}`, label: v, onRemove: () => toggleFilter("status", v) })),
-              ...(groupBy ? [{ key: "groupBy", label: `Group: ${COMMUNITY_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
+              ...(groupBy ? [{ key: "groupBy", label: `Group: ${groupByLabel(COMMUNITY_GROUP_BY_OPTIONS, groupBy)}`, onRemove: () => setGroupBy(null) }] : []),
             ]}
           />
           <div className="member-toolbar-group">
@@ -755,10 +759,10 @@ export default function CommunityJobsPage() {
             {groupedJobs
               ? groupedJobs.map(([label, items]) => (
                   <div key={label} style={{ marginBottom: "20px" }}>
-                    <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
-                      {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                    <div onClick={() => toggleGroupCollapsed(label)} style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px", cursor: "pointer", userSelect: "none" }}>
+                      <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                    <div style={{ display: collapsedGroups.has(label) ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
                       {items.map((job) => (
                         <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
                       ))}
@@ -802,11 +806,11 @@ export default function CommunityJobsPage() {
                   ? groupedJobs.map(([label, items]) => (
                       <Fragment key={label}>
                         <tr className="cj-group-row">
-                          <td colSpan={8}>
-                            {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                          <td colSpan={8} onClick={() => toggleGroupCollapsed(label)} style={{ cursor: "pointer", userSelect: "none" }}>
+                            <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
                           </td>
                         </tr>
-                        {items.map(renderJobRow)}
+                        {!collapsedGroups.has(label) && items.map(renderJobRow)}
                       </Fragment>
                     ))
                   : pagedJobs.map(renderJobRow)}

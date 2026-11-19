@@ -10,6 +10,7 @@ import FavoritesMenu from "../components/FavoritesMenu";
 import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import { collection, db, getDocs } from "../firestoreClient";
 import useMemberFilters, { MEMBER_GROUP_BY_OPTIONS, getGroupLabels } from "../hooks/useMemberFilters";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 const DEFAULT_CENTER = { lat: 22.9734, lng: 78.6569 };
 const CLUSTER_GRID_BASE_PX = 84;
@@ -467,7 +468,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
     const experienceBuckets = filterOptions.Experience || [];
     const groups = new Map();
     for (const member of mapMembers) {
-      for (const label of getGroupLabels(member.source, groupBy, experienceBuckets)) {
+      for (const label of multiGroupLabels(member.source, groupBy, (m, k) => getGroupLabels(m, k, experienceBuckets))) {
         if (!groups.has(label)) groups.set(label, []);
         groups.get(label).push(member);
       }
@@ -1120,7 +1121,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           <div className="location-meta-row">
             <span className="location-status">
               {groupBy
-                ? `Grouped by ${MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`
+                ? `Grouped by ${groupByLabel(MEMBER_GROUP_BY_OPTIONS, groupBy)}`
                 : ""}
             </span>
             <span className="location-count">
@@ -1178,7 +1179,7 @@ export default function MemberLocationPage({ memberRecords = [], membersLoading 
           {groupedMapMembers && (
             <div className="group-panel">
               <div className="group-panel-title">
-                {MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy} · {groupedMapMembers.length.toLocaleString()} groups
+                {groupByLabel(MEMBER_GROUP_BY_OPTIONS, groupBy)} · {groupedMapMembers.length.toLocaleString()} groups
               </div>
               <div className="group-panel-list">
                 {groupedMapMembers.map(([label, groupMembers]) => (

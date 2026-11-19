@@ -15,6 +15,7 @@ import useDebouncedValue from '../hooks/useDebouncedValue';
 import { parseMemberDate } from '../utils/memberFields';
 import { formatDateDDMMMYYYY } from '../utils/dateFormat';
 import { collection, db, getDocs } from '../firestoreClient';
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 // Finance analytics are only needed once the Finance tab is opened.
 const FinanceAnalytics = lazy(() => import('../components/FinanceAnalytics'));
@@ -563,14 +564,14 @@ export default function DashboardPage({ memberRecords = [], membersLoading = fal
     if (!groupBy || !filteredMembers.length) return null;
     const counts = {};
     for (const member of filteredMembers) {
-      for (const label of getGroupLabels(member, groupBy, filterOptions.Experience)) {
+      for (const label of multiGroupLabels(member, groupBy, (m, k) => getGroupLabels(m, k, filterOptions.Experience))) {
         counts[label] = (counts[label] || 0) + 1;
       }
     }
     const entries = Object.entries(counts).sort(([, a], [, b]) => b - a);
     const shown = Object.fromEntries(entries.slice(0, 20));
     return {
-      title: MEMBER_GROUP_BY_OPTIONS.find((option) => option.key === groupBy)?.label || groupBy,
+      title: groupByLabel(MEMBER_GROUP_BY_OPTIONS, groupBy),
       data: createChartData(shown, SINGLE_BAR_COLORS.concat(SINGLE_BAR_COLORS)),
       options: createDistributionBarOptions(filteredMembers.length),
       rows: Math.min(entries.length, 20),

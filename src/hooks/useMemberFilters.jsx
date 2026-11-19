@@ -23,6 +23,7 @@ import {
   parseMemberDate,
 } from "../utils/memberFields";
 import { EMPTY_REQUIREMENT_DATA, loadRequirementApplicants } from "../utils/requirementApplicants";
+import { groupByLabel } from '../utils/multiGroup';
 
 const toDatePickerValue = (value) => {
   if (!value) return null;
@@ -822,10 +823,9 @@ export default function useMemberFilters(members) {
     filterChips.push({ key: "retirement", label: retirementStatus, onRemove: () => setRetirementStatus("All") });
   }
   if (groupBy) {
-    const activeGroupOption = MEMBER_GROUP_BY_OPTIONS.find((o) => o.key === groupBy);
     filterChips.push({
       key: "groupby",
-      label: `Group: ${activeGroupOption?.label || groupBy}`,
+      label: `Group: ${groupByLabel(MEMBER_GROUP_BY_OPTIONS, groupBy)}`,
       onRemove: () => setGroupBy(null),
     });
   }

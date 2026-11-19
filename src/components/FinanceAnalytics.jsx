@@ -3,9 +3,10 @@
 // Finance view of the Dashboard, laid out like the Members List page: white
 // header band (title + count, Reset Filters, search with Filters / Group By /
 // Favorites), then a full-width table. Analytics over the `financemaster`
-// collection (one document per resource with a monthly payments map). Rows are
-// matched to members by the last 10 digits of the mobile number, which unlocks
-// the state / category filters and lets a row open the member's profile.
+// collection (one document per resource with a per-month TCS / ground payout map,
+// loaded by the Finance Upload page). Rows are matched to members by the last
+// 10 digits of the mobile number, which unlocks the category filter and lets a
+// row open the member's profile.
 import { useEffect, useMemo, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
@@ -16,6 +17,7 @@ import OdooViewToolbar from './OdooViewToolbar';
 import FavoritesMenu from './FavoritesMenu';
 import FilterAccordionList from './FilterAccordionList';
 import useDebouncedValue from '../hooks/useDebouncedValue';
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 import { collection, db, getDocs } from '../firestoreClient';
 import TableLoadingSpinner from './TableLoadingSpinner';
 
@@ -31,13 +33,12 @@ const monthLabel = (key) => {
 };
 
 const GROUP_BY_OPTIONS = [
-  { key: 'Category', label: 'Category' },
+  { key: 'Zone', label: 'Zone' },
   { key: 'State', label: 'State' },
   { key: 'City', label: 'City' },
-  { key: 'Service', label: 'Service' },
-  { key: 'Rank', label: 'Rank' },
+  { key: 'Category', label: 'Category' },
 ];
-const GROUP_FIELD = { Category: 'category', State: 'state', City: 'city', Service: 'service', Rank: 'rank' };
+const groupField = (row, key) => (key === 'Category' ? row.member?.category : row[key.toLowerCase()]);
 
 const median = (sorted) => {
   if (!sorted.length) return 0;
@@ -63,8 +64,8 @@ const MONTH_BAR_OPTIONS = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { display: false },
-    tooltip: { callbacks: { label: (ctx) => ` ${inr(ctx.raw)}` } },
+    legend: { display: true, position: 'bottom' },
+    tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${inr(ctx.raw)}` } },
   },
   scales: {
     y: { beginAtZero: true, ticks: { callback: (v) => `₹${Number(v).toLocaleString('en-IN')}` } },
@@ -73,7 +74,7 @@ const MONTH_BAR_OPTIONS = {
 };
 
 function TableRow({ index, style, data }) {
-  const { items, months, selectedSet, onRowClick, gridTemplate } = data;
+  const { items, onRowClick, gridTemplate } = data;
   const item = items[index];
 
   if (item.__group) {
@@ -82,13 +83,13 @@ function TableRow({ index, style, data }) {
         <div className="fin-group-label">
           {item.label} <span className="fin-group-count">({item.count.toLocaleString('en-IN')})</span>
         </div>
-        <div className="fin-group-total">{inr(item.total)}</div>
+        <div className="fin-group-total">{inr(item.ground)} ground · {inr(item.tcs)} TCS</div>
       </div>
     );
   }
 
   const row = item;
-  const place = row.member ? [row.member.city, row.member.state].filter(Boolean).join(', ') : '';
+  const place = [row.city, row.state].filter(Boolean).join(', ');
   return (
     <div
       className={`fin-row${row.member ? ' clickable' : ''}${row.stripe ? ' alt' : ''}`}
@@ -98,13 +99,12 @@ function TableRow({ index, style, data }) {
     >
       <div className="fin-name" title={row.name}>{row.name}</div>
       <div>{row.mobile || '—'}</div>
-      <div title={place}>{row.member ? place || '—' : <span className="fin-muted">Not a member</span>}</div>
-      {months.map((m) => (
-        <div key={m} className={`fin-num${selectedSet.has(m) ? '' : ' dim'}`}>
-          {row.payments[m] ? Number(row.payments[m]).toLocaleString('en-IN') : '—'}
-        </div>
-      ))}
-      <div className="fin-num fin-total">{row.amount.toLocaleString('en-IN')}</div>
+      <div title={place}>{place || '—'}</div>
+      <div className="fin-muted" title={row.zone}>{row.zone || '—'}</div>
+      <div className="fin-num">{row.days.toLocaleString('en-IN')}</div>
+      <div className="fin-num">{row.tcs.toLocaleString('en-IN')}</div>
+      <div className="fin-num fin-total">{row.ground.toLocaleString('en-IN')}</div>
+      <div className={`fin-num${row.margin < 0 ? ' fin-neg' : ''}`}>{row.margin.toLocaleString('en-IN')}</div>
     </div>
   );
 }
@@ -134,7 +134,11 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
               id: d.id,
               name: String(data.resource_name || 'Unnamed'),
               mobile: String(data.mobile || ''),
-              payments: data.payments || {},
+              email: String(data.email || ''),
+              state: String(data.state || ''),
+              city: String(data.city || ''),
+              zone: String(data.zone || ''),
+              months: data.months || {},
             };
           })
         );
@@ -159,7 +163,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
 
   const months = useMemo(() => {
     const set = new Set();
-    (raw || []).forEach((row) => Object.keys(row.payments).forEach((m) => set.add(m)));
+    (raw || []).forEach((row) => Object.keys(row.months).forEach((m) => set.add(m)));
     return Array.from(set).sort();
   }, [raw]);
 
@@ -172,15 +176,23 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
       (raw || []).map((row) => {
         const key = LAST_10(row.mobile);
         const member = key.length === 10 ? memberByPhone.get(key) || null : null;
-        let amount = 0;
-        for (const m of selectedMonths) amount += Number(row.payments[m]) || 0;
-        return { ...row, member, amount };
+        let tcs = 0;
+        let ground = 0;
+        let days = 0;
+        for (const m of selectedMonths) {
+          const b = row.months[m];
+          if (!b) continue;
+          tcs += Number(b.tcs) || 0;
+          ground += Number(b.ground) || 0;
+          days += Number(b.days) || 0;
+        }
+        return { ...row, member, tcs, ground, days, margin: tcs - ground, amount: ground };
       }),
     [raw, memberByPhone, selectedMonths]
   );
 
   const stateOptions = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.member?.state).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    () => Array.from(new Set(rows.map((r) => r.state).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [rows]
   );
   const categoryOptions = useMemo(
@@ -191,8 +203,9 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
   const filtered = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
     const list = rows.filter((row) => {
-      if (term && !row.name.toLowerCase().includes(term) && !row.mobile.includes(term)) return false;
-      if (stateFilter.length && !stateFilter.includes(row.member?.state)) return false;
+      if (term && !row.name.toLowerCase().includes(term) && !row.mobile.includes(term) && !row.city.toLowerCase().includes(term)) return false;
+      if (row.days === 0) return false;
+      if (stateFilter.length && !stateFilter.includes(row.state)) return false;
       if (categoryFilter.length && !categoryFilter.includes(row.member?.category)) return false;
       return true;
     });
@@ -201,8 +214,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
       let diff;
       if (sort.key === 'name') diff = a.name.localeCompare(b.name);
       else if (sort.key === 'mobile') diff = a.mobile.localeCompare(b.mobile);
-      else if (sort.key === 'amount') diff = a.amount - b.amount;
-      else diff = (Number(a.payments[sort.key]) || 0) - (Number(b.payments[sort.key]) || 0);
+      else diff = (a[sort.key] || 0) - (b[sort.key] || 0);
       return diff * dir || a.name.localeCompare(b.name);
     });
     return list;
@@ -211,11 +223,14 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
   const stats = useMemo(() => {
     const paid = filtered.filter((r) => r.amount > 0);
     const total = paid.reduce((a, r) => a + r.amount, 0);
+    const tcs = filtered.reduce((a, r) => a + r.tcs, 0);
     const sortedAmounts = paid.map((r) => r.amount).sort((a, b) => a - b);
     const top = paid.reduce((best, r) => (!best || r.amount > best.amount ? r : best), null);
     const low = paid.reduce((best, r) => (!best || r.amount < best.amount ? r : best), null);
     return {
       total,
+      tcs,
+      margin: tcs - total,
       resources: filtered.length,
       average: paid.length ? total / paid.length : 0,
       median: median(sortedAmounts),
@@ -229,7 +244,8 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
     () =>
       months.map((m) => ({
         month: m,
-        total: filtered.reduce((a, row) => a + (Number(row.payments[m]) || 0), 0),
+        tcs: filtered.reduce((a, row) => a + (Number(row.months[m]?.tcs) || 0), 0),
+        ground: filtered.reduce((a, row) => a + (Number(row.months[m]?.ground) || 0), 0),
       })),
     [months, filtered]
   );
@@ -237,18 +253,18 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
   // Table items: plain rows, or group header + rows when grouped.
   const items = useMemo(() => {
     if (!groupBy) return filtered.map((row, i) => ({ ...row, stripe: i % 2 === 0 }));
-    const field = GROUP_FIELD[groupBy];
     const groups = new Map();
     for (const row of filtered) {
-      const label = String(row.member?.[field] || '').trim() || 'Not a member';
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(row);
+      for (const label of multiGroupLabels(row, groupBy, groupField)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(row);
+      }
     }
     const flat = [];
     Array.from(groups.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .forEach(([label, groupRows]) => {
-        flat.push({ __group: true, label, count: groupRows.length, total: groupRows.reduce((a, r) => a + r.amount, 0), id: `g:${label}` });
+        flat.push({ __group: true, label, count: groupRows.length, ground: groupRows.reduce((a, r) => a + r.ground, 0), tcs: groupRows.reduce((a, r) => a + r.tcs, 0), id: `g:${label}` });
         groupRows.forEach((row, i) => flat.push({ ...row, stripe: i % 2 === 0 }));
       });
     return flat;
@@ -296,7 +312,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
     ...categoryFilter.map((v) => ({ key: `c:${v}`, label: v, onRemove: () => setCategoryFilter((prev) => prev.filter((x) => x !== v)) })),
   ];
   if (groupBy) {
-    filterChips.push({ key: 'groupby', label: `Group: ${groupBy}`, onRemove: () => setGroupBy(null) });
+    filterChips.push({ key: 'groupby', label: `Group: ${groupByLabel(GROUP_BY_OPTIONS, groupBy)}`, onRemove: () => setGroupBy(null) });
   }
 
   const persistFavorites = (next) => {
@@ -319,12 +335,12 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
   const deleteFavorite = (id) => persistFavorites(favorites.filter((f) => f.id !== id));
 
   const exportCsv = () => {
-    const head = ['Resource Name', 'Mobile', 'City', 'State', 'Category', ...months.map(monthLabel), 'Total (selected months)'];
+    const head = ['Resource Name', 'Mobile', 'Email', 'Zone', 'State', 'City', 'Days', 'TCS Payout', 'Ground Payout', 'Margin', ...months.map((m) => `${monthLabel(m)} Ground`)];
     const lines = [head.map(csvCell).join(',')];
     filtered.forEach((row) => {
       lines.push(
-        [row.name, row.mobile, row.member?.city || '', row.member?.state || '', row.member?.category || '',
-          ...months.map((m) => Number(row.payments[m]) || 0), row.amount].map(csvCell).join(',')
+        [row.name, row.mobile, row.email, row.zone, row.state, row.city, row.days, row.tcs, row.ground, row.margin,
+          ...months.map((m) => Number(row.months[m]?.ground) || 0)].map(csvCell).join(',')
       );
     });
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -336,7 +352,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
     URL.revokeObjectURL(url);
   };
 
-  const gridTemplate = `minmax(180px,1.6fr) 124px minmax(150px,1.2fr) ${months.map(() => '88px').join(' ')} 108px`;
+  const gridTemplate = `minmax(180px,1.6fr) 124px minmax(150px,1.2fr) 100px 64px 110px 110px 110px`;
   const sortHead = (k, label, align) => (
     <button type="button" className={`fin-head-btn${align === 'right' ? ' right' : ''}`} onClick={() => setSortKey(k)}>
       {label}{sort.key === k ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
@@ -372,7 +388,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
         .fin-chart-box { position: relative; height: 300px; }
 
         .fin-table-wrap { overflow-x: auto; background: #fff; border-top: 1px solid #dde1e7; }
-        .fin-table { min-width: 1000px; }
+        .fin-table { min-width: 1100px; }
         .fin-head, .fin-row { display: grid; align-items: center; padding: 0 12px; box-sizing: border-box; }
         .fin-head { height: 45px; background: #c2d45e; color: #243014; font-size: 13px; font-weight: 600; }
         .fin-head > div { padding: 0 10px; }
@@ -388,6 +404,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
         .fin-num.dim { color: #cbd5e1; }
         .fin-total { font-weight: 700; color: #111827; }
         .fin-muted { color: #94a3b8; }
+        .fin-neg { color: #b91c1c; }
         .fin-group-row { background: #f1f6d6; color: #0f172a; font-weight: 700; border-bottom: 1px solid #d9e49a; }
         .fin-group-count { font-weight: 500; color: #64748b; }
         .fin-group-total { color: #5f6f14; }
@@ -416,7 +433,7 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
             variant="boxed"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search resource name or mobile..."
+            placeholder="Search resource name, mobile or city..."
             chips={filterChips}
           />
           <div className="member-toolbar-group">
@@ -446,35 +463,39 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
         <div className="stats-grid">
           <div className="stat-card">
             <div className="card-icon blue"><FaRupeeSign size={28} /></div>
-            <div className="card-label">Total Paid</div>
-            <div className="card-value">{inr(stats.total)}</div>
+            <div className="card-label">TCS Payout (We Receive)</div>
+            <div className="card-value">{inr(stats.tcs)}</div>
           </div>
           <div className="stat-card">
             <div className="card-icon applied"><FaChartLine size={28} /></div>
-            <div className="card-label">Avg Earning</div>
-            <div className="card-value">{inr(stats.average)}</div>
-          </div>
-          <div className="stat-card">
-            <div className="card-icon new"><FaTrophy size={28} /></div>
-            <div className="card-label">Highest Earner</div>
-            <div className="card-value">{stats.top ? inr(stats.top.amount) : '–'}</div>
-            {stats.top && <div className="card-label fin-card-name" title={stats.top.name}>{stats.top.name}</div>}
+            <div className="card-label">Ground Payout (Resources Earn)</div>
+            <div className="card-value">{inr(stats.total)}</div>
+            <div className="card-label fin-card-name">Avg {inr(stats.average)} per resource</div>
           </div>
           <div className="stat-card">
             <div className="card-icon quarter"><FaArrowDown size={28} /></div>
-            <div className="card-label">Lowest Earner (Paid)</div>
-            <div className="card-value">{stats.low ? inr(stats.low.amount) : '–'}</div>
-            {stats.low && <div className="card-label fin-card-name" title={stats.low.name}>{stats.low.name}</div>}
+            <div className="card-label">Margin (TCS − Ground)</div>
+            <div className="card-value">{inr(stats.margin)}</div>
+            <div className="card-label fin-card-name">{stats.tcs ? ((stats.margin / stats.tcs) * 100).toFixed(1) : '0.0'}% of TCS payout</div>
+          </div>
+          <div className="stat-card">
+            <div className="card-icon new"><FaTrophy size={28} /></div>
+            <div className="card-label">Highest Ground Earner</div>
+            <div className="card-value">{stats.top ? inr(stats.top.amount) : '–'}</div>
+            {stats.top && <div className="card-label fin-card-name" title={stats.top.name}>{stats.top.name}</div>}
           </div>
         </div>
 
         <div className="fin-chart-card">
-          <h3>Month-wise Payout</h3>
+          <h3>Month-wise TCS Payout vs Ground Payout</h3>
           <div className="fin-chart-box">
             <Bar
               data={{
                 labels: monthly.map((m) => monthLabel(m.month)),
-                datasets: [{ data: monthly.map((m) => m.total), backgroundColor: monthly.map((m) => (selectedSet.has(m.month) ? '#c2d45e' : '#e6eeb0')), borderRadius: 4 }],
+                datasets: [
+                  { label: 'TCS Payout', data: monthly.map((m) => m.tcs), backgroundColor: monthly.map((m) => (selectedSet.has(m.month) ? '#1976d2' : '#bcd6f2')), borderRadius: 4 },
+                  { label: 'Ground Payout', data: monthly.map((m) => m.ground), backgroundColor: monthly.map((m) => (selectedSet.has(m.month) ? '#c2d45e' : '#e6eeb0')), borderRadius: 4 },
+                ],
               }}
               options={MONTH_BAR_OPTIONS}
             />
@@ -488,8 +509,11 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
             <div>{sortHead('name', 'Resource')}</div>
             <div>{sortHead('mobile', 'Mobile')}</div>
             <div>Location</div>
-            {months.map((m) => (<div key={m}>{sortHead(m, monthLabel(m), 'right')}</div>))}
-            <div>{sortHead('amount', 'Total', 'right')}</div>
+            <div>Zone</div>
+            <div>{sortHead('days', 'Days')}</div>
+            <div>{sortHead('tcs', 'TCS Payout')}</div>
+            <div>{sortHead('ground', 'Ground Payout')}</div>
+            <div>{sortHead('margin', 'Margin')}</div>
           </div>
           {items.length === 0 ? (
             <div className="fin-empty">No resources match your filters</div>
@@ -500,14 +524,14 @@ export default function FinanceAnalytics({ memberRecords = [], onMemberClick, vi
               itemCount={items.length}
               itemSize={ROW_HEIGHT}
               itemKey={(index, data) => data.items[index].id}
-              itemData={{ items, months, selectedSet, onRowClick: (member) => onMemberClick?.(member), gridTemplate }}
+              itemData={{ items, onRowClick: (member) => onMemberClick?.(member), gridTemplate }}
             >
               {TableRow}
             </TableList>
           )}
           <div className="fin-footer">
             <span>{stats.resources.toLocaleString('en-IN')} resources · click a row to open the member</span>
-            <span>Total {inr(stats.total)}</span>
+            <span>TCS {inr(stats.tcs)} · Ground {inr(stats.total)} · Margin {inr(stats.margin)}</span>
           </div>
         </div>
       </div>

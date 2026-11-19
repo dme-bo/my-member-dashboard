@@ -15,6 +15,8 @@ import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
 import { formatDateDDMMMYYYY, formatDateText } from "../utils/dateFormat";
+import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const AGENT_FILTER_LABELS = { city: "City", district: "District", state: "State", rating: "Rating" };
 const AGENT_GROUP_BY_OPTIONS = [
@@ -32,6 +34,7 @@ export default function PartnerAgentListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [groupBy, setGroupBy] = useState(null);
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
   const [kanbanView, setKanbanView] = useState("list");
 
   // Modal states
@@ -160,15 +163,16 @@ export default function PartnerAgentListPage() {
   // matching the same pattern used on Recruitment/Projects/TempStaff pages.
   const groupedRows = useMemo(() => {
     if (!groupBy) return null;
-    const getLabel = (agent) => {
+    const getLabel = (agent, groupBy) => {
       const raw = agent[groupBy];
       return raw && String(raw).trim() ? String(raw).trim() : "Unspecified";
     };
     const groups = new Map();
     for (const agent of currentRows) {
-      const label = getLabel(agent);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(agent);
+      for (const label of multiGroupLabels(agent, groupBy, getLabel)) {
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(agent);
+      }
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupBy, currentRows]);
@@ -181,7 +185,7 @@ export default function PartnerAgentListPage() {
         onRemove: () => toggleFilter(key, value),
       }))
     ),
-    ...(groupBy ? [{ key: "groupBy", label: `Group: ${AGENT_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label || groupBy}`, onRemove: () => setGroupBy(null) }] : []),
+    ...(groupBy ? [{ key: "groupBy", label: `Group: ${groupByLabel(AGENT_GROUP_BY_OPTIONS, groupBy)}`, onRemove: () => setGroupBy(null) }] : []),
   ];
 
   const advancedFiltersPanel = (
@@ -400,10 +404,10 @@ export default function PartnerAgentListPage() {
                   {groupedRows
                     ? groupedRows.map(([label, items]) => (
                         <div key={label} style={{ marginBottom: "20px" }}>
-                          <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
-                            {label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                          <div onClick={() => toggleGroupCollapsed(label)} style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px", cursor: "pointer", userSelect: "none" }}>
+                            <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                          <div style={{ display: collapsedGroups.has(label) ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
                             {items.map((agent) => (
                               <AgentCard key={agent.id} agent={agent} onClick={() => openModal(agent)} />
                             ))}
@@ -447,11 +451,11 @@ export default function PartnerAgentListPage() {
                       ? groupedRows.map(([label, items]) => (
                           <Fragment key={label}>
                             <tr>
-                              <td colSpan={4} style={{ padding: "10px 12px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9" }}>
-                                {label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                              <td colSpan={4} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "10px 12px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9", cursor: "pointer", userSelect: "none" }}>
+                                <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
                               </td>
                             </tr>
-                            {items.map(renderAgentRow)}
+                            {!collapsedGroups.has(label) && items.map(renderAgentRow)}
                           </Fragment>
                         ))
                       : currentRows.map(renderAgentRow)}

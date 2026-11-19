@@ -3,10 +3,11 @@
 // Filters: a curated list of one-click quick toggles, plus a collapsible
 // "Advanced Filters" section that embeds a page-supplied panel (so each page
 // keeps its own real filter fields instead of a generic query builder).
-// Group By: a curated list of one-click fields with a checkmark on the
-// active one, plus a small "Add custom group" picker for parity with Odoo.
+// Group By: a multi-select list of fields (checkmark + order number on each
+// active one); the page groups by the combination of everything picked.
 import React, { useEffect, useRef, useState } from "react";
 import { boxedButtonStyle } from "../utils/uiStyles";
+import { splitGroupBy, joinGroupBy } from "../utils/multiGroup";
 
 const iconStyle = { width: "14px", height: "14px", flexShrink: 0 };
 
@@ -220,27 +221,29 @@ function FiltersMenu({ quickFilters, advancedContent, boxed }) {
 
 function GroupByMenu({ groupByOptions, groupBy, onGroupByChange, boxed }) {
   const [open, setOpen] = useState(false);
-  const [customField, setCustomField] = useState(groupByOptions[0]?.key || "");
   const ref = useRef(null);
   useClickOutside(ref, () => setOpen(false));
+  const selected = splitGroupBy(groupBy);
+
+  // Any number of fields can be on at once; they apply in the order picked.
+  const toggle = (key) =>
+    onGroupByChange(joinGroupBy(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]));
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((v) => !v)} style={linkButtonStyle(!!groupBy, boxed)}>
-        <GroupIcon /> Group By {boxed && <ChevronDownIcon />}
+      <button type="button" onClick={() => setOpen((v) => !v)} style={linkButtonStyle(selected.length > 0, boxed)}>
+        <GroupIcon /> Group By{selected.length > 1 ? ` (${selected.length})` : ""} {boxed && <ChevronDownIcon />}
       </button>
       {open && (
         <div style={dropdownPanelStyle}>
-          <div style={{ padding: "4px 0" }}>
+          <div style={{ padding: "4px 0", maxHeight: 360, overflowY: "auto" }}>
             {groupByOptions.map((opt) => {
-              const active = groupBy === opt.key;
+              const order = selected.indexOf(opt.key);
+              const active = order >= 0;
               return (
                 <div
                   key={opt.key}
-                  onClick={() => {
-                    onGroupByChange(active ? null : opt.key);
-                    setOpen(false);
-                  }}
+                  onClick={() => toggle(opt.key)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -253,29 +256,19 @@ function GroupByMenu({ groupByOptions, groupBy, onGroupByChange, boxed }) {
                   }}
                 >
                   <span style={{ width: "12px", display: "inline-block" }}>{active ? "✓" : ""}</span>
-                  {opt.label}
+                  <span style={{ flex: 1 }}>{opt.label}</span>
+                  {active && selected.length > 1 && <span style={{ fontSize: 11, color: "#64748b" }}>{order + 1}</span>}
                 </div>
               );
             })}
           </div>
-          <div style={{ borderTop: "1px solid #e5e7eb", padding: "10px 14px" }}>
-            <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700, marginBottom: "6px" }}>Add custom group</div>
-            <select
-              value={customField}
-              onChange={(e) => setCustomField(e.target.value)}
-              style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px", marginBottom: "8px" }}
-            >
-              {groupByOptions.map((opt) => (
-                <option key={opt.key} value={opt.key}>{opt.label}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => { onGroupByChange(customField); setOpen(false); }}
-              style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: "var(--accent, #c2d45e)", color: "var(--on-accent, #243014)", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}
-            >
-              Apply
-            </button>
+          <div style={{ borderTop: "1px solid #e5e7eb", padding: "8px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11.5, color: "#64748b" }}>Pick one or more</span>
+            {selected.length > 0 && (
+              <button type="button" onClick={() => onGroupByChange(null)} style={{ background: "none", border: "none", color: "#1976d2", fontSize: 12.5, cursor: "pointer", padding: 0 }}>
+                Clear
+              </button>
+            )}
           </div>
         </div>
       )}
