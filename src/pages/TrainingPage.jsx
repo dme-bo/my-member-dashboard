@@ -21,7 +21,7 @@ import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import FavoritesMenu from "../components/FavoritesMenu";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import WorkshopDetailModal from "../components/WorkshopDetailModal";
-import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
+import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText, toValidDate } from "../utils/dateFormat";
 import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
 
 const COLLECTION_NAME = "trainingsessions";
@@ -37,14 +37,30 @@ const WORKSHOP_MONTHS = {
   Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
 };
 
-// Workshop dates look like "06-Aug-2025 09:30" -> { date: "2025-08-06", time: "09:30" }
+// Workshop dates usually look like "06-Aug-2025 09:30" -> { date: "2025-08-06", time: "09:30" }.
+// Other formats ("27 Nov 2026", "27/11/2026", "2026-11-27", "27-NOV-2026",
+// Firestore Timestamps...) are parsed too — an unparsed date would otherwise
+// leave the workshop with no date and wrongly show it as Completed.
+const toYMD = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 const parseWorkshopDateTime = (value) => {
   if (!value) return { date: "", time: "" };
-  const [datePart, timePart = ""] = String(value).trim().split(" ");
-  const [day, monName, year] = datePart.split("-");
-  const month = WORKSHOP_MONTHS[monName];
-  if (!day || !month || !year) return { date: "", time: timePart };
-  return { date: `${year}-${month}-${day.padStart(2, "0")}`, time: timePart };
+  if (typeof value === "string") {
+    const text = value.trim();
+    const match = text.match(/^(\d{1,2})-([A-Za-z]{3})[A-Za-z]*-(\d{4})(?:\s+(.*))?$/);
+    if (match) {
+      const [, day, monName, year, timePart = ""] = match;
+      const month = WORKSHOP_MONTHS[monName.charAt(0).toUpperCase() + monName.slice(1, 3).toLowerCase()];
+      if (month) return { date: `${year}-${month}-${day.padStart(2, "0")}`, time: timePart.trim() };
+    }
+    const timeMatch = text.match(/\b(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)\s*$/);
+    const datePart = timeMatch ? text.slice(0, timeMatch.index).trim().replace(/[,\sT]+$/, "") : text;
+    const parsed = toValidDate(datePart) || toValidDate(text);
+    return { date: parsed ? toYMD(parsed) : "", time: timeMatch ? timeMatch[1] : "" };
+  }
+  const parsed = toValidDate(value);
+  return { date: parsed ? toYMD(parsed) : "", time: "" };
 };
 
 const createEmptyForm = () => ({
