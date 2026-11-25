@@ -1,26 +1,43 @@
 // src/components/WorkshopDetailModal.jsx
 // Everything for one workshop in a single large modal: overview + manual
-// completion, trainees with attendance, the communication plan (registration
-// confirmation, assignment / previous material, reminders) and trainer feedback.
+// completion, trainees with attendance, reminders (the workshop emails) and
+// trainer feedback.
 //
-// This modal only records settings and state on the session — it never sends
-// email. Persistence goes through `onPatch(sessionId, patch)`.
+// Workshop emails: the day-before and 15-minute reminders and the thank-you are
+// sent automatically by the /api/send-workshop-reminders cron (this modal only
+// switches them on/off); the feedback email is sent from here via
+// /api/send-workshop-feedback. Persistence goes through `onPatch(sessionId, patch)`.
 import { useMemo, useState } from "react";
-import { FaTimes, FaPlus, FaCheckCircle, FaUserCheck } from "react-icons/fa";
+import { FaTimes, FaPlus, FaCheckCircle, FaUserCheck, FaLink, FaCheck } from "react-icons/fa";
 import { getMemberName, getMemberPhone, getMemberEmail, getMemberCity } from "../utils/memberFields";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY } from "../utils/dateFormat";
+import WorkshopDocumentsTab from "./WorkshopDocumentsTab";
+import useConfirm from "./useConfirm";
+import TraineeFeedbackTab from "./TraineeFeedbackTab";
+import ManualReminderCard from "./ManualReminderCard";
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "trainees", label: "Trainees & Attendance" },
-  { id: "communication", label: "Communication" },
+  { id: "communication", label: "Reminders" },
+  { id: "documents", label: "Documents" },
+  { id: "traineeFeedback", label: "Trainee Feedback" },
   { id: "feedback", label: "Trainer Feedback" },
 ];
 
 const REMINDERS = [
-  { key: "dayBefore", label: "1 day before the workshop", describe: (d, t) => (d ? `${shiftDays(d, -1)}${t ? ` at ${t}` : ""}` : "") },
-  { key: "onDay", label: "On the day of the workshop", describe: (d, t) => (d ? `${d}${t ? ` (session at ${t})` : ""}` : "") },
-  { key: "fifteenMin", label: "15 minutes before the session", describe: (d, t) => (d && t ? `${d} at ${shiftMinutes(t, -15)}` : d || "") },
+  {
+    key: "dayBefore",
+    label: "1 day before the workshop",
+    subject: "Reminder: Workshop Tomorrow!",
+    describe: (d, t) => (d ? `${formatDateDDMMMYYYY(shiftDays(d, -1))} at ${t || "10:00"}` : "Needs a workshop date"),
+  },
+  {
+    key: "fifteenMin",
+    label: "15 minutes before the session",
+    subject: "📢 Reminder: Workshop Starts in 15 Minutes!",
+    describe: (d, t) => (d && t ? `${formatDateDDMMMYYYY(d)} at ${shiftMinutes(t, -15)}` : "Needs a workshop date and time"),
+  },
 ];
 
 function shiftDays(dateStr, days) {
@@ -31,24 +48,58 @@ function shiftDays(dateStr, days) {
 }
 
 function shiftMinutes(timeStr, minutes) {
-  const match = /^(\d{1,2}):(\d{2})/.exec(timeStr || "");
+  const match = /^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?/.exec(timeStr || "");
   if (!match) return timeStr;
-  const total = (((Number(match[1]) * 60 + Number(match[2]) + minutes) % 1440) + 1440) % 1440;
+  let hours = Number(match[1]);
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem === "pm" && hours < 12) hours += 12;
+  if (meridiem === "am" && hours === 12) hours = 0;
+  const total = (((hours * 60 + Number(match[2]) + minutes) % 1440) + 1440) % 1440;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-const cleanTime = (time) => (time && time !== "-" ? time : "");
+// Public pages in the member app where trainees mark attendance / give feedback.
+const MEMBER_APP_BASE = "https://briskoliveresourcemangement.web.app";
+const attendanceLink = (workshopId) => `${MEMBER_APP_BASE}/attend/${workshopId}`;
+const workshopFeedbackLink = (workshopId) => `${MEMBER_APP_BASE}/feedback/${workshopId}`;
 
-export default function WorkshopDetailModal({ session, completed, members, registered = [], presentIds = [], onClose, onPatch, onEditDetails, onManageDocuments }) {
-  const [tab, setTab] = useState("overview");
+const cleanTime =(time) => (time && time !== "-" ? time : "");
+
+export default function WorkshopDetailModal({ session, completed, members, registered = [], presentIds = [], initialTab = "overview", onClose, onPatch, onEditDetails, onEmailTeam, onDocumentAdded, sendingTeamEmail = false }) {
+  const [tab, setTab] = useState(initialTab);
+  const [confirm, confirmDialog] = useConfirm();
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
-  const [assignmentNote, setAssignmentNote] = useState(session.assignment?.note || "");
+  const [feedbackLink, setFeedbackLink] = useState(
+    session.feedbackLink || session.emailLog?.feedback?.link || (session.workshopId ? workshopFeedbackLink(session.workshopId) : "")
+  );
+  const [copied, setCopied] = useState(""); // "attendance" | "feedback" | ""
+
+  const copyLink = async (which, link) => {
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      // Clipboard API unavailable (e.g. not https): fall back to a hidden textarea.
+      const area = document.createElement("textarea");
+      area.value = link;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setCopied(which);
+    setTimeout(() => setCopied((current) => (current === which ? "" : current)), 2000);
+  };
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackResult, setFeedbackResult] = useState(null); // { type, text }
   const [feedback, setFeedback] = useState({
     rating: session.trainerFeedback?.rating || 0,
     summary: session.trainerFeedback?.summary || "",
     wentWell: session.trainerFeedback?.wentWell || "",
     improvements: session.trainerFeedback?.improvements || "",
+    futureNotes: session.trainerFeedback?.futureNotes || "",
   });
 
   const trainees = useMemo(() => {
@@ -161,29 +212,70 @@ export default function WorkshopDetailModal({ session, completed, members, regis
     });
   };
 
-  const toggleCompleted = () => {
-    if (!completed && !window.confirm("Mark this workshop as completed? It will move to Completed Workshops.")) return;
+  const toggleCompleted = async () => {
+    if (
+      !completed &&
+      !(await confirm({
+        title: "Mark as completed?",
+        message: "This workshop will move to Completed Workshops, and the thank-you email will go to trainees marked present.",
+        confirmLabel: "Mark as completed",
+      }))
+    ) return;
     return patch(
       completed ? { completed: false, completedAt: null } : { completed: true, completedAt: new Date().toISOString() }
     );
   };
 
+  // Workshop emails are on unless switched off.
+  const reminderOn = (key) => reminders[key]?.enabled !== false;
   const toggleReminder = (key) =>
-    patch({ reminders: { ...reminders, [key]: { ...(reminders[key] || {}), enabled: !reminders[key]?.enabled } } });
+    patch({ reminders: { ...reminders, [key]: { ...(reminders[key] || {}), enabled: !reminderOn(key) } } });
 
-  const toggleConfirmation = () => patch({ registrationConfirmation: { enabled: !session.registrationConfirmation?.enabled } });
-
-  const toggleMaterial = (docId) => {
-    const ids = new Set(session.assignment?.documentIds || []);
-    if (ids.has(docId)) ids.delete(docId);
-    else ids.add(docId);
-    return patch({ assignment: { ...(session.assignment || {}), documentIds: [...ids] } });
+  const emailLog = session.emailLog || {};
+  const sentNote = (kind) => {
+    const entry = emailLog[kind];
+    const count = entry?.sentIds?.length || 0;
+    return count ? `Sent to ${count}${entry.lastSentAt ? ` · last ${formatDateTimeDDMMMYYYY(entry.lastSentAt)}` : ""}` : "";
   };
 
-  const saveAssignment = () => patch({ assignment: { ...(session.assignment || {}), note: assignmentNote.trim() } });
+  const sendFeedback = async (resendAll = false) => {
+    const link = feedbackLink.trim();
+    if (!/^https?:\/\/\S+$/i.test(link)) {
+      setFeedbackResult({ type: "error", text: "Enter the feedback form link, starting with http:// or https://" });
+      return;
+    }
+    const presentWithEmail = rows.filter((r) => r.mark?.status === "present" && r.email).length;
+    const ok = await confirm({
+      title: resendAll ? "Send feedback email again?" : "Send feedback email?",
+      message: resendAll
+        ? `It will go to all ${presentWithEmail} trainees marked present, including those who already got it.`
+        : `It will go to the trainees marked present (${presentWithEmail} with an email address).`,
+      confirmLabel: "Send",
+    });
+    if (!ok) return;
+    setFeedbackSending(true);
+    setFeedbackResult(null);
+    try {
+      const response = await fetch("/api/send-workshop-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, link, resendAll }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Failed to send the feedback email.");
+      const parts = [`Sent to ${data.sent || 0}`];
+      if (data.noEmail) parts.push(`${data.noEmail} without an email address`);
+      if (data.failed) parts.push(`${data.failed} failed`);
+      setFeedbackResult({ type: data.failed ? "error" : "success", text: data.message || parts.join(" · ") });
+    } catch (error) {
+      setFeedbackResult({ type: "error", text: error.message });
+    } finally {
+      setFeedbackSending(false);
+    }
+  };
 
   const saveFeedback = () =>
-    patch({ trainerFeedback: { ...feedback, summary: feedback.summary.trim(), wentWell: feedback.wentWell.trim(), improvements: feedback.improvements.trim(), savedAt: new Date().toISOString() } });
+    patch({ trainerFeedback: { ...feedback, summary: feedback.summary.trim(), wentWell: feedback.wentWell.trim(), improvements: feedback.improvements.trim(), futureNotes: feedback.futureNotes.trim(), savedAt: new Date().toISOString() } });
 
   const time = cleanTime(session.time);
 
@@ -198,7 +290,9 @@ export default function WorkshopDetailModal({ session, completed, members, regis
         .wsd-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-left: 10px; vertical-align: middle; }
         .wsd-badge.upcoming { background: #fff4e5; color: #b45309; }
         .wsd-badge.completed { background: #dcfce7; color: #15803d; }
-        .wsd-close { margin-left: auto; border: none; background: none; cursor: pointer; color: #64748b; font-size: 18px; padding: 4px; }
+        .wsd-head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .wsd-btn.copied { border-color: #15803d; color: #15803d; }
+        .wsd-close { border: none; background: none; cursor: pointer; color: #64748b; font-size: 18px; padding: 4px; }
         .wsd-tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid #e5eaf1; background: #f8fafc; }
         .wsd-tab { border: none; background: none; padding: 12px 16px; font-size: 14px; font-weight: 600; color: #475569; cursor: pointer; border-bottom: 3px solid transparent; }
         .wsd-tab.active { color: #5f6f14; border-bottom-color: #c2d45e; }
@@ -235,6 +329,13 @@ export default function WorkshopDetailModal({ session, completed, members, regis
         .wsd-toggle:first-of-type { border-top: none; }
         .wsd-toggle input { width: 16px; height: 16px; accent-color: #c2d45e; }
         .wsd-toggle .when { margin-left: auto; font-size: 12px; color: #64748b; }
+        .wsd-info { font-size: 12px; color: #1e3a8a; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; }
+        .wsd-subject { display: block; font-size: 12px; color: #64748b; margin-top: 2px; }
+        .wsd-sent { display: block; color: #15803d; font-weight: 600; margin-top: 2px; }
+        .wsd-toggle .when { text-align: right; }
+        .wsd-result { margin-top: 10px; font-size: 13px; padding: 8px 12px; border-radius: 8px; }
+        .wsd-result.success { background: #dcfce7; color: #15803d; }
+        .wsd-result.error { background: #fee2e2; color: #b91c1c; }
         .wsd-note { font-size: 12px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; }
         .wsd-stars button { border: none; background: none; font-size: 24px; cursor: pointer; color: #cbd5e1; padding: 0 2px; }
         .wsd-stars button.on { color: #f59e0b; }
@@ -252,9 +353,23 @@ export default function WorkshopDetailModal({ session, completed, members, regis
               {[session.date ? formatDateDDMMMYYYY(session.date) : "", time, session.workshopOrganizer, session.workshopLocation].filter(Boolean).join(" · ")}
             </div>
           </div>
-          <button type="button" className="wsd-close" onClick={onClose} aria-label="Close">
-            <FaTimes />
-          </button>
+          <div className="wsd-head-actions">
+            {session.workshopId && (
+              <>
+                <button type="button" className={`wsd-btn ${copied === "attendance" ? "copied" : ""}`} onClick={() => copyLink("attendance", attendanceLink(session.workshopId))} title={attendanceLink(session.workshopId)}>
+                  {copied === "attendance" ? <FaCheck size={12} /> : <FaLink size={12} />}
+                  {copied === "attendance" ? "Copied!" : "Copy attendance link"}
+                </button>
+                <button type="button" className={`wsd-btn ${copied === "feedback" ? "copied" : ""}`} onClick={() => copyLink("feedback", workshopFeedbackLink(session.workshopId))} title={workshopFeedbackLink(session.workshopId)}>
+                  {copied === "feedback" ? <FaCheck size={12} /> : <FaLink size={12} />}
+                  {copied === "feedback" ? "Copied!" : "Copy feedback link"}
+                </button>
+              </>
+            )}
+            <button type="button" className="wsd-close" onClick={onClose} aria-label="Close">
+              <FaTimes />
+            </button>
+          </div>
         </div>
 
         <div className="wsd-tabs">
@@ -290,7 +405,7 @@ export default function WorkshopDetailModal({ session, completed, members, regis
               )}
               <div className="wsd-actions">
                 <button type="button" className="wsd-btn" onClick={() => onEditDetails(session)}>Edit details</button>
-                <button type="button" className="wsd-btn" onClick={() => onManageDocuments(session)}>Manage documents</button>
+                <button type="button" className="wsd-btn" onClick={() => setTab("documents")}>Manage documents</button>
                 <button type="button" className={`wsd-btn ${completed ? "" : "success"}`} onClick={toggleCompleted} disabled={busy}>
                   <FaCheckCircle size={13} />
                   {completed ? "Reopen (move back to Upcoming)" : "Mark as completed"}
@@ -383,70 +498,85 @@ export default function WorkshopDetailModal({ session, completed, members, regis
 
           {tab === "communication" && (
             <>
-              <div className="wsd-note">These settings are saved on the workshop only. This screen does not send any email.</div>
-
-              <div className="wsd-card">
-                <h4>Registration confirmation</h4>
-                <p>Confirm to a trainee as soon as they register for this workshop.</p>
-                <label className="wsd-toggle">
-                  <input type="checkbox" checked={!!session.registrationConfirmation?.enabled} onChange={toggleConfirmation} disabled={busy} />
-                  Send a confirmation when a trainee registers
-                </label>
-                <div style={{ fontSize: 12, color: "#64748b" }}>
-                  {rows.filter((r) => r.confirmed).length} of {rows.length} trainees already confirmed (WhatsApp).
-                </div>
-              </div>
-
-              <div className="wsd-card">
-                <h4>Assignment / previous material</h4>
-                <p>Choose what trainees should receive: pick documents from this workshop's library and add a note.</p>
-                {documents.length === 0 ? (
-                  <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10 }}>
-                    No documents uploaded yet.{" "}
-                    <button type="button" className="wsd-btn" onClick={() => onManageDocuments(session)}>Upload documents</button>
-                  </div>
-                ) : (
-                  documents.map((document, index) => {
-                    const docId = document.id || document.url || String(index);
-                    return (
-                      <label className="wsd-toggle" key={docId}>
-                        <input
-                          type="checkbox"
-                          checked={(session.assignment?.documentIds || []).includes(docId)}
-                          onChange={() => toggleMaterial(docId)}
-                          disabled={busy}
-                        />
-                        {document.name || document.title || document.fileName || `Document ${index + 1}`}
-                      </label>
-                    );
-                  })
-                )}
-                <textarea
-                  className="wsd-textarea"
-                  rows={3}
-                  placeholder="Assignment instructions or a note for trainees…"
-                  value={assignmentNote}
-                  onChange={(e) => setAssignmentNote(e.target.value)}
-                  style={{ marginTop: 10 }}
-                />
-                <div className="wsd-actions" style={{ marginTop: 10 }}>
-                  <button type="button" className="wsd-btn primary" onClick={saveAssignment} disabled={busy}>Save</button>
-                </div>
-              </div>
+              <ManualReminderCard session={session} rows={rows} confirm={confirm} />
 
               <div className="wsd-card">
                 <h4>Reminders</h4>
-                <p>Which reminders this workshop should have.</p>
+                <p>
+                  Emailed automatically to everyone registered for this workshop. Untick one to stop it.
+                  {rows.some((r) => !r.email) && ` ${rows.filter((r) => !r.email).length} of ${rows.length} trainees have no email address and will not receive emails.`}
+                </p>
                 {REMINDERS.map((reminder) => (
                   <label className="wsd-toggle" key={reminder.key}>
-                    <input type="checkbox" checked={!!reminders[reminder.key]?.enabled} onChange={() => toggleReminder(reminder.key)} disabled={busy} />
-                    {reminder.label}
-                    <span className="when">{reminder.describe(session.date, time)}</span>
+                    <input type="checkbox" checked={reminderOn(reminder.key)} onChange={() => toggleReminder(reminder.key)} disabled={busy} />
+                    <span>
+                      {reminder.label}
+                      <span className="wsd-subject">{reminder.subject}</span>
+                    </span>
+                    <span className="when">
+                      {reminder.describe(session.date, time)}
+                      {sentNote(reminder.key) && <span className="wsd-sent">{sentNote(reminder.key)}</span>}
+                    </span>
                   </label>
                 ))}
               </div>
+
+              <div className="wsd-card">
+                <h4>Thank-you email</h4>
+                <p>Emailed automatically once the workshop is marked completed, only to trainees marked Present. Anyone marked present later (within 7 days) gets it too.</p>
+                <label className="wsd-toggle">
+                  <input type="checkbox" checked={reminderOn("thankYou")} onChange={() => toggleReminder("thankYou")} disabled={busy} />
+                  <span>
+                    Send after completion
+                    <span className="wsd-subject">🎉 Thank You for Attending the Workshop!</span>
+                  </span>
+                  <span className="when">
+                    {completed ? `${counts.present} marked present` : "Waiting for the workshop to be marked completed"}
+                    {sentNote("thankYou") && <span className="wsd-sent">{sentNote("thankYou")}</span>}
+                  </span>
+                </label>
+              </div>
+
+              <div className="wsd-card" style={{ opacity: completed ? 1 : 0.6 }}>
+                <h4>Feedback request</h4>
+                <p>Sent manually to trainees marked Present. Paste the feedback form link, then send.</p>
+                <div className="wsd-field" style={{ marginBottom: 10 }}>
+                  <label htmlFor="wsd-feedback-link">Feedback form link</label>
+                  <input
+                    id="wsd-feedback-link"
+                    type="url"
+                    className="wsd-textarea"
+                    placeholder="https://forms.gle/…"
+                    value={feedbackLink}
+                    onChange={(e) => setFeedbackLink(e.target.value)}
+                    disabled={!completed || feedbackSending}
+                  />
+                </div>
+                <div className="wsd-actions" style={{ marginTop: 0, alignItems: "center" }}>
+                  <button type="button" className="wsd-btn primary" onClick={() => sendFeedback(false)} disabled={!completed || feedbackSending || counts.present === 0}>
+                    {feedbackSending ? "Sending…" : "Send feedback email"}
+                  </button>
+                  {emailLog.feedback?.sentIds?.length > 0 && (
+                    <button type="button" className="wsd-btn" onClick={() => sendFeedback(true)} disabled={!completed || feedbackSending}>
+                      Send again to everyone
+                    </button>
+                  )}
+                  <span style={{ fontSize: 12, color: "#64748b" }}>
+                    {!completed ? "Available after the workshop is marked completed." : counts.present === 0 ? "No trainees marked present yet." : sentNote("feedback")}
+                  </span>
+                </div>
+                {feedbackResult && (
+                  <div className={`wsd-result ${feedbackResult.type}`} role="status">{feedbackResult.text}</div>
+                )}
+              </div>
             </>
           )}
+
+          {tab === "documents" && (
+            <WorkshopDocumentsTab session={session} onPatch={onPatch} onDocumentAdded={onDocumentAdded} onEmailTeam={onEmailTeam} sendingTeamEmail={sendingTeamEmail} />
+          )}
+
+          {tab === "traineeFeedback" && <TraineeFeedbackTab session={session} memberById={memberById} />}
 
           {tab === "feedback" && (
             <>
@@ -467,6 +597,7 @@ export default function WorkshopDetailModal({ session, completed, members, regis
                   ["summary", "Session summary"],
                   ["wentWell", "What went well"],
                   ["improvements", "What to improve"],
+                  ["futureNotes", "Future notes (plans, ideas or reminders for the next workshop)"],
                 ].map(([field, label]) => (
                   <div className="wsd-field" key={field} style={{ marginBottom: 10 }}>
                     <label>{label}</label>
@@ -486,6 +617,7 @@ export default function WorkshopDetailModal({ session, completed, members, regis
             </>
           )}
         </div>
+        {confirmDialog}
       </div>
     </div>
   );

@@ -30,7 +30,6 @@ const WORKSHOP_APPLICANTS_SUBCOLLECTION = "workshop_users_applied";
 // workshopsmaster/{workshopId}/attendance/{userId}: a document per member marked present.
 const WORKSHOP_ATTENDANCE_SUBCOLLECTION = "attendance";
 const WORKSHOP_FAVORITES_KEY = "workshopsPageFavorites";
-const MATERIAL_TYPES = ["Members Training Update", "Training Video"];
 
 const WORKSHOP_MONTHS = {
   Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
@@ -73,7 +72,6 @@ const createEmptyForm = () => ({
   teamEmails: "",
 });
 
-const createEmptyMaterialForm = () => ({ type: MATERIAL_TYPES[0], link: "" });
 
 const todayStr = () => {
   const now = new Date();
@@ -108,6 +106,7 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [savingMessage, setSavingMessage] = useState(""); // "first" | "final" | ""
   const [memberSearch, setMemberSearch] = useState("");
   const [detailSessionId, setDetailSessionId] = useState(null); // workshop detail modal
+  const [detailTab, setDetailTab] = useState("overview"); // tab the detail modal opens on
   const [detailApplicants, setDetailApplicants] = useState([]); // registered for the open workshop
   const [detailPresentIds, setDetailPresentIds] = useState([]); // marked present in the attendance collection
   const [addTraineesModal, setAddTraineesModal] = useState(null); // { session, trainees }
@@ -154,17 +153,7 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
     }
   });
 
-  const [activeView, setActiveView] = useState("sessions");
-  const [documentsSession, setdocumentsSession] = useState(null);
-  const [materialForm, setMaterialForm] = useState(createEmptyMaterialForm());
-  const [materialFormError, setMaterialFormError] = useState("");
-  const [savingMaterial, setSavingMaterial] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
-  const [showUploadPicker, setShowUploadPicker] = useState(false);
-  const [uploadPickerSearch, setUploadPickerSearch] = useState("");
-  const [libraryTypeFilter, setLibraryTypeFilter] = useState("All");
-  const [libraryTrainingFilter, setLibraryTrainingFilter] = useState("All");
-  const [librarySearch, setLibrarySearch] = useState("");
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -431,13 +420,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
     setCurrentPage(1);
   };
   const deleteFavorite = (id) => persistFavorites(favorites.filter((f) => f.id !== id));
-
-  const uploadPickerSessions = useMemo(() => {
-    const term = uploadPickerSearch.trim().toLowerCase();
-    const desc = [...sortedSessions].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    if (!term) return desc;
-    return desc.filter((session) => String(session.topic || "").toLowerCase().includes(term));
-  }, [sortedSessions, uploadPickerSearch]);
 
   const counts = useMemo(() => {
     const upcoming = entries.filter((session) => getSessionStatus(session) === "Upcoming").length;
@@ -1001,122 +983,38 @@ Please don't miss it — we look forward to your participation!`;
     }
   };
 
-  const opendocumentsModal = (session) => {
-    setdocumentsSession(session);
-    setMaterialForm(createEmptyMaterialForm());
-    setMaterialFormError("");
-  };
+  const handleSendTeamEmail = async (session) => {
+    if (!session) return;
 
-  const closedocumentsModal = () => {
-    setdocumentsSession(null);
-    setMaterialForm(createEmptyMaterialForm());
-    setMaterialFormError("");
-  };
-
-  const openUploadPicker = () => {
-    setUploadPickerSearch("");
-    setShowUploadPicker(true);
-  };
-
-  const closeUploadPicker = () => {
-    setShowUploadPicker(false);
-    setUploadPickerSearch("");
-  };
-
-  const handlePickTrainingForUpload = (session) => {
-    closeUploadPicker();
-    opendocumentsModal(session);
-  };
-
-  const updateMaterialForm = (field, value) => setMaterialForm((prev) => ({ ...prev, [field]: value }));
-
-  const handleAddMaterial = async (e) => {
-    e.preventDefault();
-    if (!documentsSession) return;
-
-    if (!materialForm.link.trim()) {
-      setMaterialFormError("Please paste the Drive/share link.");
-      return;
-    }
-
-    setMaterialFormError("");
-    setSavingMaterial(true);
-    try {
-      const newMaterial = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: materialForm.type,
-        type: materialForm.type,
-        link: materialForm.link.trim(),
-        addedAt: new Date().toISOString(),
-      };
-      const updateddocuments = [
-        ...(documentsSession.documents || []).filter((item) => item.type !== materialForm.type),
-        newMaterial,
-      ];
-      await updateDoc(doc(db, COLLECTION_NAME, documentsSession.id), { documents: updateddocuments });
-      setSessions((prev) =>
-        prev.map((item) => (item.id === documentsSession.id ? { ...item, documents: updateddocuments } : item))
-      );
-      setdocumentsSession((prev) => ({ ...prev, documents: updateddocuments }));
-      setMaterialForm(createEmptyMaterialForm());
-    } catch (error) {
-      console.error("Error adding material:", error);
-      setMaterialFormError("Failed to save. Please try again.");
-    } finally {
-      setSavingMaterial(false);
-    }
-  };
-
-  const handleRemoveMaterial = async (materialId) => {
-    if (!documentsSession) return;
-    const updateddocuments = (documentsSession.documents || []).filter((item) => item.id !== materialId);
-    try {
-      await updateDoc(doc(db, COLLECTION_NAME, documentsSession.id), { documents: updateddocuments });
-      setSessions((prev) =>
-        prev.map((item) => (item.id === documentsSession.id ? { ...item, documents: updateddocuments } : item))
-      );
-      setdocumentsSession((prev) => ({ ...prev, documents: updateddocuments }));
-    } catch (error) {
-      console.error("Error removing material:", error);
-      showToast("Failed to remove material.", "error");
-    }
-  };
-
-  const handleSendTeamEmail = async () => {
-    if (!documentsSession) return;
-
-    const recipients = getTeamEmailRecipients(documentsSession);
+    const recipients = getTeamEmailRecipients(session);
     if (recipients.length === 0) {
       showToast("Add at least one team email in the training's schedule details first.", "error");
       return;
     }
 
-    const documents = documentsSession.documents || [];
-    const findLink = (type) => documents.find((m) => m.type === type)?.link;
+    const documents = session.documents || [];
+    // Every link of a type (several videos/PPTs can be uploaded), one per line.
+    const findLink = (type) => documents.filter((m) => m.type === type && m.link).map((m) => m.link).join("\n");
     const updateLink = findLink("Members Training Update");
     const videoLink = findLink("Training Video");
+    const pptLink = findLink("Training PPT");
 
-    const missing = [
-      !updateLink && "Members Training Update",
-      !videoLink && "Training Video",
-    ].filter(Boolean);
-    if (missing.length > 0) {
-      showToast(`Add the ${missing.join(", ")} link before emailing the team.`, "error");
+    if (!videoLink && !pptLink) {
+      showToast("Upload the training video or PPT before emailing the team.", "error");
       return;
     }
 
-    const dateTime = `${formatDateDisplay(documentsSession.date)}${
-      documentsSession.time && documentsSession.time !== "-" ? ` at ${documentsSession.time}` : ""
+    const dateTime = `${formatDateDisplay(session.date)}${
+      session.time && session.time !== "-" ? ` at ${session.time}` : ""
     }`;
     const bodyLines = [
       "Dear All,",
-      `I am pleased to inform you that the training session on "${documentsSession.topic}" was successfully conducted on ${dateTime}. The session went well, and participants were actively engaged throughout.`,
+      `I am pleased to inform you that the training session on "${session.topic}" was successfully conducted on ${dateTime}. The session went well, and participants were actively engaged throughout.`,
       "",
-      "Additionally, you can track the training progress and updates here:",
-      `Members Training Update Link: ${updateLink}`,
-      "",
-      `Training Video Link: ${videoLink}`,
-      "",
+      "Additionally, you can find the training material here:",
+      ...(updateLink ? [`Members Training Update Link: ${updateLink}`, ""] : []),
+      ...(videoLink ? [`Training Video Link: ${videoLink}`, ""] : []),
+      ...(pptLink ? [`Training PPT Link: ${pptLink}`, ""] : []),
       "Regards,",
       "Training Team",
     ];
@@ -1125,16 +1023,15 @@ Please don't miss it — we look forward to your participation!`;
     try {
       await sendTrainingEmail({
         recipients,
-        subject: `Training Update — ${documentsSession.topic} (${formatDateDisplay(documentsSession.date)})`,
+        subject: `Training Update — ${session.topic} (${formatDateDisplay(session.date)})`,
         body: bodyLines.join("\n"),
       });
 
       const sentAt = new Date().toISOString();
-      await updateDoc(doc(db, COLLECTION_NAME, documentsSession.id), { emailSentAt: sentAt });
+      await updateDoc(doc(db, COLLECTION_NAME, session.id), { emailSentAt: sentAt });
       setSessions((prev) =>
-        prev.map((item) => (item.id === documentsSession.id ? { ...item, emailSentAt: sentAt } : item))
+        prev.map((item) => (item.id === session.id ? { ...item, emailSentAt: sentAt } : item))
       );
-      setdocumentsSession((prev) => ({ ...prev, emailSentAt: sentAt }));
       showToast(`Email sent to ${recipients.length} recipient(s).`);
     } catch (error) {
       console.error("Error sending team email:", error);
@@ -1144,34 +1041,6 @@ Please don't miss it — we look forward to your participation!`;
     }
   };
 
-
-  const alldocuments = useMemo(
-    () =>
-      sortedSessions.flatMap((session) =>
-        (session.documents || []).map((material) => ({
-          ...material,
-          sessionId: session.id,
-          sessionTopic: session.topic,
-          sessionDate: session.date,
-        }))
-      ),
-    [sortedSessions]
-  );
-
-  const libraryTrainingOptions = useMemo(
-    () => ["All", ...Array.from(new Set(alldocuments.map((item) => item.sessionTopic))).sort((a, b) => a.localeCompare(b))],
-    [alldocuments]
-  );
-
-  const filtereddocuments = useMemo(() => {
-    const term = librarySearch.trim().toLowerCase();
-    return alldocuments.filter((item) => {
-      if (libraryTypeFilter !== "All" && item.type !== libraryTypeFilter) return false;
-      if (libraryTrainingFilter !== "All" && item.sessionTopic !== libraryTrainingFilter) return false;
-      if (term && !item.title.toLowerCase().includes(term) && !item.sessionTopic.toLowerCase().includes(term)) return false;
-      return true;
-    });
-  }, [alldocuments, libraryTypeFilter, libraryTrainingFilter, librarySearch]);
 
   const selectCell = (session) => (
     <td style={{ width: 36 }}>
@@ -1280,7 +1149,7 @@ Please don't miss it — we look forward to your participation!`;
           )}
         </td>
         <td>
-          <button type="button" className="training-documents-btn" onClick={() => opendocumentsModal(session)}>
+          <button type="button" className="training-documents-btn" onClick={() => { setDetailTab("documents"); setDetailSessionId(session.id); }} title="Open documents">
             <FaFolderOpen size={11} />
             {(session.documents || []).length}
           </button>
@@ -2133,8 +2002,8 @@ Please don't miss it — we look forward to your participation!`;
       <div className="ws-header page-header-band">
         <div className="ws-row ws-title-row">
           <div className="ws-title">
-            <h1>{activeView === "library" ? "Documents Library" : "Workshops"}</h1>
-            {activeView === "sessions" && (
+            <h1>Workshops</h1>
+            {(
               <div className="ws-kpis" role="group" aria-label="Quick filters">
                 <button type="button" className="ws-kpi green" aria-pressed="false" onClick={() => { setStatusFilters([]); setCurrentPage(1); }}><b>{counts.total.toLocaleString()}</b>Total workshops</button>
                 <button type="button" className="ws-kpi amber" aria-pressed={statusFilters.includes("Upcoming")} onClick={() => { toggleStatusFilter("Upcoming"); setCurrentPage(1); }}><b>{counts.upcoming.toLocaleString()}</b>Upcoming</button>
@@ -2143,26 +2012,15 @@ Please don't miss it — we look forward to your participation!`;
               </div>
             )}
           </div>
-          {activeView === "sessions" ? (
+          {(
             <button type="button" className="ws-outline-btn" onClick={clearFilters}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
               Reset Filters
             </button>
-          ) : (
-            <div className="ws-row" style={{ gap: 8 }}>
-              <button type="button" className="ws-outline-btn" onClick={openUploadPicker}>
-                <FaFolderOpen size={12} />
-                Upload Documents
-              </button>
-              <button type="button" className="ws-outline-btn" onClick={() => setActiveView("sessions")}>
-                <FaChalkboardTeacher size={12} />
-                Back to Workshops
-              </button>
-            </div>
           )}
         </div>
 
-        {activeView === "sessions" && (
+        {(
           <>
             <div className="ws-row" style={{ gap: 8 }}>
               <OdooSearchBar
@@ -2205,14 +2063,6 @@ Please don't miss it — we look forward to your participation!`;
             <div className="ws-row ws-meta-row">
               <div className="ws-meta-left">
                 <SelectionActionMenu count={selectedIds.size} onExport={handleExportSelected} onClear={() => setSelectedIds(new Set())} />
-                <button type="button" className="ws-outline-btn" onClick={openUploadPicker}>
-                  <FaFolderOpen size={12} />
-                  Upload Documents
-                </button>
-                <button type="button" className="ws-outline-btn" onClick={() => setActiveView("library")}>
-                  <FaLink size={12} />
-                  Documents Library
-                </button>
               </div>
               <div className="ws-meta-right">
                 <select
@@ -2251,7 +2101,7 @@ Please don't miss it — we look forward to your participation!`;
         )}
       </div>
 
-      {activeView === "sessions" && (
+      {(
         <div className="ws-table-wrap">
           {loading || workshopsLoading ? (
             <TableLoadingSpinner label="Loading workshops…" />
@@ -2324,108 +2174,6 @@ Please don't miss it — we look forward to your participation!`;
             </div>
           )}
         </div>
-      )}
-
-      {activeView === "library" && (
-      <div style={{ padding: "12px 32px 24px" }}>
-      <div className="training-filter-row">
-        <input
-          type="text"
-          value={librarySearch}
-          onChange={(e) => setLibrarySearch(e.target.value)}
-          placeholder="Search documents or training..."
-        />
-        <select value={libraryTypeFilter} onChange={(e) => setLibraryTypeFilter(e.target.value)}>
-          <option value="All">All Types</option>
-          {MATERIAL_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-        <select value={libraryTrainingFilter} onChange={(e) => setLibraryTrainingFilter(e.target.value)}>
-          {libraryTrainingOptions.map((topic) => (
-            <option key={topic} value={topic}>
-              {topic === "All" ? "All Trainings" : topic}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="training-clear-filters-btn"
-          onClick={() => {
-            setLibrarySearch("");
-            setLibraryTypeFilter("All");
-            setLibraryTrainingFilter("All");
-          }}
-          disabled={!librarySearch && libraryTypeFilter === "All" && libraryTrainingFilter === "All"}
-        >
-          <FaTimes size={11} />
-          Clear All
-        </button>
-      </div>
-
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="card-icon blue">
-            <FaFolderOpen size={24} />
-          </div>
-          <div className="card-label">Total documents</div>
-          <div className="card-value">{alldocuments.length.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="card-icon orange">
-            <FaChalkboardTeacher size={24} />
-          </div>
-          <div className="card-label">Trainings With documents</div>
-          <div className="card-value">{(libraryTrainingOptions.length - 1).toLocaleString()}</div>
-        </div>
-      </div>
-
-      <div className="training-table-card">
-        <h3>Documents Library ({filtereddocuments.length})</h3>
-
-        {loading ? (
-          <TableLoadingSpinner label="Loading documents…" />
-        ) : alldocuments.length === 0 ? (
-          <div className="training-empty">No documents added to any training yet.</div>
-        ) : filtereddocuments.length === 0 ? (
-          <div className="training-empty">No documents match these filters.</div>
-        ) : (
-          <table className="training-table">
-            <thead>
-              <tr>
-                <th>Training</th>
-                <th>Training Date</th>
-                <th>Material</th>
-                <th>Type</th>
-                <th>Added</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtereddocuments.map((material) => (
-                <tr key={`${material.sessionId}-${material.id}`}>
-                  <td>{material.sessionTopic}</td>
-                  <td>{formatDateDisplay(material.sessionDate)}</td>
-                  <td>{material.title}</td>
-                  <td>
-                    <span className="training-material-type-badge">{material.type}</span>
-                  </td>
-                  <td>{material.addedAt ? formatDateDisplay(material.addedAt.slice(0, 10)) : "-"}</td>
-                  <td>
-                    <a className="training-meeting-link" href={material.link} target="_blank" rel="noopener noreferrer">
-                      <FaExternalLinkAlt size={11} />
-                      Open
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-      </div>
       )}
 
       {showScheduleModal && (
@@ -2652,140 +2400,6 @@ Please don't miss it — we look forward to your participation!`;
         </div>
       )}
 
-      {showUploadPicker && (
-        <div className="modal-overlay" onClick={closeUploadPicker}>
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(480px, 100%)" }}>
-            <div className="modal-panel-header">
-              <h3>Select Training To Upload Documents</h3>
-              <button type="button" className="modal-close-btn" onClick={closeUploadPicker} title="Close">
-                <FaTimes />
-              </button>
-            </div>
-            <div className="modal-panel-body">
-              <div className="training-member-search" style={{ marginBottom: "12px" }}>
-                <FaSearch size={13} />
-                <input
-                  type="text"
-                  autoFocus
-                  value={uploadPickerSearch}
-                  onChange={(e) => setUploadPickerSearch(e.target.value)}
-                  placeholder="Search training by topic..."
-                />
-              </div>
-              <div className="training-member-list" style={{ maxHeight: "320px" }}>
-                {uploadPickerSessions.length === 0 ? (
-                  <div className="training-empty">No trainings match your search.</div>
-                ) : (
-                  uploadPickerSessions.map((session) => (
-                    <div key={session.id} className="training-member-row" onClick={() => handlePickTrainingForUpload(session)}>
-                      <div>
-                        <div className="training-member-name">{session.topic}</div>
-                        <div className="training-member-phone">
-                          {formatDateDisplay(session.date)} · {(session.documents || []).length} doc(s) uploaded
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {documentsSession && (
-        <div className="modal-overlay" onClick={closedocumentsModal}>
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 100%)" }}>
-            <div className="modal-panel-header">
-              <h3>Documents - {documentsSession.topic}</h3>
-              <button type="button" className="modal-close-btn" onClick={closedocumentsModal} title="Close">
-                <FaTimes />
-              </button>
-            </div>
-            <div className="modal-panel-body">
-              <div className="training-attendees-list">
-                {(documentsSession.documents || []).length === 0 ? (
-                  <div style={{ fontSize: "13px", color: "#94a3b8" }}>No documents added yet.</div>
-                ) : (
-                  documentsSession.documents.map((material) => (
-                    <div key={material.id} className="training-material-row">
-                      <div className="training-material-info">
-                        <span className="training-material-type-badge">{material.type}</span>
-                        <span className="training-material-title" title={material.title}>
-                          {material.title}
-                        </span>
-                      </div>
-                      <div className="training-material-actions">
-                        <a
-                          className="training-material-open-link"
-                          href={material.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Open"
-                        >
-                          <FaExternalLinkAlt size={13} />
-                        </a>
-                        <button
-                          type="button"
-                          className="training-attendee-remove"
-                          onClick={() => handleRemoveMaterial(material.id)}
-                          title="Remove"
-                        >
-                          <FaTimes size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <form className="training-material-add-form" onSubmit={handleAddMaterial}>
-                <select
-                  className="training-material-type-select"
-                  value={materialForm.type}
-                  onChange={(e) => updateMaterialForm("type", e.target.value)}
-                >
-                  {MATERIAL_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={materialForm.link}
-                  onChange={(e) => updateMaterialForm("link", e.target.value)}
-                  placeholder="Paste the Google Drive / share link..."
-                />
-                {materialFormError && <div className="training-error">{materialFormError}</div>}
-                <button type="submit" className="training-btn training-btn-primary" disabled={savingMaterial}>
-                  <FaPlus size={11} />
-                  {savingMaterial ? "Saving..." : "Add Material"}
-                </button>
-              </form>
-
-              <div style={{ marginTop: "18px", paddingTop: "16px", borderTop: "1px solid #e2e8f0" }}>
-                <button
-                  type="button"
-                  className="training-btn training-btn-secondary"
-                  onClick={handleSendTeamEmail}
-                  disabled={sendingEmail}
-                  style={{ width: "100%", justifyContent: "center" }}
-                >
-                  <FaEnvelope size={12} />
-                  {sendingEmail ? "Sending..." : "Email Documents To Team"}
-                </button>
-                {documentsSession.emailSentAt && (
-                  <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", textAlign: "center" }}>
-                    Last sent {formatDateTimeDDMMMYYYY(documentsSession.emailSentAt)}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {reminderModal && (
         <div className="modal-overlay" onClick={closeReminderModal}>
           <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 100%)" }}>
@@ -2900,10 +2514,21 @@ Please don't miss it — we look forward to your participation!`;
           members={allMembers}
           registered={detailApplicants}
           presentIds={detailPresentIds}
-          onClose={() => setDetailSessionId(null)}
+          initialTab={detailTab}
+          onClose={() => { setDetailSessionId(null); setDetailTab("overview"); }}
           onPatch={patchSession}
+          onDocumentAdded={(sessionId, document) =>
+            setSessions((prev) =>
+              prev.map((item) =>
+                item.id === sessionId && !(item.documents || []).some((d) => d.id === document.id)
+                  ? { ...item, documents: [...(item.documents || []), document] }
+                  : item
+              )
+            )
+          }
           onEditDetails={openScheduleModal}
-          onManageDocuments={opendocumentsModal}
+          onEmailTeam={handleSendTeamEmail}
+          sendingTeamEmail={sendingEmail}
         />
       )}
 

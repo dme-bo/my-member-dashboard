@@ -29,6 +29,10 @@
     {
       "path": "/api/send-birthday-messages",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/send-workshop-reminders",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
@@ -45,6 +49,15 @@
       "maxDuration": 60
     },
     "api/send-birthday-messages.js": {
+      "maxDuration": 60
+    },
+    "api/send-workshop-reminders.js": {
+      "maxDuration": 60
+    },
+    "api/send-workshop-feedback.js": {
+      "maxDuration": 60
+    },
+    "api/send-workshop-message.js": {
       "maxDuration": 60
     }
   }

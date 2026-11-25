@@ -7,7 +7,8 @@ function allocationEmailDevApi() {
     name: 'allocation-email-dev-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (req.method !== 'POST' || req.url !== '/api/send-allocation-email') {
+        const DEV_EMAIL_ROUTES = { '/api/send-allocation-email': './api/send-allocation-email.js', '/api/send-workshop-feedback': './api/send-workshop-feedback.js', '/api/drive-upload': './api/drive-upload.js', '/api/send-workshop-message': './api/send-workshop-message.js' }
+        if (req.method !== 'POST' || !DEV_EMAIL_ROUTES[req.url]) {
           return next()
         }
 
@@ -23,7 +24,7 @@ function allocationEmailDevApi() {
             Object.assign(process.env, env)
 
             req.body = rawBody ? JSON.parse(rawBody) : {}
-            const { default: handler } = await import('./api/send-allocation-email.js')
+            const { default: handler } = await import(/* @vite-ignore */ new URL(DEV_EMAIL_ROUTES[req.url], import.meta.url).href)
             const shimRes = {
               statusCode: 200,
               setHeader: (...args) => res.setHeader(...args),
@@ -38,9 +39,9 @@ function allocationEmailDevApi() {
             }
             await handler(req, shimRes)
           } catch (error) {
-            console.error('send-allocation-email (dev) error:', error)
+            console.error(`${req.url} (dev) error:`, error)
             res.statusCode = 500
-            res.end(JSON.stringify({ error: 'Failed to send allocation email.' }))
+            res.end(JSON.stringify({ error: 'Failed to send email.' }))
           }
         })
       })
