@@ -1,4 +1,4 @@
-import { getAdminDb } from "./_lib/firebaseAdmin.js";
+import { getAdminDb } from "../firebaseAdmin.js";
 import {
   SESSIONS,
   gmailConfigured,
@@ -8,7 +8,7 @@ import {
   parseTimeMinutes,
   sendToTrainees,
   shiftDateKey,
-} from "./_lib/workshopEmails.js";
+} from "../workshopEmails.js";
 
 // Sends the automatic workshop emails for scheduled workshops (`trainingsessions`).
 //

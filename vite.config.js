@@ -7,7 +7,7 @@ function allocationEmailDevApi() {
     name: 'allocation-email-dev-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const DEV_EMAIL_ROUTES = { '/api/send-allocation-email': './api/send-allocation-email.js', '/api/send-workshop-feedback': './api/send-workshop-feedback.js', '/api/drive-upload': './api/drive-upload.js', '/api/send-workshop-message': './api/send-workshop-message.js' }
+        const DEV_EMAIL_ROUTES = { '/api/send-allocation-email': './api/send-allocation-email.js', '/api/send-workshop-feedback': './api/_lib/handlers/send-workshop-feedback.js', '/api/drive-upload': './api/_lib/handlers/drive-upload.js', '/api/send-workshop-message': './api/_lib/handlers/send-workshop-message.js' }
         if (req.method !== 'POST' || !DEV_EMAIL_ROUTES[req.url]) {
           return next()
         }

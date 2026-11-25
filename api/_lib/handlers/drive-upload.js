@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { getAdminDb } from "./_lib/firebaseAdmin.js";
-import { applySharing, driveConfig, ensureWorkshopFolder, getFile, isWorkshopFolder, namesInFolder, renameFile, startResumableUpload } from "./_lib/googleDrive.js";
+import { getAdminDb } from "../firebaseAdmin.js";
+import { applySharing, driveConfig, ensureWorkshopFolder, getFile, isWorkshopFolder, namesInFolder, renameFile, startResumableUpload } from "../googleDrive.js";
 
 // Workshop document uploads to Google Drive (Documents tab of a workshop).
 //

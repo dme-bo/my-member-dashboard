@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
-import { getAdminDb } from "./_lib/firebaseAdmin.js";
-import { renderDailyReportEmail } from "./_lib/emailTemplate.js";
-import { buildWeeklyReport } from "./_lib/reportData.js";
+import { getAdminDb } from "../firebaseAdmin.js";
+import { renderDailyReportEmail } from "../emailTemplate.js";
+import { buildDailyReport } from "../reportData.js";
 
 let cachedTransporter = null;
 const getTransporter = () => {
@@ -17,9 +17,10 @@ const getTransporter = () => {
   return cachedTransporter;
 };
 
-// Temporarily restricted to dme@briskolive.com only, same as send-daily-report.js.
-// const DEFAULT_RECIPIENT = "dme@briskolive.com";
+// Temporarily restricted to dme@briskolive.com only — restore the full
+// distribution list below once reports are ready to go out broadly again.
 const DEFAULT_RECIPIENT = "management@briskolive.com,operations.head@briskolive.com,staffing.manager@briskolive.com,members@briskolive.com,dme@briskolive.com";
+// const DEFAULT_RECIPIENT = "dme@briskolive.com";
 
 const formatDate = (date) =>
   date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -49,14 +50,14 @@ export default async function handler(req, res) {
     const to = (req.method === "POST" && req.body?.to) || req.query?.to || DEFAULT_RECIPIENT;
 
     const db = getAdminDb();
-    const report = await buildWeeklyReport(db);
+    const report = await buildDailyReport(db);
     const todayStr = formatDate(new Date());
 
     const dashboardUrl = "https://my-member-dashboard.vercel.app/";
 
     const sections = [
       { title: "Members & Regional Partner Overview", table: report.overview },
-      { title: "This Week's Report", table: report.weeksReport },
+      { title: "Today's Report", table: report.todaysReport },
       { title: "Status of Jobs / Projects / TCS / Community Jobs / Workshop on Mobile App", table: report.status },
       { title: "Regional Partner Report", table: report.regionalPartnerReport },
     ];
@@ -72,7 +73,7 @@ export default async function handler(req, res) {
     await getTransporter().sendMail({
       from: `Brisk Olive <${gmailUser}>`,
       to,
-      subject: `Weekly Report Members: ${todayStr}`,
+      subject: `Daily Report Members: ${todayStr}`,
       text: textFallback,
       html: renderDailyReportEmail({
         managerName: "Jainendra Kumar Sachan",
@@ -86,7 +87,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, to });
   } catch (error) {
-    console.error("send-weekly-report error:", error);
-    return res.status(500).json({ error: "Failed to send weekly report.", details: String(error?.message || error) });
+    console.error("send-daily-report error:", error);
+    return res.status(500).json({ error: "Failed to send daily report.", details: String(error?.message || error) });
   }
 }

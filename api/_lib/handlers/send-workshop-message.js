@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { getAdminDb } from "./_lib/firebaseAdmin.js";
-import { SESSIONS, fillPlaceholders, gmailConfigured, loadTrainees, sendToTrainees } from "./_lib/workshopEmails.js";
+import { getAdminDb } from "../firebaseAdmin.js";
+import { SESSIONS, fillPlaceholders, gmailConfigured, loadTrainees, sendToTrainees } from "../workshopEmails.js";
 
 // Manual reminder typed in a workshop's Reminders tab, emailed right away.
 //

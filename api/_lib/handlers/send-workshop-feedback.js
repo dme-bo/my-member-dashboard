@@ -1,5 +1,5 @@
-import { getAdminDb } from "./_lib/firebaseAdmin.js";
-import { SESSIONS, gmailConfigured, loadTrainees, sendToTrainees } from "./_lib/workshopEmails.js";
+import { getAdminDb } from "../firebaseAdmin.js";
+import { SESSIONS, gmailConfigured, loadTrainees, sendToTrainees } from "../workshopEmails.js";
 
 // Manual "Share your feedback" email for a completed workshop, sent from its
 // Reminders tab. Goes to trainees marked Present only.
