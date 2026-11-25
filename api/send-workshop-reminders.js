@@ -10,13 +10,16 @@ import {
   shiftDateKey,
 } from "./_lib/workshopEmails.js";
 
-// Cron (vercel.json, every 5 minutes): sends the automatic workshop emails for
-// scheduled workshops (`trainingsessions`).
+// Sends the automatic workshop emails for scheduled workshops (`trainingsessions`).
 //
-//   dayBefore   — the day before the workshop, 24h before its start time
-//                 (10:00 AM if it has no time), to everyone registered.
+// Runs once a day from vercel.json (10:00–10:59 AM IST — Vercel Hobby only allows
+// daily crons). The 15-minute reminder needs it called every 5 minutes, e.g. by a
+// free external scheduler (cron-job.org) with header `Authorization: Bearer <CRON_SECRET>`.
+// Calling it more often is always safe.
+//
+//   dayBefore   — the day before the workshop, from 10:00 AM IST, to everyone registered.
 //   fifteenMin  — 15 minutes before the start time, to everyone registered.
-//                 Needs a session time.
+//                 Needs a session time and the 5-minute external scheduler.
 //   thankYou    — after the workshop is marked completed (within 7 days of
 //                 that), to trainees marked Present only. Anyone marked present
 //                 later in that window gets it on a later run.
@@ -29,7 +32,7 @@ import {
 const MINUTE = 60 * 1000;
 const FIFTEEN_MIN_WINDOW_START = 17 * MINUTE; // cron runs every 5 min; allow a little slack
 const THANK_YOU_WINDOW = 7 * 24 * 60 * MINUTE;
-const DEFAULT_DAY_BEFORE_MINUTES = 10 * 60;
+const DAY_BEFORE_SEND_MINUTES = 10 * 60; // 10:00 AM IST on the day before
 
 const enabled = (session, kind) => session.reminders?.[kind]?.enabled !== false;
 
@@ -41,8 +44,8 @@ export function dueKinds(session, now = Date.now()) {
   const startMinutes = parseTimeMinutes(session.time);
 
   if (session.completed !== true) {
-    const start = istEpoch(date, startMinutes ?? DEFAULT_DAY_BEFORE_MINUTES);
-    if (enabled(session, "dayBefore") && istDateKey(now) === shiftDateKey(date, -1) && now >= start - 24 * 60 * MINUTE) {
+    const dayBefore = shiftDateKey(date, -1);
+    if (enabled(session, "dayBefore") && istDateKey(now) === dayBefore && now >= istEpoch(dayBefore, DAY_BEFORE_SEND_MINUTES)) {
       due.push("dayBefore");
     }
     if (enabled(session, "fifteenMin") && startMinutes !== null) {

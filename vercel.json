@@ -32,7 +32,7 @@
     },
     {
       "path": "/api/send-workshop-reminders",
-      "schedule": "*/5 * * * *"
+      "schedule": "30 4 * * *"
     }
   ],
   "functions": {

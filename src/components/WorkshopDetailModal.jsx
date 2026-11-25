@@ -30,7 +30,7 @@ const REMINDERS = [
     key: "dayBefore",
     label: "1 day before the workshop",
     subject: "Reminder: Workshop Tomorrow!",
-    describe: (d, t) => (d ? `${formatDateDDMMMYYYY(shiftDays(d, -1))} at ${t || "10:00"}` : "Needs a workshop date"),
+    describe: (d) => (d ? `${formatDateDDMMMYYYY(shiftDays(d, -1))} at 10:00 AM` : "Needs a workshop date"),
   },
   {
     key: "fifteenMin",
