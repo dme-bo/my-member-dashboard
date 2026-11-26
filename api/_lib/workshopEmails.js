@@ -21,11 +21,17 @@ const ATTENDANCE = "attendance";
 const USERS = "users";
 
 const IST_OFFSET_MS = 330 * 60 * 1000; // India is UTC+5:30, no DST
-const BCC_BATCH = 50;
+const PARALLEL_SENDS = 5; // separate emails sent at once (Gmail SMTP copes well with a handful)
 const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 let transporter = null;
+
+// Tests only: swap in a fake transporter so nothing is really sent.
+export function setTransporterForTests(fake) {
+  transporter = fake;
+}
+
 export function getTransporter() {
   if (!transporter) {
     transporter = nodemailer.createTransport({
@@ -248,9 +254,11 @@ export function renderWorkshopEmail({ subject, lines }) {
 
 // ---------- sending ----------
 
-// Sends `kind` to the given trainees in BCC batches (addresses are never shown
-// to each other), recording each delivered batch on the session right away so
-// a failure part-way through is retried next time without repeating anyone.
+// Sends `kind` to the given trainees as separate emails — each one addressed
+// only To that trainee, so nobody sees anyone else's address and no copy goes
+// to the sender. A few go out in parallel; each group that is delivered is
+// recorded on the session right away, so a failure part-way through is retried
+// next time without repeating anyone. Trainees sharing an address get one email.
 export async function sendToTrainees(db, session, kind, trainees, extra = {}, logExtra = {}) {
   const logRef = db.collection(SESSIONS).doc(session.id);
   const message = renderWorkshopEmail(TEMPLATES[kind](session, extra));
@@ -258,26 +266,40 @@ export async function sendToTrainees(db, session, kind, trainees, extra = {}, lo
   const withEmail = trainees.filter((t) => t.email);
   const result = { kind, sessionId: session.id, sent: 0, noEmail: trainees.length - withEmail.length, failed: 0 };
 
-  for (let i = 0; i < withEmail.length; i += BCC_BATCH) {
-    const batch = withEmail.slice(i, i + BCC_BATCH);
-    try {
-      await getTransporter().sendMail({
-        from: `Brisk Olive <${from}>`,
-        to: from,
-        bcc: batch.map((t) => t.email),
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-      });
+  const byEmail = new Map(); // email -> trainee ids
+  withEmail.forEach((t) => byEmail.set(t.email, [...(byEmail.get(t.email) || []), t.id]));
+  const recipients = [...byEmail.entries()];
+
+  for (let i = 0; i < recipients.length; i += PARALLEL_SENDS) {
+    const group = recipients.slice(i, i + PARALLEL_SENDS);
+    const outcomes = await Promise.allSettled(
+      group.map(([email]) =>
+        getTransporter().sendMail({
+          from: `Brisk Olive <${from}>`,
+          to: email,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+        })
+      )
+    );
+    const deliveredIds = [];
+    outcomes.forEach((outcome, index) => {
+      const [email, ids] = group[index];
+      if (outcome.status === "fulfilled") {
+        deliveredIds.push(...ids);
+        result.sent += ids.length;
+      } else {
+        console.error(`workshop email ${kind} to ${email} failed for session ${session.id}:`, outcome.reason);
+        result.failed += ids.length;
+      }
+    });
+    if (deliveredIds.length) {
       await logRef.update({
-        [`emailLog.${kind}.sentIds`]: FieldValue.arrayUnion(...batch.map((t) => t.id)),
+        [`emailLog.${kind}.sentIds`]: FieldValue.arrayUnion(...deliveredIds),
         [`emailLog.${kind}.lastSentAt`]: new Date().toISOString(),
         ...Object.fromEntries(Object.entries(logExtra).map(([k, v]) => [`emailLog.${kind}.${k}`, v])),
       });
-      result.sent += batch.length;
-    } catch (error) {
-      console.error(`workshop email ${kind} failed for session ${session.id}:`, error);
-      result.failed += batch.length;
     }
   }
   return result;
