@@ -12,7 +12,7 @@ import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
 import LocationAutocompleteInput from "../components/LocationAutocompleteInput";
-import { multiGroupLabels, groupByLabel, splitGroupBy, joinGroupBy } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, splitGroupBy, joinGroupBy, nestGroups } from '../utils/multiGroup';
 import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const REGIMENTAL_CENTRES_SEED = [
@@ -196,7 +196,7 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
   // Filters menu: tagged / untagged; Group By; saved Favorites (per browser).
   const [tagFilter, setTagFilter] = useState(null); // null | "tagged" | "untagged"
   const [groupBy, setGroupBy] = useState(null);
-  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
   const [viewMode, setViewMode] = useState("list"); // "list" | "kanban"
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []; } catch { return []; }
@@ -970,15 +970,15 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
               <div className="regimental-empty">No entries match your search.</div>
             ) : viewMode === "kanban" ? (
               <div className="regimental-kanban">
-                {(groupedPagedItems || [[null, pagedItems]]).map(([label, rows]) => (
+                {(groupedPagedItems ? nestGroups(groupedPagedItems, collapsedGroups.has) : [{ key: null, label: null, level: 0, count: pagedItems.length, open: true, items: pagedItems }]).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                   <section key={label ?? "all"} className="regimental-kanban-section">
                     {label !== null && (
                       <h3 className="regimental-kanban-heading" onClick={() => toggleGroupCollapsed(label)} style={{ cursor: "pointer", userSelect: "none" }}>
-                        <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span className="regimental-group-count">{rows.length}</span>
+                        {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span className="regimental-group-count">{groupCount}</span>
                       </h3>
                     )}
-                    <div className="regimental-kanban-grid" style={label !== null && collapsedGroups.has(label) ? { display: "none" } : undefined}>
-                      {rows.map((row) => {
+                    <div className="regimental-kanban-grid" style={label !== null && !rows ? { display: "none" } : undefined}>
+                      {(rows || []).map((row) => {
                         const selected = selectedRowIds.includes(row.id);
                         const [nameCol, ...detailCols] = activeCategory.columns;
                         return (
@@ -1053,16 +1053,16 @@ export default function RegimentalCenterPage({ memberRecords = [], membersLoadin
                   </tr>
                 </thead>
                 <tbody>
-                  {(groupedPagedItems || [[null, pagedItems]]).map(([label, rows]) => (
+                  {(groupedPagedItems ? nestGroups(groupedPagedItems, collapsedGroups.has) : [{ key: null, label: null, level: 0, count: pagedItems.length, open: true, items: pagedItems }]).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                     <Fragment key={label ?? "all"}>
                   {label !== null && (
                     <tr className="regimental-group-row">
                       <td colSpan={activeCategory.columns.length + 3} onClick={() => toggleGroupCollapsed(label)} style={{ cursor: "pointer", userSelect: "none" }}>
-                        <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span className="regimental-group-count">{rows.length}</span>
+                        {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span className="regimental-group-count">{groupCount}</span>
                       </td>
                     </tr>
                   )}
-                  {!(label !== null && collapsedGroups.has(label)) && rows.map((row) => (
+                  {!(label !== null && !rows) && (rows || []).map((row) => (
                     <tr key={row.id} className={selectedRowIds.includes(row.id) ? "is-selected" : undefined} onClick={() => openTagModal(row)} title="Click to tag members">
                       <td className="regimental-cb-col" onClick={(e) => e.stopPropagation()}>
                         <input

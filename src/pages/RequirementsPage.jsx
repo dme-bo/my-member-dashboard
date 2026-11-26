@@ -32,7 +32,7 @@ import TableLoadingSpinner from "../components/TableLoadingSpinner";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import FilterAccordionList from "../components/FilterAccordionList";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
 import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 // Projects run by TCS are shown/filtered as "Temp Staffing" instead of
@@ -185,7 +185,7 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
   const { sort: reqSort, toggleSort: toggleReqSort } = useTableSort({ key: "postedOn", dir: "desc" });
   const [groupBy, setGroupBy] = useState(null);
   const [titleFilter, setTitleFilter] = useState([]);
-  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
   const [kanbanView, setKanbanView] = useState("list");
 
   // Modals state
@@ -1266,13 +1266,13 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
         ) : kanbanView === "kanban" ? (
           <div className="page-fill-scroll" style={{ padding: "16px 32px" }}>
             {groupedRequirements
-              ? groupedRequirements.map(([label, items]) => (
+              ? nestGroups(groupedRequirements, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: items }) => (
                   <div key={label} style={{ marginBottom: "20px" }}>
                     <div onClick={() => toggleGroupCollapsed(label)} style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px", cursor: "pointer", userSelect: "none" }}>
-                      <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                      {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({groupCount})</span>
                     </div>
-                    <div style={{ display: collapsedGroups.has(label) ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
-                      {items.map((req) => (
+                    <div style={{ display: !items ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
+                      {(items || []).map((req) => (
                         <RequirementCard
                           key={req.id}
                           req={req}
@@ -1340,14 +1340,14 @@ export default function RequirementsPage({ memberRecords: propMembers = [], memb
               </thead>
               <tbody>
                 {groupedRequirements
-                  ? groupedRequirements.map(([label, items]) => (
+                  ? nestGroups(groupedRequirements, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: items }) => (
                       <Fragment key={label}>
                         <tr>
                           <td colSpan={10} onClick={() => toggleGroupCollapsed(label)} style={{ height: "40px", padding: "0 12px", fontWeight: 600, fontSize: "13px", color: "#334155", background: "#f1f5f9", borderBottom: "1px solid #dde1e7", cursor: "pointer", userSelect: "none" }}>
-                            <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                            {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span style={{ fontWeight: 500, color: "#64748b" }}>({groupCount})</span>
                           </td>
                         </tr>
-                        {!collapsedGroups.has(label) && items.map(renderRequirementRow)}
+                        {!!items && (items || []).map(renderRequirementRow)}
                       </Fragment>
                     ))
                   : displayedRequirements.map(renderRequirementRow)}

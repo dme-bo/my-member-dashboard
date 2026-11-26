@@ -21,7 +21,7 @@ import { formatDateText } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
 import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const COLLECTION_NAME = "communityjobs";
@@ -128,7 +128,7 @@ export default function CommunityJobsPage() {
   );
   const [filters, setFilters] = useState({ orgType: [], status: [] });
   const [groupBy, setGroupBy] = useState(null);
-  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
   const [kanbanView, setKanbanView] = useState("list");
 
   const [pageSize, setPageSize] = useState(500);
@@ -757,13 +757,13 @@ export default function CommunityJobsPage() {
         ) : kanbanView === "kanban" ? (
           <div className="cj-kanban page-fill-scroll">
             {groupedJobs
-              ? groupedJobs.map(([label, items]) => (
+              ? nestGroups(groupedJobs, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: items }) => (
                   <div key={label} style={{ marginBottom: "20px" }}>
                     <div onClick={() => toggleGroupCollapsed(label)} style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px", cursor: "pointer", userSelect: "none" }}>
-                      <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                      {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({groupCount})</span>
                     </div>
-                    <div style={{ display: collapsedGroups.has(label) ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
-                      {items.map((job) => (
+                    <div style={{ display: !items ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                      {(items || []).map((job) => (
                         <JobCard key={job.id} job={job} onView={() => openViewForm(job)} onEdit={() => openEditForm(job)} onArchive={() => setArchiveTarget(job)} />
                       ))}
                     </div>
@@ -803,14 +803,14 @@ export default function CommunityJobsPage() {
               </thead>
               <tbody>
                 {groupedJobs
-                  ? groupedJobs.map(([label, items]) => (
+                  ? nestGroups(groupedJobs, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: items }) => (
                       <Fragment key={label}>
                         <tr className="cj-group-row">
                           <td colSpan={8} onClick={() => toggleGroupCollapsed(label)} style={{ cursor: "pointer", userSelect: "none" }}>
-                            <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                            {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span style={{ fontWeight: 500, color: "#64748b" }}>({groupCount})</span>
                           </td>
                         </tr>
-                        {!collapsedGroups.has(label) && items.map(renderJobRow)}
+                        {!!items && (items || []).map(renderJobRow)}
                       </Fragment>
                     ))
                   : pagedJobs.map(renderJobRow)}

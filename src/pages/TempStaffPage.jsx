@@ -21,7 +21,8 @@ import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 // Default order (and the "third click" state): Full Name A→Z.
 const DEFAULT_SORT = { key: "full_name", dir: "asc" };
@@ -93,7 +94,6 @@ export default function TempStaffPage() {
   const [viewMode, setViewMode] = useState("applications"); // "applications" or "coordinators"
   const [groupBy, setGroupBy] = useState(null);
   const [kanbanView, setKanbanView] = useState("list");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [favorites, setFavorites] = useState(() => {
     try {
@@ -384,14 +384,7 @@ export default function TempStaffPage() {
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupBy, currentRows, viewMode]);
 
-  const toggleGroupCollapsed = (key) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
 
   const clearFilters = () => {
     setFilters({ city: [], coordinator_type: [], status: [], role: [], coordinator_name: [] });
@@ -803,18 +796,18 @@ export default function TempStaffPage() {
                     : `No ${viewMode === "applications" ? "applications" : "coordinators"} registered yet`}
                 </div>
               ) : groupedRows ? (
-                groupedRows.map(([label, rows]) => (
+                nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                   <div key={label} style={{ marginBottom: "12px" }}>
                     <div
                       onClick={() => toggleGroupCollapsed(label)}
                       style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2e6", color: "#2f4a22", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}
                     >
-                      <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                      {label} <span className="tcs-pill">{rows.length}</span>
+                      {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>
+                      {groupTitle} <span className="tcs-pill">{groupCount}</span>
                     </div>
-                    {!collapsedGroups.has(label) && (
+                    {!!rows && (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
-                        {rows.map((item) => (
+                        {(rows || []).map((item) => (
                           <TempStaffCard key={item.id} item={item} viewMode={viewMode} onClick={() => openModal(item)} />
                         ))}
                       </div>
@@ -861,15 +854,15 @@ export default function TempStaffPage() {
                     </td>
                   </tr>
                 ) : groupedRows ? (
-                  groupedRows.map(([label, rows]) => (
+                  nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                     <Fragment key={label}>
                       <tr className="tcs-group-row">
                         <td colSpan={5} onClick={() => toggleGroupCollapsed(label)}>
-                          <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                          {label} <span className="tcs-pill">{rows.length}</span>
+                          {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {groupTitle} <span className="tcs-pill">{groupCount}</span>
                         </td>
                       </tr>
-                      {!collapsedGroups.has(label) && rows.map((item) => renderRow(item))}
+                      {!!rows && (rows || []).map((item) => renderRow(item))}
                     </Fragment>
                   ))
                 ) : (

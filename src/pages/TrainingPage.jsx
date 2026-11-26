@@ -22,7 +22,8 @@ import FavoritesMenu from "../components/FavoritesMenu";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import WorkshopDetailModal from "../components/WorkshopDetailModal";
 import { formatDateDDMMMYYYY, formatDateTimeDDMMMYYYY, formatDateText, toValidDate } from "../utils/dateFormat";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const COLLECTION_NAME = "trainingsessions";
 const WORKSHOP_COLLECTION_NAME = "workshopsmaster";
@@ -139,8 +140,8 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const [statusFilters, setStatusFilters] = useState([]);
   const [topicSearch, setTopicSearch] = useState("");
   const [sessionsGroupBy, setSessionsGroupBy] = useState(null);
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(sessionsGroupBy);
   const [viewMode, setViewMode] = useState("list");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
@@ -356,12 +357,27 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
   const rangeStart = totalItems ? (activePage - 1) * pageSize + 1 : 0;
   const rangeEnd = Math.min(activePage * pageSize, totalItems);
 
+  // Grouped: Odoo-style nested groups (items only under an open last-level
+  // heading). Not grouped: the Upcoming / Completed sections.
   const sections = sessionsGroupBy
-    ? groupSessions(pageRows).map(([label, items]) => ({ key: label, label, items, total: items.length, empty: "" }))
+    ? nestGroups(groupSessions(pageRows), collapsedGroups.has).map((group) => ({
+        key: group.key,
+        label: group.label,
+        level: group.level,
+        open: group.open,
+        items: group.items,
+        total: group.count,
+        empty: "",
+      }))
     : [
         { key: "Upcoming Workshops", label: "Upcoming Workshops", items: pageRows.filter((s) => getSessionStatus(s) === "Upcoming"), total: upcomingSessions.length, empty: "No upcoming workshops." },
         { key: "Completed Workshops", label: "Completed Workshops", items: pageRows.filter((s) => getSessionStatus(s) === "Completed"), total: completedSessions.length, empty: "No completed workshops yet." },
-      ].filter((section) => !statusFilters.length || section.total > 0);
+      ]
+        .filter((section) => !statusFilters.length || section.total > 0)
+        .map((section) => {
+          const open = !collapsedGroups.has(section.key);
+          return { ...section, level: 0, open, items: open ? section.items : null };
+        });
 
   const allRowsSelected = pageRows.length > 0 && pageRows.every((s) => selectedIds.has(s.id));
   const someRowsSelected = !allRowsSelected && pageRows.some((s) => selectedIds.has(s.id));
@@ -376,13 +392,6 @@ export default function TrainingPage({ memberRecords = [], membersLoading = fals
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
-    });
-  const toggleGroupCollapsed = (key) =>
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
       return next;
     });
 
@@ -2110,10 +2119,10 @@ Please don't miss it — we look forward to your participation!`;
               {sections.map((section) => (
                 <div key={section.key} style={{ marginBottom: 12 }}>
                   <div className="ws-kanban-group" onClick={() => toggleGroupCollapsed(section.key)}>
-                    <span style={{ display: "inline-block", transform: collapsedGroups.has(section.key) ? "rotate(-90deg)" : "none" }}>▾</span>
+                    {section.level > 0 && <span style={{ display: "inline-block", width: section.level * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", transform: !section.open ? "rotate(-90deg)" : "none" }}>▾</span>
                     {section.label} <span className="ws-count">({section.total})</span>
                   </div>
-                  {!collapsedGroups.has(section.key) && (
+                  {section.items && (
                     section.items.length === 0 ? (
                       <div className="ws-empty">{hasActiveFilters ? "No workshops match these filters." : section.empty}</div>
                     ) : (
@@ -2154,11 +2163,11 @@ Please don't miss it — we look forward to your participation!`;
                     <Fragment key={section.key}>
                       <tr className="ws-group-row">
                         <td colSpan={10} onClick={() => toggleGroupCollapsed(section.key)}>
-                          <span style={{ display: "inline-block", marginRight: 8, transform: collapsedGroups.has(section.key) ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {section.level > 0 && <span style={{ display: "inline-block", width: section.level * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: 8, transform: !section.open ? "rotate(-90deg)" : "none" }}>▾</span>
                           {section.label} <span className="ws-count">({section.total})</span>
                         </td>
                       </tr>
-                      {!collapsedGroups.has(section.key) && (
+                      {section.items && (
                         section.items.length === 0 ? (
                           <tr>
                             <td colSpan={10} className="ws-empty">{hasActiveFilters ? "No workshops match these filters." : section.empty}</td>

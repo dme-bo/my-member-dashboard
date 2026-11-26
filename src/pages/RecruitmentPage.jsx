@@ -20,7 +20,8 @@ import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 // Sort values mirror what each table cell displays.
 const RECRUITMENT_SORT_ACCESSORS = {
@@ -195,7 +196,6 @@ export default function RecruitmentPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [groupBy, setGroupBy] = useState(null);
   const [viewMode, setViewMode] = useState("list");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
   // Default (key: null) keeps the existing A–Z by name, blank names last.
   const { sort, toggleSort } = useTableSort({ key: null, dir: "asc" });
@@ -483,14 +483,7 @@ export default function RecruitmentPage() {
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupBy, currentRows]);
 
-  const toggleGroupCollapsed = (key) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
 
   const filterChips = [];
   Object.entries(filters).forEach(([key, values]) => {
@@ -860,18 +853,18 @@ export default function RecruitmentPage() {
             {currentRows.length === 0 ? (
               <div className="rec-empty">{emptyMessage}</div>
             ) : groupedRows ? (
-              groupedRows.map(([label, rows]) => (
+              nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                 <div key={label} style={{ marginBottom: "12px" }}>
                   <div
                     onClick={() => toggleGroupCollapsed(label)}
                     style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#eef2f7", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}
                   >
-                    <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                    {label} <span className="rec-count-pill">{rows.length}</span>
+                    {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>
+                    {groupTitle} <span className="rec-count-pill">{groupCount}</span>
                   </div>
-                  {!collapsedGroups.has(label) && (
+                  {!!rows && (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
-                      {rows.map((c) => (
+                      {(rows || []).map((c) => (
                         <CandidateCard key={c.id} candidate={c} onClick={() => openModal(c)} />
                       ))}
                     </div>
@@ -908,15 +901,15 @@ export default function RecruitmentPage() {
                     <td colSpan="7" className="rec-empty">{emptyMessage}</td>
                   </tr>
                 ) : groupedRows ? (
-                  groupedRows.map(([label, rows]) => (
+                  nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                     <Fragment key={label}>
                       <tr className="rec-group-row">
                         <td colSpan={7} onClick={() => toggleGroupCollapsed(label)}>
-                          <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                          {label} <span className="rec-count-pill">{rows.length}</span>
+                          {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {groupTitle} <span className="rec-count-pill">{groupCount}</span>
                         </td>
                       </tr>
-                      {!collapsedGroups.has(label) && rows.map(renderRow)}
+                      {!!rows && (rows || []).map(renderRow)}
                     </Fragment>
                   ))
                 ) : (

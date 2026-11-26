@@ -20,7 +20,8 @@ import { formatDateDDMMMYYYY } from "../utils/dateFormat";
 import SelectionActionMenu from "../components/SelectionActionMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const PROJECTS_GROUP_BY_OPTIONS = [
   { key: "city", label: "City" },
@@ -75,7 +76,6 @@ export default function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [groupBy, setGroupBy] = useState(null);
   const [viewMode, setViewMode] = useState("list");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -256,14 +256,7 @@ export default function ProjectsPage() {
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupBy, currentRows]);
 
-  const toggleGroupCollapsed = (key) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
 
   const filterChips = [];
   Object.entries(filters).forEach(([key, values]) => {
@@ -669,18 +662,18 @@ export default function ProjectsPage() {
             {currentRows.length === 0 ? (
               <div className="pj-empty">{emptyMessage}</div>
             ) : groupedRows ? (
-              groupedRows.map(([label, rows]) => (
+              nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                 <div key={label} style={{ marginBottom: "12px" }}>
                   <div
                     onClick={() => toggleGroupCollapsed(label)}
                     style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#f4f5f0", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
                   >
-                    <span style={{ display: "inline-block", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                    {label} <span className="pj-pill" style={{ marginLeft: 0 }}>{rows.length}</span>
+                    {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>
+                    {groupTitle} <span className="pj-pill" style={{ marginLeft: 0 }}>{groupCount}</span>
                   </div>
-                  {!collapsedGroups.has(label) && (
+                  {!!rows && (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px", marginTop: "10px" }}>
-                      {rows.map((app) => (
+                      {(rows || []).map((app) => (
                         <ApplicationCard key={app.id} app={app} onClick={() => openModal(app)} />
                       ))}
                     </div>
@@ -722,15 +715,15 @@ export default function ProjectsPage() {
                     <td colSpan="5" className="pj-empty">{emptyMessage}</td>
                   </tr>
                 ) : groupedRows ? (
-                  groupedRows.map(([label, rows]) => (
+                  nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: rows }) => (
                     <Fragment key={label}>
                       <tr className="pj-group-row">
                         <td colSpan={5} onClick={() => toggleGroupCollapsed(label)}>
-                          <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>
-                          {label}<span className="pj-pill">{rows.length}</span>
+                          {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>
+                          {groupTitle}<span className="pj-pill">{groupCount}</span>
                         </td>
                       </tr>
-                      {!collapsedGroups.has(label) && rows.map(renderRow)}
+                      {!!rows && (rows || []).map(renderRow)}
                     </Fragment>
                   ))
                 ) : (

@@ -15,7 +15,7 @@ import OdooSearchBar from "../components/OdooSearchBar";
 import OdooViewToolbar from "../components/OdooViewToolbar";
 import FilterAccordionList from "../components/FilterAccordionList";
 import { formatDateDDMMMYYYY, formatDateText } from "../utils/dateFormat";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
 import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 const AGENT_FILTER_LABELS = { city: "City", district: "District", state: "State", rating: "Rating" };
@@ -34,7 +34,7 @@ export default function PartnerAgentListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
   const [groupBy, setGroupBy] = useState(null);
-  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups();
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
   const [kanbanView, setKanbanView] = useState("list");
 
   // Modal states
@@ -402,13 +402,13 @@ export default function PartnerAgentListPage() {
               ) : kanbanView === "kanban" ? (
                 <div>
                   {groupedRows
-                    ? groupedRows.map(([label, items]) => (
+                    ? nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: items }) => (
                         <div key={label} style={{ marginBottom: "20px" }}>
                           <div onClick={() => toggleGroupCollapsed(label)} style={{ fontWeight: 700, fontSize: "14px", color: "#334155", marginBottom: "10px", cursor: "pointer", userSelect: "none" }}>
-                            <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({items.length})</span>
+                            {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span style={{ fontWeight: 500, color: "#94a3b8" }}>({groupCount})</span>
                           </div>
-                          <div style={{ display: collapsedGroups.has(label) ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
-                            {items.map((agent) => (
+                          <div style={{ display: !items ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+                            {(items || []).map((agent) => (
                               <AgentCard key={agent.id} agent={agent} onClick={() => openModal(agent)} />
                             ))}
                           </div>
@@ -448,14 +448,14 @@ export default function PartnerAgentListPage() {
                   </thead>
                   <tbody>
                     {groupedRows
-                      ? groupedRows.map(([label, items]) => (
+                      ? nestGroups(groupedRows, collapsedGroups.has).map(({ key: label, label: groupTitle, level: groupLevel, count: groupCount, open: groupOpen, items: items }) => (
                           <Fragment key={label}>
                             <tr>
                               <td colSpan={4} onClick={() => toggleGroupCollapsed(label)} style={{ padding: "10px 12px", fontWeight: 700, fontSize: "13px", color: "#334155", background: "#f1f5f9", cursor: "pointer", userSelect: "none" }}>
-                                <span style={{ display: "inline-block", marginRight: "8px", transform: collapsedGroups.has(label) ? "rotate(-90deg)" : "none" }}>▾</span>{label} <span style={{ fontWeight: 500, color: "#64748b" }}>({items.length})</span>
+                                {groupLevel > 0 && <span style={{ display: "inline-block", width: groupLevel * 20, flexShrink: 0 }} />}<span style={{ display: "inline-block", marginRight: "8px", transform: !groupOpen ? "rotate(-90deg)" : "none" }}>▾</span>{groupTitle} <span style={{ fontWeight: 500, color: "#64748b" }}>({groupCount})</span>
                               </td>
                             </tr>
-                            {!collapsedGroups.has(label) && items.map(renderAgentRow)}
+                            {!!items && (items || []).map(renderAgentRow)}
                           </Fragment>
                         ))
                       : currentRows.map(renderAgentRow)}

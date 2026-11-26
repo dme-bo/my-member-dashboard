@@ -1,5 +1,13 @@
 import React from "react";
 
+// Errors that come from the page's code being loaded badly (two copies of
+// React after a dev-server re-optimize, or a chunk from an older deploy) rather
+// than from a bug. Re-rendering can't fix these; a full page reload does.
+const LOAD_ERROR = /reading 'use[A-Z]\w*'|Invalid hook call|dynamically imported module|Importing a module script failed|Loading chunk \d+ failed/i;
+const RELOAD_KEY = "errorBoundaryReloadedAt";
+
+const isLoadError = (error) => LOAD_ERROR.test(String(error?.message || error || ""));
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -12,7 +20,24 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    if (!isLoadError(error)) return;
+    // Reload once on its own; if it happens again within 30s, show the message
+    // instead of looping.
+    try {
+      const last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
+      if (Date.now() - last > 30_000) {
+        sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+        window.location.reload();
+      }
+    } catch {
+      // storage unavailable: leave it to the Try Again button
+    }
   }
+
+  handleRetry = () => {
+    if (isLoadError(this.state.error)) window.location.reload();
+    else this.setState({ hasError: false, error: null });
+  };
 
   render() {
     if (this.state.hasError) {
@@ -42,7 +67,7 @@ class ErrorBoundary extends React.Component {
             {this.state.error?.message || "An unexpected error occurred. Please try again."}
           </p>
           <button
-            onClick={() => this.setState({ hasError: false, error: null })}
+            onClick={this.handleRetry}
             style={{
               padding: "10px 28px",
               background: "#c2d45e",

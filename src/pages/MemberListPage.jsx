@@ -25,7 +25,8 @@ import useMemberFilters, { MEMBER_GROUP_BY_OPTIONS, getGroupLabels, SUPPORTING_D
 import FavoritesMenu from "../components/FavoritesMenu";
 import useTableSort, { sortRows, sortHeaderProps } from "../hooks/useTableSort";
 import SortArrow from "../components/SortArrow";
-import { multiGroupLabels, groupByLabel } from '../utils/multiGroup';
+import { multiGroupLabels, groupByLabel, nestGroups } from '../utils/multiGroup';
+import useCollapsedGroups from '../hooks/useCollapsedGroups';
 
 
 // ─── Module-level cache for this page's supporting fetches ───────────────────
@@ -127,7 +128,7 @@ const GroupHeaderRow = React.memo(({ style, group, collapsed, onToggle }) => (
       display: "flex",
       alignItems: "center",
       gap: "8px",
-      padding: "0 14px",
+      padding: `0 14px 0 ${14 + (group.level || 0) * 20}px`,
       background: "#eef2f7",
       borderBottom: "1px solid #dbe3ee",
       borderTop: "1px solid #dbe3ee",
@@ -335,7 +336,6 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(500);
   const [viewMode, setViewMode] = useState("list");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [kanbanCardsPerRow, setKanbanCardsPerRow] = useState(4);
   const kanbanContainerRef = useRef(null);
   const tagsPopoverRef = useRef(null);
@@ -409,14 +409,7 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
     return () => window.removeEventListener("resize", calc);
   }, [viewMode]);
 
-  const toggleGroupCollapsed = useCallback((key) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  const { collapsedGroups, toggleGroupCollapsed } = useCollapsedGroups(groupBy);
 
   useEffect(() => {
     if (!membersLoading && Array.isArray(memberRecords)) {
@@ -507,9 +500,10 @@ export default function MemberListPage({ onMemberClick, memberRecords = [], memb
   const groupedFlatItems = useMemo(() => {
     if (!groupedMembers) return null;
     const flat = [];
-    for (const [label, groupMembers] of groupedMembers) {
-      flat.push({ __type: "group", key: label, label, count: groupMembers.length });
-      if (!collapsedGroups.has(label)) flat.push(...groupMembers);
+    // Odoo-style nested groups: sub-groups and members only under open headings.
+    for (const group of nestGroups(groupedMembers, collapsedGroups.has)) {
+      flat.push({ __type: "group", key: group.key, label: group.label, count: group.count, level: group.level });
+      if (group.items) flat.push(...group.items);
     }
     return flat;
   }, [groupedMembers, collapsedGroups]);

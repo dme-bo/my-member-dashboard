@@ -404,7 +404,17 @@ export default defineConfig({
     sendAllocationSummaryDevApi(),
     parseCommunityJobPhotosDevApi(),
   ],
+  // Always one copy of React, even if a dependency resolves its own.
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   optimizeDeps: {
+    // Scan every page (they're lazy-loaded) when the dev server starts, so Vite
+    // pre-bundles all their libraries up front instead of discovering one when a
+    // page is first opened and re-optimizing mid-session — that re-optimize can
+    // leave the page with two copies of React ("Cannot read properties of null
+    // (reading 'useState')").
+    entries: ['index.html', 'src/**/*.{js,jsx}'],
     include: ['react-window'],
   },
   build: {
