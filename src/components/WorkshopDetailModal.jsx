@@ -3,10 +3,11 @@
 // completion, trainees with attendance, reminders (the workshop emails) and
 // trainer feedback.
 //
-// Workshop emails: the day-before and 15-minute reminders and the thank-you are
-// sent automatically by the /api/send-workshop-reminders cron (this modal only
-// switches them on/off); the feedback email is sent from here via
-// /api/send-workshop-feedback. Persistence goes through `onPatch(sessionId, patch)`.
+// Workshop emails: the day-before and 15-minute reminders, the thank-you and the
+// feedback email are sent automatically by /api/send-workshop-reminders (this
+// modal switches them on/off, and calls it for this workshop the moment it is
+// marked completed). The feedback email can also be re-sent by hand with another
+// link via /api/send-workshop-feedback. Persistence goes through `onPatch(sessionId, patch)`.
 import { useMemo, useState } from "react";
 import { FaTimes, FaPlus, FaCheckCircle, FaUserCheck, FaLink, FaCheck } from "react-icons/fa";
 import { getMemberName, getMemberPhone, getMemberEmail, getMemberCity } from "../utils/memberFields";
@@ -217,13 +218,38 @@ export default function WorkshopDetailModal({ session, completed, members, regis
       !completed &&
       !(await confirm({
         title: "Mark as completed?",
-        message: "This workshop will move to Completed Workshops, and the thank-you email will go to trainees marked present.",
+        message: "This workshop will move to Completed Workshops, and the thank-you and feedback emails will go to trainees marked present right away.",
         confirmLabel: "Mark as completed",
       }))
     ) return;
-    return patch(
-      completed ? { completed: false, completedAt: null } : { completed: true, completedAt: new Date().toISOString() }
-    );
+    if (completed) return patch({ completed: false, completedAt: null });
+    await patch({ completed: true, completedAt: new Date().toISOString() });
+    await sendCompletionEmails();
+  };
+
+  // Sends the after-completion emails (thank-you + feedback) for this workshop
+  // now rather than waiting for the daily run. Only sends what is switched on,
+  // to trainees marked present who have not had it yet.
+  const sendCompletionEmails = async () => {
+    setFeedbackResult(null);
+    try {
+      const response = await fetch("/api/send-workshop-reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not send the completion emails.");
+      const feedbackRun = (data.results || []).find((r) => r.kind === "feedback");
+      if (feedbackRun) {
+        const parts = [`Feedback email sent to ${feedbackRun.sent || 0}`];
+        if (feedbackRun.noEmail) parts.push(`${feedbackRun.noEmail} without an email address`);
+        if (feedbackRun.failed) parts.push(`${feedbackRun.failed} failed`);
+        setFeedbackResult({ type: feedbackRun.failed ? "error" : "success", text: parts.join(" · ") });
+      }
+    } catch (error) {
+      setFeedbackResult({ type: "error", text: `${error.message} They will be retried at the next daily run (10 AM).` });
+    }
   };
 
   // Workshop emails are on unless switched off.
@@ -539,7 +565,17 @@ export default function WorkshopDetailModal({ session, completed, members, regis
 
               <div className="wsd-card" style={{ opacity: completed ? 1 : 0.6 }}>
                 <h4>Feedback request</h4>
-                <p>Sent manually to trainees marked Present. Paste the feedback form link, then send.</p>
+                <p>Emailed automatically when the workshop is marked completed, only to trainees marked Present (anyone marked present later, within 7 days, gets it at the next daily run). To use a different form, change the link and send it by hand.</p>
+                <label className="wsd-toggle" style={{ marginBottom: 12 }}>
+                  <input type="checkbox" checked={reminderOn("feedback")} onChange={() => toggleReminder("feedback")} disabled={busy} />
+                  <span>
+                    Send after completion
+                    <span className="wsd-subject">📝 Share Your Feedback – {session.topic}</span>
+                  </span>
+                  <span className="when">
+                    {completed ? `${counts.present} marked present` : "Waiting for the workshop to be marked completed"}
+                  </span>
+                </label>
                 <div className="wsd-field" style={{ marginBottom: 10 }}>
                   <label htmlFor="wsd-feedback-link">Feedback form link</label>
                   <input

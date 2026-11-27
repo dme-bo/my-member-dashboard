@@ -1,5 +1,6 @@
 // Workshop emails: the two automatic reminders (day before, 15 minutes before),
-// the automatic thank-you after completion, and the manual feedback request.
+// the automatic thank-you and feedback request after completion (the feedback
+// request can also be re-sent by hand with a different link).
 //
 // Data lives in Firestore:
 //   trainingsessions/{id}                              the scheduled workshop (date, time, meetingLink,
@@ -24,6 +25,16 @@ const IST_OFFSET_MS = 330 * 60 * 1000; // India is UTC+5:30, no DST
 const PARALLEL_SENDS = 5; // separate emails sent at once (Gmail SMTP copes well with a handful)
 const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const MEMBER_APP_BASE = "https://briskoliveresourcemangement.web.app";
+
+// The feedback form link for a session: the one saved on it (set when the
+// feedback email was sent by hand), else the member app's form for its workshop.
+export function feedbackLinkFor(session) {
+  const saved = String(session.feedbackLink || "").trim();
+  if (/^https?:\/\/\S+$/i.test(saved)) return saved;
+  return session.workshopId ? `${MEMBER_APP_BASE}/feedback/${encodeURIComponent(session.workshopId)}` : "";
+}
 
 let transporter = null;
 
